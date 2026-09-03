@@ -24,8 +24,8 @@ func main() {
 	}
 }
 
-func run(logger *slog.Logger) error {
-	err := godotenv.Load()
+func run(logger *slog.Logger) (err error) {
+	err = godotenv.Load()
 	if err != nil {
 		logger.Warn("failed to load env configs", "error", err)
 	}
@@ -34,21 +34,69 @@ func run(logger *slog.Logger) error {
 	if dbURL == "" {
 		return fmt.Errorf("DATABASE_URL is not set")
 	}
+
 	conn, err := openConn(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to open db conn: %w", err)
 	}
+
+	var (
+		fetched     int
+		failed      int
+		sourceID    int
+		sourceIDPtr *int
+	)
+
+	runId, err := openRun(ctx, conn)
+	if err != nil {
+		return fmt.Errorf("failed to open run: %w", err)
+	}
+	defer func() {
+		closeErr := closeRun(ctx, conn, fetched, failed, runId, sourceIDPtr, err)
+		if closeErr != nil {
+			logger.Error("failed to close run", "error", closeErr)
+		}
+	}()
+	sourceID, err = getSourceID(ctx, conn, "remoteok")
+	if err != nil {
+		return fmt.Errorf("failed to get source id: %w", err)
+	}
+	sourceIDPtr = &sourceID
+
 	items, err := fetchData("https://remoteok.com/api")
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}
-	sourceID, err := getSourceID(ctx, conn, "remoteok")
-	if err != nil {
-		return fmt.Errorf("failed to get source id: %w", err)
-	}
-	err = collectAndStoreData(ctx, conn, logger, items, sourceID)
+
+	fetched = len(items)
+	failed, err = collectAndStoreData(ctx, conn, logger, items, sourceID)
 	if err != nil {
 		return fmt.Errorf("failed to collect and insert data: %w", err)
+	}
+
+	return nil
+}
+
+func openRun(ctx context.Context, conn *pgx.Conn) (int, error) {
+	var id int
+	sql := "INSERT INTO runs (started_at) VALUES (now()) RETURNING id;"
+	err := conn.QueryRow(ctx, sql).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func closeRun(ctx context.Context, conn *pgx.Conn, fetched, failed, id int, sourceID *int, runErr error) error {
+	var runErrStr *string
+	sql := "UPDATE runs SET fetched = $1, failed = $2, source_id = $3, error = $4 WHERE id = $5;"
+	if runErr != nil {
+		errStr := runErr.Error()
+		runErrStr = &errStr
+	}
+	_, err := conn.Exec(ctx, sql, fetched, failed, sourceID, runErrStr, id)
+	if err != nil {
+		return fmt.Errorf("failed to close run: %w", err)
 	}
 	return nil
 }
@@ -65,14 +113,14 @@ func openConn(ctx context.Context, dbURL string) (*pgx.Conn, error) {
 	return conn, nil
 }
 
-func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) error {
-	err := insertRawJobs(ctx, conn, logger, items, sourceID)
+func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
+	failed, err := insertRawJobs(ctx, conn, logger, items, sourceID)
 	if err != nil {
-		return fmt.Errorf("failed to insert raw jobs: %w", err)
+		return failed, fmt.Errorf("failed to insert raw jobs: %w", err)
 	}
 	jobsMap, err := normalizeRawJobs(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("failed to normalize raw jobs: %w", err)
+		return failed, fmt.Errorf("failed to normalize raw jobs: %w", err)
 	}
 	for externals, job := range jobsMap {
 		err = insertJob(ctx, conn, externals.RawJobID, externals.SourceID, externals.ExternalID, job)
@@ -81,7 +129,7 @@ func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logge
 			continue
 		}
 	}
-	return nil
+	return failed, nil
 }
 
 func insertJob(ctx context.Context, conn *pgx.Conn, rawjobID, sourceID int, externalID string, job Job) error {
@@ -134,11 +182,13 @@ func getSourceID(ctx context.Context, conn *pgx.Conn, source string) (int, error
 	return id, nil
 }
 
-func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) error {
+func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
+	failed := 0
 	for _, item := range items {
 		var jobID JobID
 		if err := json.Unmarshal(item, &jobID); err != nil {
 			logger.Error("failed to unmarshal raw json to job", "error", err)
+			failed++
 			continue
 		}
 		if jobID.ID == "" {
@@ -147,7 +197,7 @@ func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, ite
 		var compactedBuffer bytes.Buffer
 		err := json.Compact(&compactedBuffer, item)
 		if err != nil {
-			return fmt.Errorf("failed to compact raw json: %w", err)
+			return failed, fmt.Errorf("failed to compact raw json: %w", err)
 		}
 		h := sha256.Sum256(compactedBuffer.Bytes())
 		hash := hex.EncodeToString(h[:])
@@ -160,11 +210,13 @@ func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, ite
 				logger.Info("item already exists, jumping", "source_id", sourceID, "external_id", jobID.ID)
 				continue
 			}
-			return fmt.Errorf("failed to insert item into raw_jobs: %w", err)
+			logger.Error("failed to insert item into raw_jobs", "error", err)
+			failed++
+			continue
 		}
 		logger.Info("new raw_job inserted", "id", rawJobID)
 	}
-	return nil
+	return failed, nil
 }
 
 func normalizeRawJobs(ctx context.Context, conn *pgx.Conn) (map[JobExternals]Job, error) {
