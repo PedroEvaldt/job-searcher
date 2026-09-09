@@ -25,6 +25,7 @@ func main() {
 }
 
 func run(logger *slog.Logger) (err error) {
+	// TODO: Mudar para transactions
 	err = godotenv.Load()
 	if err != nil {
 		logger.Warn("failed to load env configs", "error", err)
@@ -39,6 +40,12 @@ func run(logger *slog.Logger) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to open db conn: %w", err)
 	}
+	defer func() {
+		err := conn.Close(ctx)
+		if err != nil {
+			logger.Error("failed to close connection", "error", err)
+		}
+	}()
 
 	var (
 		fetched     int
@@ -215,6 +222,7 @@ func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, ite
 			continue
 		}
 		logger.Info("new raw_job inserted", "id", rawJobID)
+		// TODO: Ajeitar loggers para fazer por run e nao por insercao, ou mudar algo do tipo
 	}
 	return failed, nil
 }
@@ -222,10 +230,10 @@ func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, ite
 func normalizeRawJobs(ctx context.Context, conn *pgx.Conn) (map[JobExternals]Job, error) {
 	sql := "SELECT id, source_id, external_id, payload FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY source_id, external_id ORDER BY fetched_at DESC) AS rn FROM raw_jobs)t WHERE rn = 1;"
 	rows, err := conn.Query(ctx, sql)
-	defer rows.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to query raw jobs: %w", err)
 	}
+	defer rows.Close()
 	jobs := make(map[JobExternals]Job, 0)
 	for rows.Next() {
 		var (
