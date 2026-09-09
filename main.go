@@ -13,8 +13,15 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/joho/godotenv"
 )
+
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 func main() {
 	logger := slog.Default()
@@ -84,6 +91,18 @@ func run(logger *slog.Logger) (err error) {
 	return nil
 }
 
+func openConn(ctx context.Context, dbURL string) (*pgx.Conn, error) {
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed start db connection: %w", err)
+	}
+	err = conn.Ping(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed ping db: %w", err)
+	}
+	return conn, nil
+}
+
 func openRun(ctx context.Context, conn *pgx.Conn) (int, error) {
 	var id int
 	sql := "INSERT INTO runs (started_at) VALUES (now()) RETURNING id;"
@@ -108,38 +127,124 @@ func closeRun(ctx context.Context, conn *pgx.Conn, fetched, failed, id int, sour
 	return nil
 }
 
-func openConn(ctx context.Context, dbURL string) (*pgx.Conn, error) {
-	conn, err := pgx.Connect(ctx, dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed start db connection: %w", err)
-	}
-	err = conn.Ping(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed ping db: %w", err)
-	}
-	return conn, nil
-}
-
 func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
 	failed, err := insertRawJobs(ctx, conn, logger, items, sourceID)
 	if err != nil {
 		return failed, fmt.Errorf("failed to insert raw jobs: %w", err)
 	}
-	jobsMap, err := normalizeRawJobs(ctx, conn)
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return failed, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			logger.Error("failed to rollback transaction", "error", rollbackErr)
+		}
+	}()
+	jobsMap, err := normalizeRawJobs(ctx, tx)
 	if err != nil {
 		return failed, fmt.Errorf("failed to normalize raw jobs: %w", err)
 	}
 	for externals, job := range jobsMap {
-		err = insertJob(ctx, conn, externals.RawJobID, externals.SourceID, externals.ExternalID, job)
+		err = insertJob(ctx, tx, externals.RawJobID, externals.SourceID, externals.ExternalID, job)
 		if err != nil {
-			logger.Error("failed to insert job", "job_id", job.ID, "job_company", job.Company, "error", err)
-			continue
+			return failed, fmt.Errorf("failed to insert job %s: %w", job.ID, err)
 		}
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return failed, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return failed, nil
 }
 
-func insertJob(ctx context.Context, conn *pgx.Conn, rawjobID, sourceID int, externalID string, job Job) error {
+func getSourceID(ctx context.Context, conn *pgx.Conn, source string) (int, error) {
+	sql := "SELECT id from sources WHERE name = $1"
+
+	var id int
+	err := conn.QueryRow(ctx, sql, source).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query db: %w", err)
+	}
+	return id, nil
+}
+
+func insertRawJobs(ctx context.Context, conn querier, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
+	failed := 0
+	for _, item := range items {
+		var jobID JobID
+		if err := json.Unmarshal(item, &jobID); err != nil {
+			logger.Error("failed to unmarshal raw json to job", "error", err)
+			failed++
+			continue
+		}
+		if jobID.ID == "" {
+			continue
+		}
+		var compactedBuffer bytes.Buffer
+		err := json.Compact(&compactedBuffer, item)
+		if err != nil {
+			return failed, fmt.Errorf("failed to compact raw json: %w", err)
+		}
+		h := sha256.Sum256(compactedBuffer.Bytes())
+		hash := hex.EncodeToString(h[:])
+
+		var rawJobID int
+		sql := "INSERT INTO raw_jobs (source_id, external_id, payload, content_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (source_id, external_id, content_hash) DO NOTHING RETURNING id;"
+		err = conn.QueryRow(ctx, sql, sourceID, jobID.ID, item, hash).Scan(&rawJobID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				logger.Info("item already exists, jumping", "source_id", sourceID, "external_id", jobID.ID)
+				continue
+			}
+			logger.Error("failed to insert item into raw_jobs", "error", err)
+			failed++
+			continue
+		}
+		logger.Info("new raw_job inserted", "id", rawJobID)
+	}
+	return failed, nil
+}
+
+func normalizeRawJobs(ctx context.Context, conn querier) (map[JobExternals]Job, error) {
+	sql := "SELECT id, source_id, external_id, payload FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY source_id, external_id ORDER BY fetched_at DESC) AS rn FROM raw_jobs)t WHERE rn = 1;"
+	rows, err := conn.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query raw jobs: %w", err)
+	}
+	defer rows.Close()
+	jobs := make(map[JobExternals]Job, 0)
+	for rows.Next() {
+		var (
+			id         int
+			sourceID   int
+			externalID string
+			payload    json.RawMessage
+			job        Job
+		)
+		err := rows.Scan(&id, &sourceID, &externalID, &payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan raw job: %w", err)
+		}
+		if err := json.Unmarshal(payload, &job); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+		}
+		external := JobExternals{
+			RawJobID:   id,
+			SourceID:   sourceID,
+			ExternalID: externalID,
+		}
+		jobs[external] = job
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	return jobs, nil
+}
+
+func insertJob(ctx context.Context, conn querier, rawjobID, sourceID int, externalID string, job Job) error {
 	sql := `
 		INSERT into jobs (raw_job_id, source_id, external_id, title, company, url, description) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7) 
@@ -176,89 +281,4 @@ func fetchData(sourceURL string) ([]json.RawMessage, error) {
 		return nil, fmt.Errorf("failed to decode request body: %w", err)
 	}
 	return items, nil
-}
-
-func getSourceID(ctx context.Context, conn *pgx.Conn, source string) (int, error) {
-	sql := "SELECT id from sources WHERE name = $1"
-
-	var id int
-	err := conn.QueryRow(ctx, sql, source).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("failed to query db: %w", err)
-	}
-	return id, nil
-}
-
-func insertRawJobs(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
-	failed := 0
-	for _, item := range items {
-		var jobID JobID
-		if err := json.Unmarshal(item, &jobID); err != nil {
-			logger.Error("failed to unmarshal raw json to job", "error", err)
-			failed++
-			continue
-		}
-		if jobID.ID == "" {
-			continue
-		}
-		var compactedBuffer bytes.Buffer
-		err := json.Compact(&compactedBuffer, item)
-		if err != nil {
-			return failed, fmt.Errorf("failed to compact raw json: %w", err)
-		}
-		h := sha256.Sum256(compactedBuffer.Bytes())
-		hash := hex.EncodeToString(h[:])
-
-		var rawJobID int
-		sql := "INSERT INTO raw_jobs (source_id, external_id, payload, content_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (source_id, external_id, content_hash) DO NOTHING RETURNING id;"
-		err = conn.QueryRow(ctx, sql, sourceID, jobID.ID, item, hash).Scan(&rawJobID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				logger.Info("item already exists, jumping", "source_id", sourceID, "external_id", jobID.ID)
-				continue
-			}
-			logger.Error("failed to insert item into raw_jobs", "error", err)
-			failed++
-			continue
-		}
-		logger.Info("new raw_job inserted", "id", rawJobID)
-		// TODO: Ajeitar loggers para fazer por run e nao por insercao, ou mudar algo do tipo
-	}
-	return failed, nil
-}
-
-func normalizeRawJobs(ctx context.Context, conn *pgx.Conn) (map[JobExternals]Job, error) {
-	sql := "SELECT id, source_id, external_id, payload FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY source_id, external_id ORDER BY fetched_at DESC) AS rn FROM raw_jobs)t WHERE rn = 1;"
-	rows, err := conn.Query(ctx, sql)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query raw jobs: %w", err)
-	}
-	defer rows.Close()
-	jobs := make(map[JobExternals]Job, 0)
-	for rows.Next() {
-		var (
-			id         int
-			sourceID   int
-			externalID string
-			payload    json.RawMessage
-			job        Job
-		)
-		err := rows.Scan(&id, &sourceID, &externalID, &payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan raw job: %w", err)
-		}
-		if err := json.Unmarshal(payload, &job); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
-		}
-		external := JobExternals{
-			RawJobID:   id,
-			SourceID:   sourceID,
-			ExternalID: externalID,
-		}
-		jobs[external] = job
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate rows: %w", err)
-	}
-	return jobs, nil
 }
