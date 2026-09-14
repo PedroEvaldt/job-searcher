@@ -1,0 +1,4 @@
+sources:
+  - name: remoteok
+    enabled: true
+    url: https://remoteok.com/api

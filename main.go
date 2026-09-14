@@ -15,7 +15,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/joho/godotenv"
+	"go.yaml.in/yaml/v3"
 )
+
+var source = "https://remoteok.com/api"
 
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
@@ -23,26 +26,56 @@ type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+type Config struct {
+	Sources []Source `yaml:"sources"`
+}
+
+type Source struct {
+	Name    string `yaml:"name"`
+	Enabled bool   `yaml:"enabled"`
+	Url     string `yaml:"url"`
+}
+
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", path, err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
+	}
+	return &cfg, nil
+}
+
 func main() {
 	logger := slog.Default()
-	if err := run(logger); err != nil {
+
+	err := godotenv.Load()
+	if err != nil {
+		logger.Warn("failed to load env configs", "error", err)
+	}
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		logger.Error("DATABASE_URL is not set")
+		os.Exit(1)
+	}
+
+	cfg, err := Load("./config.yaml")
+	if err != nil {
+		logger.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	if err := run(logger, dbURL, cfg); err != nil {
 		logger.Error("failed to run", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) (err error) {
-	// TODO: Mudar para transactions
-	err = godotenv.Load()
-	if err != nil {
-		logger.Warn("failed to load env configs", "error", err)
-	}
+func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	ctx := context.Background()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		return fmt.Errorf("DATABASE_URL is not set")
-	}
-
 	conn, err := openConn(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to open db conn: %w", err)
@@ -54,6 +87,19 @@ func run(logger *slog.Logger) (err error) {
 		}
 	}()
 
+	for _, source := range cfg.Sources {
+		if source.Enabled {
+			err = processSource(ctx, conn, logger, source)
+			if err != nil {
+				logger.Warn("failed to process source", "source", source.Name, "error", err)
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source) error {
 	var (
 		fetched     int
 		failed      int
@@ -71,13 +117,13 @@ func run(logger *slog.Logger) (err error) {
 			logger.Error("failed to close run", "error", closeErr)
 		}
 	}()
-	sourceID, err = getSourceID(ctx, conn, "remoteok")
+	sourceID, err = getSourceID(ctx, conn, source.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get source id: %w", err)
 	}
 	sourceIDPtr = &sourceID
 
-	items, err := fetchData("https://remoteok.com/api")
+	items, err := fetchData(source.Url)
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}
@@ -87,7 +133,6 @@ func run(logger *slog.Logger) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to collect and insert data: %w", err)
 	}
-
 	return nil
 }
 
