@@ -6,10 +6,10 @@
 
 ## Onde estou
 
-**Etapa 0 · Tarefa 0.3 · Subtarefa 0.3.2** — 6 de 9 subtarefas concluídas. Tarefas 0.1 e 0.2
-fechadas; 0.3 pela metade. Blockers B1/B2/B3/B4 todos resolvidos.
+**Etapa 0 · Tarefa 0.4 · Subtarefa 0.4.1** — 7 de 9 subtarefas concluídas. Tarefas 0.1, 0.2
+e 0.3 fechadas. Falta só a 0.4: Dockerfile + compose e o analyzer Python mínimo.
 
-Última sessão: **2026-09-09**.
+Última sessão: **2026-09-14**.
 
 ---
 
@@ -88,6 +88,51 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **Testes validados por mutação** (não só por passarem): tabela extra, tabela ausente e
   seed removida — as três detectadas.
 
+- **Transações (D16), 2026-09-09.** Três tentativas até a fronteira certa. (1) `Begin` no
+  `run()`, envolvendo `openRun`/`closeRun`: como `*pgx.Conn` é **uma sessão só**, todo
+  `conn.Exec` seguinte viaja dentro da transação mesmo sem receber a `tx` — o rollback
+  apagava a run que falhou (verificado: `runs = 0`). (2) `err = tx.Rollback(ctx)` num
+  `defer` sobre resultado nomeado: o `ErrTxClosed` que o `Rollback` sempre devolve depois
+  de um `Commit` bem-sucedido virava o erro de `run()` — coleta perfeita saindo com
+  `exit=1`. (3) `insertRawJobs` dentro da transação: uma falha em `jobs` desfazia os 101
+  payloads bons.
+- **Interface `querier`** (3 métodos, definida no consumidor) para as funções aceitarem
+  `*pgx.Conn` **e** `pgx.Tx`. `Begin` fica de fora de propósito — quem abre transação é
+  `collectAndStoreData`, que continua recebendo a conexão concreta.
+- **Verificação final:** sabotagem (`check` que rejeita toda `jobs`) → `raw_jobs = 100`,
+  `jobs = 0`, **uma** linha de erro nomeando a vaga, gravada em `runs.error`. Caminho
+  feliz duas vezes → `exit=0`, zero linhas `ERROR`, `jobs = 250 = distintas`.
+
+- **`config.yaml` e múltiplas fontes, 2026-09-09 (adiantado da Etapa 1).** Fontes saíram do
+  código para `config.yaml` (`name`/`enabled`/`url`), `run()` recebe `dbURL` e `*Config` por
+  parâmetro, e o corpo do laço virou `processSource`. Efeito colateral bom: a 0.3.2 fica
+  trivial — o teste monta um `Config` apontando para o `httptest.Server`, sem ler arquivo.
+- **Dois erros de configuração silenciosa no caminho.** (1) Tag `yaml:"enable"` contra chave
+  `enabled:` no arquivo: campo desconhecido é **ignorado** pelo YAML, então `Enabled` ficou
+  `false`, o laço nunca entrou e o programa saiu com `exit=0` tendo coletado nada. (2) `defer
+  closeRun` dentro do `for`: `defer` se liga à **função**, não ao bloco — as N runs ficariam
+  abertas até o fim de `run()` e fechariam em ordem inversa.
+- **Verificado com duas fontes** (a primeira ausente de `sources`): run 21 gravada com
+  `source_id` NULL e o erro, run 22 coletando normalmente. Uma fonte que falha não derruba
+  as outras — `run()` loga `WARN` e segue.
+
+### 2026-09-14
+
+- **0.3.2 fechada — teste de ponta a ponta sem internet.** `httptest.Server` servindo
+  `testdata/remoteok.json`, `Config` montado no teste (sem `Load`), `TRUNCATE ... RESTART
+  IDENTITY CASCADE` no início e duas execuções de `run` contra o mesmo estado.
+- **Três asserções, três frentes independentes:** contagem absoluta (`raw_jobs`/`jobs` = 100)
+  pega coletar/normalizar de menos; igualdade entre as duas execuções pega duplicação; e
+  `runs` (2 linhas, nenhuma com `error`) pega a segunda execução morrendo no meio — que é
+  invisível para as contagens, porque o rollback deixa o banco idêntico ao da primeira.
+- **Quatro mutações, três detectadas.** Escapou a remoção do `ON CONFLICT DO NOTHING` de
+  `raw_jobs`: os 100 itens colidem, viram `failed++`, e o coletor termina `exit=0` com
+  `error` NULL. É o D12/D21 aparecendo como buraco de teste — fecha com uma asserção de uma
+  linha (`SELECT COUNT(*) FROM runs WHERE failed > 0` = 0).
+- **Armadilhas do caminho:** `run()` devolve `nil` mesmo com a fonte explodindo (D21), então
+  checar o retorno de `run` não basta — a falha só existe em `runs`. E `db.QueryRow` sem
+  `.Scan` engole o erro: um `SELECT ... FROM raw_jogs` ficou verde por rodadas.
+
 ---
 
 ## Decisões tomadas
@@ -107,6 +152,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-09-03 | Falha de `INSERT` em `raw_jobs` rebaixada de fatal para erro por item | Um item com dado ruim não deve derrubar a coleta inteira. **Custo aceito:** se o banco cair no meio, todos os itens falham e o coletor ainda termina com `exit=0` e `error=NULL` — verificado: `fetched=101, failed=100, exit=0`. Falta um limiar de `failed/fetched`. Dono: Etapa 1. |
 | 2026-09-03 | Abrir a linha de `runs` **antes** do `getSourceID` | Fonte ausente de `sources` é erro de configuração que acontece de madrugada. Abrindo antes, ela aparece em `runs` com `source_id` NULL em vez de sumir sem rastro. |
 | 2026-09-09 | Um container Postgres por **pacote** de teste (`TestMain`), não por teste | Subir Postgres custa ~5s; um por teste inviabilizaria a Tarefa 0.3. **Custo aceito:** os testes passam a compartilhar estado, e a partir da 0.3.2 (que escreve no banco) vai ser preciso isolar — limpeza entre testes, e nada de `t.Parallel()` sem isso. |
+| 2026-09-09 | Transação cobre **só** `normalizeRawJobs` + o laço de `insertJob`; `insertRawJobs` fica fora | `raw_jobs` é append-only, idempotente por `ON CONFLICT DO NOTHING` e cada `INSERT` já é atômico — não há estado intermediário para alguém enxergar, e incluí-la só destruía trabalho bom (verificado: uma falha em `jobs` desfazia os 101 payloads). `jobs` entra porque é uma leitura seguida de N escritas derivadas dela, e é a tabela que o analyzer vai ler enquanto o coletor escreve — a transação existe para **consistência de leitura**, não para recuperação de falha (o sistema já se cura sozinho: `normalizeRawJobs` varre a tabela inteira). |
+| 2026-09-09 | Dentro da transação, tudo-ou-nada: `insertJob` retorna no primeiro erro, sem `continue` | Postgres aborta a transação inteira no primeiro statement com erro (`25P02`) — o `continue` virava 245 erros falsos e o `Commit` falhava do mesmo jeito. É aceitável porque `jobs` é derivação **pura** de `raw_jobs`: nada se perde, a run seguinte reconstrói. **Custo aceito:** atraso até a próxima coleta, e o risco de pílula envenenada (D19). |
 
 ---
 
@@ -136,8 +183,16 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D10 | dados          | Payloads do Remote OK chegam com entidades HTML cruas (`&amp;`) e mojibake (`Donâ\u0080\u0099t`, `å\u008C\u0096`). Um `slug` vazio. `salary_min: 0` significa "não informado", não zero. | aberto — dono: Etapa 2, na normalização de texto |
 | D11 | `main.go:54`   | `defer` roda durante panic e grava `error=NULL`: a run mente dizendo sucesso enquanto o processo morreu de SIGSEGV. Verificado em 2026-09-03. | aberto — dono: Etapa 1 |
 | D12 | `db/migrations/001_init.sql` | `runs` não tem `finished_at` — dá para saber quando começou e o que houve, não quanto durou. E não há limiar de `failed/fetched` que marque a run como fracasso. | aberto — dono: Etapa 1, migration `004` |
-| D13 | `main_test.go:143` | `err := db.Close()` é sobrescrito pela linha seguinte: se o `Close` falhar e o `Terminate` funcionar, `teardown()` devolve `nil`. O `return err` final é sempre `nil`. | aberto — pagar antes do commit da 0.3 (`errors.Join`) |
-| D14 | `main_test.go:90` | Loop `for rows.Next()` sem checar `rows.Err()` depois: erro no meio da iteração vira "tabela não existe" para as tabelas não lidas. | aberto — dono: fim da Etapa 0 |
+| D13 | `main_test.go:143` | `err := db.Close()` é sobrescrito pela linha seguinte: se o `Close` falhar e o `Terminate` funcionar, `teardown()` devolve `nil`. O `return err` final é sempre `nil`. | ✅ pago 2026-09-09 — `errors.Join` acumulando os dois |
+| D14 | `main_test.go:90` | Loop `for rows.Next()` sem checar `rows.Err()` depois. | ✅ pago 2026-09-09 |
+| D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
+| D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
+| D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | aberto — dono: 0.4.1 |
+| D18 | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | aberto — dono: fim da Etapa 0 |
+| D19 | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | aberto — dono: Etapa 1, quando houver 3 fontes e frequência medida |
+| D20 | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | aberto — pagar até o fim da Etapa 0 |
+| D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). | aberto — dono: Etapa 1 |
+| D22 | `main.go:21` | `var source = "https://remoteok.com/api"` morta desde a chegada do `config.yaml`, e sombreada pela variável do laço. Junto: `Url` → `URL`, `runId` → `runID`. | aberto — 🟢, pagar no próximo commit |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -176,6 +231,24 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   conhece o ciclo de vida.
 - **2026-09-09** — um teste que passa não prova nada até você fazê-lo falhar de propósito.
   Mutação é o `/check` do próprio teste.
+- **2026-09-09** — o rollback dispara por causa do `return`, não do erro. Erro engolido
+  com `continue` não aciona o `defer` — mas já envenenou a transação por dentro: em Go
+  parece que deu certo, no Postgres nada mais funciona (`25P02`).
+- **2026-09-09** — transação para **consistência de leitura** ≠ transação para
+  **recuperação de falha**. Se o dado de origem está fora do escopo desfeito, tudo-ou-nada
+  não custa dado, custa atraso.
+- **2026-09-09** — `defer` se liga à função, não ao bloco. Um `for` não tem ponto de
+  retorno, então `defer` dentro dele só enfileira. Para limpeza por iteração, o corpo do
+  laço precisa virar função.
+- **2026-09-09** — YAML ignora campo desconhecido em silêncio: config escrito errado não
+  vira erro, vira comportamento faltando. `KnownFields` no decoder do `yaml.v3` transforma
+  isso em erro.
+- **2026-09-14** — teste que só compara "antes vs. depois" aprova um coletor que não faz
+  nada: zero concorda com zero. Valor absoluto e comparação relativa medem coisas
+  diferentes; nenhum dos dois substitui o outro.
+- **2026-09-14** — quando uma transação desfaz, o banco fica idêntico ao estado anterior.
+  Nenhuma contagem distingue "não precisou mudar" de "tentou e falhou" — só o registro de
+  execução distingue. É para isso que a tabela `runs` existe.
 
 ---
 

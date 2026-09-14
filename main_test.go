@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -19,10 +22,18 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+const (
+	rjCount = 100
+	jCount  = 100
+)
+
 //go:embed db/migrations/*.sql
 var migrationsFS embed.FS
 
-var db *sql.DB
+var (
+	db  *sql.DB
+	dsn string
+)
 
 func TestMain(m *testing.M) {
 	var (
@@ -109,6 +120,107 @@ func TestMigrations(t *testing.T) {
 	}
 }
 
+func TestFetch(t *testing.T) {
+	err := pingDB(db)
+	if err != nil {
+		t.Fatalf("database not ready for testing fetching: %v", err)
+	}
+	cfg := Config{
+		Sources: []Source{
+			{
+				Name:    "remoteok",
+				Enabled: true,
+			},
+		},
+	}
+	for i, source := range cfg.Sources {
+		body, err := os.ReadFile(fmt.Sprintf("testdata/%s.json", source.Name))
+		if err != nil {
+			t.Fatalf("failed to read json file: %v", err)
+		}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(body)
+		}))
+		t.Cleanup(func() { srv.Close() })
+		cfg.Sources[i].Url = srv.URL
+	}
+
+	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	if err != nil {
+		t.Errorf("expected error nil, got %v", err)
+		return
+	}
+	var rawJobsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM raw_jobs;").Scan(&rawJobsCount)
+	if err != nil {
+		t.Fatalf("failed to query raw_jobs rows: %v", err)
+	}
+	var jobsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM jobs;").Scan(&jobsCount)
+	if err != nil {
+		t.Fatalf("failed to query jobs rows: %v", err)
+	}
+	if rawJobsCount != rjCount {
+		t.Errorf("expected %d; got %d", rjCount, rawJobsCount)
+		return
+	}
+	if jobsCount != jCount {
+		t.Errorf("expected %d; got %d", jCount, jobsCount)
+		return
+	}
+
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	if err != nil {
+		t.Errorf("expected error nil, got %v", err)
+		return
+	}
+	var rawJobsSecondRun int
+	err = db.QueryRow("SELECT COUNT(*) FROM raw_jobs;").Scan(&rawJobsSecondRun)
+	if err != nil {
+		t.Fatalf("failed to query raw_jobs rows: %v", err)
+	}
+	var jobsSecondRun int
+	err = db.QueryRow("SELECT COUNT(*) FROM jobs;").Scan(&jobsSecondRun)
+	if err != nil {
+		t.Fatalf("failed to query jobs rows: %v", err)
+	}
+
+	if rawJobsCount != rawJobsSecondRun {
+		t.Errorf("expected %d; got %d", rawJobsCount, rawJobsSecondRun)
+		return
+	}
+	if jobsCount != jobsSecondRun {
+		t.Errorf("expected %d; got %d", jobsCount, jobsSecondRun)
+		return
+	}
+
+	var runsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM runs;").Scan(&runsCount)
+	if err != nil {
+		t.Fatalf("failed to query runs rows: %v", err)
+	}
+	if runsCount != 2 {
+		t.Errorf("expected 2; got %d", runsCount)
+		return
+	}
+
+	var runsErrorsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM runs WHERE error IS NOT NULL;").Scan(&runsErrorsCount)
+	if err != nil {
+		t.Fatalf("failed to query runs errors rows: %v", err)
+	}
+	if runsErrorsCount != 0 {
+		t.Errorf("expected 0; got %d", runsErrorsCount)
+		return
+	}
+}
+
 func pingDB(db *sql.DB) error {
 	return db.Ping()
 }
@@ -135,7 +247,7 @@ func setupPostgres() (*sql.DB, func() error, error) {
 		return nil
 	}
 
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
+	dsn, err = ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		return nil, teardown, fmt.Errorf("failed to get dsn string: %v", err)
 	}

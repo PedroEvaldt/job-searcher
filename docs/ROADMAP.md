@@ -102,8 +102,13 @@ por parâmetro, teste table-driven.
       em todos os `return`, migrations por `goose.NewProvider` sobre `fs.Sub(embed.FS)`.
       `TestMigrations` afirma nos dois sentidos (falta e sobra); validado por 3 mutações:
       tabela extra, tabela ausente e seed removida — as três detectadas.
-- [ ] **0.3.2** Alimentar o coletor com `testdata/remoteok.json` servido localmente e
+- [x] **0.3.2** Alimentar o coletor com `testdata/remoteok.json` servido localmente e
       afirmar a idempotência de ponta a ponta.
+      ✅ 2026-09-14 — `httptest.Server` servindo o fixture, `Config` montado no teste,
+      `TRUNCATE` no início e duas execuções de `run`. Afirma contagem absoluta (100/100),
+      igualdade entre as duas execuções e `runs` (2 linhas, nenhuma com `error`).
+      Validado por 4 mutações: 3 detectadas, 1 escapou (`ON CONFLICT DO NOTHING` de
+      `raw_jobs` — é o D12/D21, falta asserção sobre `runs.failed`).
 
 ### Tarefa 0.4 — Tudo dentro do compose, incluindo o Python
 
