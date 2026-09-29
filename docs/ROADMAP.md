@@ -1,38 +1,43 @@
 # ROADMAP — job-radar
 
-Só a etapa atual aparece em detalhe. As próximas ficam em uma linha.
-Quando a Etapa 0 fechar, a Etapa 1 é expandida.
+Só a fase atual aparece em detalhe. As próximas ficam em uma linha.
+Quando a Fase 0 fechar, a Fase 1 é expandida.
 
 ---
 
 ## Visão geral
 
-| Etapa | Nome                        | Pronto quando                                                                                                         |
-| ----- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **0** | Uma fonte só, ponta a ponta | `docker compose up` coleta, o teste de integração passa e o Python enxerga o banco                                    |
-| 1     | Coleta de verdade           | Mais fontes atrás da interface `Source`, dedup, rate limit, `runs` confiável — e o cron rodando sozinho em background |
-| 2     | Olhar o dado                | EDA em Python sobre o que já foi coletado; você lista 5 defeitos concretos do seu próprio dado                        |
-| 3     | Baseline honesta            | Extrator por dicionário, TF-IDF, `radar label`, `cv.md` — com um precision@10 medido                                  |
-| 4     | ML de verdade               | sentence-transformers + pgvector, comparado contra a baseline nas mesmas vagas                                        |
-| 5     | FastAPI e digest            | Analyzer expõe HTTP; primeiro digest chega no Discord sem você rodar nada à mão                                       |
-| 6     | Kubernetes                  | Imagens multi-stage e multi-arch, minikube com CronJob/Deployment/ConfigMap/Secret/probes, Prometheus                 |
-| 7     | Fechamento                  | CI no GitHub Actions, painel de tendências de stack, README que outra pessoa consegue seguir                          |
+| Fase   | Nome                          | Pronto quando                                                                                          |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **0**  | Uma fonte só, ponta a ponta   | `docker compose up` coleta, o teste de integração passa e o Python enxerga o banco                     |
+| 1      | Coleta de verdade             | Mais fontes atrás de `Source`, normalização, dedupe, rate limit, métricas — roda 7 dias sozinho        |
+| 2      | Olhar o dado                  | EDA + boilerplate medido, política de localização, vagas PT-BR — 5 defeitos listados + corte de boilerplate com teste |
+| 3a     | Extração no código            | Skills, anos exigidos, salário, idade da vaga; ranking TF-IDF — extrator acerta as skills do currículo |
+| 3b     | Rotulagem e avaliação         | `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele                            |
+| 4a     | Embeddings                    | sentence-transformers + pgvector vs baseline — sabe qual ganha e por quanto, no conjunto congelado     |
+| 4b     | Jev como extrator de features | Question set v1, `jev_answers` — concordância por pergunta e custo por mil vagas medidos; roda sem chave |
+| 4c     | sklearn                       | Features do Jev + cosseno + features do código — três abordagens comparadas no conjunto congelado      |
+| 5      | FastAPI e digest              | Primeiro digest chega no Discord sem você rodar nada à mão                                             |
+| 6      | Kubernetes                    | `kubectl apply -k deploy/k8s` sobe tudo do zero                                                        |
+| 7      | Fechamento                    | Outra pessoa roda seguindo só o README                                                                 |
 
 **Mudanças aplicadas ao plano original (Sessão Zero):**
 
-- Prometheus saiu da Etapa 1 e foi para a 6, onde existe scraper de verdade. `runs` cobre observabilidade até lá.
-- "Rodar 7 dias sozinho" deixa de ser portão bloqueante: o cron fica rodando em background **durante** a Etapa 2, que precisa do volume acumulado.
-- Rotulagem vira contínua a partir do fim da Etapa 1 (alguns por semana), em vez de 200 de uma vez na Etapa 3.
-- Currículo (`cv.md`) ganhou dono explícito: Etapa 3.
-- Etapa 0 passou a atravessar Python também, com um `analyzer` mínimo.
+- Prometheus saiu da Fase 1 e foi para a 6, onde existe scraper de verdade. `runs` cobre observabilidade até lá.
+- Currículo (`cv.md`) ganhou dono explícito: Fase 3a.
+- Fase 0 passou a atravessar Python também, com um `analyzer` mínimo.
+
+**Revisão de 2026-09-29 (sincronização com o `CLAUDE.md`):** "Etapa" virou "Fase"; Fase 3
+dividida em 3a/3b e Fase 4 em 4a/4b/4c (Jev entra na 4b); "rodar 7 dias sozinho" voltou a
+ser o critério da Fase 1; rotulagem concentrada na 3b.
 
 ---
 
-## 📍 Etapa 0 — Uma fonte só, ponta a ponta
+## 📍 Fase 0 — Uma fonte só, ponta a ponta
 
 **Objetivo de aprendizado:** fazer o caminho mais fino possível atravessar Go, Postgres
 e Python, provando que a integração funciona **antes** de qualquer feature. Ao fim
-desta etapa, `docker compose up` numa máquina limpa coleta vagas reais e o Python
+desta fase, `docker compose up` numa máquina limpa coleta vagas reais e o Python
 consegue enxergá-las.
 
 ### Tarefa 0.1 — Migrations válidas e identidade estável
@@ -124,30 +129,41 @@ rede do compose, imagem distroless/alpine.
 **Onde ler:** [Docker — Multi-stage builds](https://docs.docker.com/build/building/multi-stage/) ·
 [Compose — depends_on](https://docs.docker.com/reference/compose-file/services/#depends_on)
 
-- [ ] **0.4.1** Dockerfile multi-stage do `collector` + serviço no compose, esperando o
+- [x] **0.4.1** Dockerfile multi-stage do `collector` + serviço no compose, esperando o
       Postgres ficar saudável.
+      ✅ 2026-09-15 — `golang:1.26.1-alpine` → `alpine:3.23`, 935 MB → 36.9 MB;
+      `.dockerignore` tirando `.env`, `.git` e o binário morto do contexto; compose
+      constrói pela chave `build:` mantendo a tag `job-searcher:latest`; credenciais
+      só por `${}` (4 pontos, healthcheck incluído); `condition: service_healthy`.
+      Verificado: imagem apagada → `docker compose up` reconstrói, espera `Healthy` e
+      coleta (run 32, `fetched=100 failed=0 error NULL`); `go run .` do terminal também
+      volta a funcionar, com a senha existindo 1× no repositório.
 - [ ] **0.4.2** `analyzer` Python mínimo no compose: conecta no Postgres e imprime a
       contagem de `jobs` com `scored_at is null`. Nada além disso.
+- [ ] **0.4.3** Máquina limpa de verdade: banco sem schema vira banco com schema sem
+      ninguém rodar `make gup` à mão, e quem clona sabe quais variáveis exportar
+      (`.env.example`, D6). Fecha o critério de aceite da Tarefa 0.4.
 
 ---
 
-## Etapas seguintes (resumo)
+## Fases seguintes (resumo)
 
-**Etapa 1 — Coleta de verdade.** Remotive e Himalayas entram; é olhando duas fontes lado a
-lado que a interface `Source` nasce certa. Depois: dedup entre fontes, rate limit,
-`config.yaml`, cron. Termina com o coletor rodando sozinho em background.
+**Fase 1 — Coleta de verdade.** Remotive e Himalayas entram atrás da interface `Source`; depois dedupe, rate limit, métricas e cron. Termina rodando 7 dias sozinho.
 
-**Etapa 2 — Olhar o dado.** EDA em Python sobre o que se acumulou. Sai com 5 defeitos
-concretos do seu próprio dado, escritos.
+**Fase 2 — Olhar o dado.** EDA em Python, boilerplate medido, política de localização, vagas PT-BR. Sai com 5 defeitos concretos e uma função de corte de boilerplate testada.
 
-**Etapa 3 — Baseline honesta.** `cv.md`, extrator de skills por dicionário rodando nos dois
-lados, TF-IDF, `radar label`, precision@10 medido.
+**Fase 3a — Extração no código.** `cv.md`, skills por dicionário/regex, anos exigidos, salário, idade da vaga, ranking TF-IDF.
 
-**Etapa 4 — ML de verdade.** sentence-transformers, pgvector, comparação direta contra a
-baseline usando `(job_id, model_version)`.
+**Fase 3b — Rotulagem e avaliação.** `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele.
 
-**Etapa 5 — FastAPI e digest.** `api` em Go, analyzer expondo HTTP, digest semanal no Discord.
+**Fase 4a — Embeddings.** sentence-transformers + pgvector contra a baseline, no conjunto congelado.
 
-**Etapa 6 — Kubernetes.** Multi-arch, minikube, manifests, probes, Prometheus.
+**Fase 4b — Jev como extrator de features.** Question set v1, `jev_answers`, piloto com anotação manual, pesos manuais.
 
-**Etapa 7 — Fechamento.** CI, painel de tendências, README verificado por outra pessoa.
+**Fase 4c — sklearn.** Features do Jev + cosseno + features do código; três abordagens comparadas.
+
+**Fase 5 — FastAPI e digest.** Digest semanal no Discord chegando sozinho.
+
+**Fase 6 — Kubernetes.** Imagens multi-stage/multi-arch, minikube.
+
+**Fase 7 — Fechamento.** CI, painel de tendências, README verificado por outra pessoa.

@@ -6,10 +6,11 @@
 
 ## Onde estou
 
-**Etapa 0 · Tarefa 0.4 · Subtarefa 0.4.1** — 7 de 9 subtarefas concluídas. Tarefas 0.1, 0.2
-e 0.3 fechadas. Falta só a 0.4: Dockerfile + compose e o analyzer Python mínimo.
+**Fase 0 · Tarefa 0.4 · Subtarefa 0.4.2** — 8 de 10 subtarefas concluídas. Tarefas 0.1, 0.2
+e 0.3 fechadas; 0.4.1 fechada. Faltam o analyzer Python mínimo (0.4.2) e a máquina limpa
+de verdade (0.4.3, criada em 2026-09-15).
 
-Última sessão: **2026-09-14**.
+Última sessão: **2026-09-29** — SPEC e ROADMAP sincronizados com o `CLAUDE.md` novo (Etapa → Fase, 3a/3b, 4a/4b/4c, Jev, invariantes de avaliação).
 
 ---
 
@@ -135,6 +136,35 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ---
 
+### 2026-09-15
+
+- **0.4.1 fechada — o collector vive dentro do compose.** `Dockerfile` multi-stage
+  (`golang:1.26.1-alpine` → `alpine:3.23`), `.dockerignore`, serviço `app` no `compose.yaml`
+  construído pelo próprio compose, credenciais fora do arquivo versionado e
+  `condition: service_healthy`. Verificado: `docker image rm -f job-searcher:latest` seguido
+  de `docker compose up` reconstrói e coleta sozinho; `postgres_db Waiting → Healthy → app
+  Starting`; run 32 com `fetched=100, failed=0, error NULL`, `app Exited (0)`.
+- **935 MB → 36.9 MB.** O estágio builder (compilador Go + cache de módulos + fonte) pesa
+  935 MB; a imagem final carrega dois arquivos, `jobs_collector` e `config.yaml`. `FROM` é
+  linha de corte: o estágio final nasce de uma base limpa e só atravessa o que o
+  `COPY --from` leva na mão.
+- **Quatro nomes que não casavam, em dois dias.** `yaml:"enable"` (09/09), `CGO_ENABLE=0`,
+  `job_searcher` no `.dockerignore`, `js_builder` vs `js-builder` no `docker run`. Só o
+  último deu erro. Regra que saiu disso: **ferramenta que *resolve* nome protege você;
+  ferramenta que *filtra* nome, não** — num filtro, entrada que não casa com nada é
+  legítima, então a verificação é sempre olhar o resultado, nunca reler a própria lista.
+- **O `CGO_ENABLE=0` era inofensivo por acidente:** `golang:*-alpine` não traz compilador C,
+  então o Go já resolvia `CGO_ENABLED=0` sozinho. Trocar o builder para a variante Debian
+  teria produzido binário ligado a glibc e um `not found` inexplicável dentro do alpine.
+- **`go run .` quebrado e consertado.** Ao apontar a `DATABASE_URL` para a rede do compose,
+  o terminal perdeu o acesso. Causa: uma string única respondendo uma pergunta cuja resposta
+  depende de quem pergunta. Ver decisão de identidade × topologia abaixo.
+- **`service_started` é o `WithOccurrence(1)` do compose.** Mesma corrida que o
+  `main_test.go:236` já tinha resolvido com testcontainers: o entrypoint do Postgres sobe um
+  servidor temporário para o initdb antes do definitivo. Não é observável hoje porque o
+  volume local já está inicializado — só aparece na máquina de quem clona, que é exatamente
+  o cenário do critério de aceite da Tarefa 0.4.
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -153,7 +183,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-09-03 | Abrir a linha de `runs` **antes** do `getSourceID` | Fonte ausente de `sources` é erro de configuração que acontece de madrugada. Abrindo antes, ela aparece em `runs` com `source_id` NULL em vez de sumir sem rastro. |
 | 2026-09-09 | Um container Postgres por **pacote** de teste (`TestMain`), não por teste | Subir Postgres custa ~5s; um por teste inviabilizaria a Tarefa 0.3. **Custo aceito:** os testes passam a compartilhar estado, e a partir da 0.3.2 (que escreve no banco) vai ser preciso isolar — limpeza entre testes, e nada de `t.Parallel()` sem isso. |
 | 2026-09-09 | Transação cobre **só** `normalizeRawJobs` + o laço de `insertJob`; `insertRawJobs` fica fora | `raw_jobs` é append-only, idempotente por `ON CONFLICT DO NOTHING` e cada `INSERT` já é atômico — não há estado intermediário para alguém enxergar, e incluí-la só destruía trabalho bom (verificado: uma falha em `jobs` desfazia os 101 payloads). `jobs` entra porque é uma leitura seguida de N escritas derivadas dela, e é a tabela que o analyzer vai ler enquanto o coletor escreve — a transação existe para **consistência de leitura**, não para recuperação de falha (o sistema já se cura sozinho: `normalizeRawJobs` varre a tabela inteira). |
-| 2026-09-09 | Dentro da transação, tudo-ou-nada: `insertJob` retorna no primeiro erro, sem `continue` | Postgres aborta a transação inteira no primeiro statement com erro (`25P02`) — o `continue` virava 245 erros falsos e o `Commit` falhava do mesmo jeito. É aceitável porque `jobs` é derivação **pura** de `raw_jobs`: nada se perde, a run seguinte reconstrói. **Custo aceito:** atraso até a próxima coleta, e o risco de pílula envenenada (D19). |
+| 2026-09-09 | Dentro da transação, tudo-ou-nada: `insertJob` retorna no primeiro erro, sem `continue` | Postgres aborta a transação inteira no primeiro statement com erro (`25P02`) — o `continue` virava 245 erros falsos e o `Commit` falhava do mesmo jeito. É aceitável porque `jobs` é derivação **pura** de `raw_jobs`: nada se perde, a run seguinte reconstrói. **Custo aceito:** atraso até a próxima coleta, e o risco de pílula envenenada (D19). || 2026-09-15 | Identidade mora no `.env`; topologia mora no arquivo que descreve o ambiente | `user`/`senha` são invariantes (iguais no laptop e no container); `host:porta` varia com o observador. Grudadas numa string, a parte invariante é arrastada pela variante — foi o que quebrou o `go run .`. O `.env` guarda a URL do ponto de vista do terminal (`localhost:5433`); o `compose.yaml` monta a sua própria com `postgres:5432`, e `environment:` vence o `.env`. **Custo aceito:** o *molde* da URL fica escrito duas vezes — duplica-se o público, nunca o segredo. É a mesma linha que o k8s da Etapa 6 usa para separar `Secret` de manifesto. |
+| 2026-09-15 | `image:` mantido junto de `build:` no serviço `app` | Com as duas chaves, o compose constrói **e** aplica a tag dada, em vez de derivar `job-searcher-app` do nome do diretório. A Etapa 6 vai referenciar essa imagem num manifest que não sabe em que pasta o build ocorreu. |
+| 2026-09-15 | `config.yaml` assado na imagem, não montado como volume | Mantém a imagem autocontida: `docker run` funciona sem `-v`. **Custo aceito e não discutido pelo aluno:** mudar uma linha do `config.yaml` exige rebuild da imagem, o que atrita com a promessa do §6 do SPEC ("ajusta o `config.yaml` e roda `docker compose up`"). Revisitar na 0.4.3 ou na Etapa 1, quando a lista de fontes começar a mudar de verdade. |
 
 ---
 
@@ -174,9 +206,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D1~~ | `go.mod`     | `pgx` e `godotenv` como `// indirect`.                                                                                          | ✅ pago 2026-08-26 (0.2.1) |
 | ~~D2~~ | `main.go`    | `os.Exit(1)` espalhado pelo fluxo.                                                                                              | ✅ pago 2026-08-26 (0.2.1) — `run() error`, `main()` é o único ponto de morte |
 | D3  | `main.go`      | Struct `Job` declarada dentro de `main()`. Aceitável hoje; vira problema quando a segunda fonte chegar (Etapa 1).               | ✅ pago 2026-09-03 — `Job`, `JobID` e `JobExternals` movidas para `models.go` |
-| D4  | `compose.yaml` | Credenciais do Postgres hardcoded no arquivo versionado.                                                                        | aberto |
-| D5  | —              | `testdata/*.json` existe mas nenhum teste usa. Endereçado por 0.3.2.                                                            | aberto |
-| D6  | `.env`         | Existe no disco e está no `.gitignore` (correto), mas não há `.env.example` para quem clona.                                    | aberto |
+| ~~D4~~ | `compose.yaml` | Credenciais do Postgres hardcoded no arquivo versionado.                                                                   | ✅ pago 2026-09-15 (0.4.1) — `${}` nos 4 pontos, incluindo o `-U`/`-d` do healthcheck; senha existe 1× no repositório |
+| ~~D5~~ | —          | `testdata/*.json` existe mas nenhum teste usa.                                                                                  | ✅ pago 2026-09-14 (0.3.2) — `TestFetch` serve o fixture por `httptest.Server` |
+| D6  | `.env`         | Sem `.env.example` para quem clona. **Piorou em 2026-09-15:** eram 1 variável, agora são 4 — um clone recebe quatro interpolações vazias e um erro confuso. | aberto — dono: 0.4.3 |
 | D7  | `main.go:56`   | `http.Get` sem timeout — o padrão espera para sempre. No cron, um servidor que aceita a conexão e não responde pendura o coletor e o ciclo seguinte sobe outro em cima. | aberto — dono: Etapa 1, junto com rate limit por fonte |
 | D8  | `main.go:99`   | `content_hash` calculado sobre JSON compactado, mas `json.Compact` não canoniza ordem de chaves. Se a fonte reordenar chaves, todos os hashes mudam de uma vez e nascem "novas versões" falsas. | aberto — sem dono; sintoma seria inexplicável se ocorrer |
 | D9  | `main.go:86`   | Falha de `Unmarshal` é logada sem identificar o item — e não há como identificar, já que o parse é justamente o que falhou. Alarme sem endereço. | aberto — reavaliar em 0.2.3 junto com `runs.failed` |
@@ -187,11 +219,13 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D14 | `main_test.go:90` | Loop `for rows.Next()` sem checar `rows.Err()` depois. | ✅ pago 2026-09-09 |
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
 | D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
-| D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | aberto — dono: 0.4.1 |
+| D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | 🔶 parcial — caminho relativo desde 2026-09-09; a DSN literal repetida 3× continua aberta (ver D4) |
 | D18 | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | aberto — dono: fim da Etapa 0 |
 | D19 | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | aberto — dono: Etapa 1, quando houver 3 fontes e frequência medida |
 | D20 | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | aberto — pagar até o fim da Etapa 0 |
 | D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). | aberto — dono: Etapa 1 |
+| D23 | `compose.yaml:15` | `container_name: postgres_db` fixa o nome fora do namespace do projeto: impede subir uma segunda instância (`docker compose -p outro up`) e, portanto, impede testar a corrida do healthcheck sem destruir o volume de dados real. | aberto — dono: Etapa 6, quando houver mais de um ambiente |
+| D24 | `compose.yaml:26` | Healthcheck usa `$POSTGRES_USER` (expandido pelo **Compose**, em tempo de parse) em vez de `$$POSTGRES_USER` (expandido pelo shell do container, em tempo de execução). Funciona, mas o valor vaza literal no `docker inspect` e o padrão não sobrevive ao k8s, onde não há Compose para interpolar. | aberto — 🟢, dono: Etapa 6 |
 | D22 | `main.go:21` | `var source = "https://remoteok.com/api"` morta desde a chegada do `config.yaml`, e sombreada pela variável do laço. Junto: `Url` → `URL`, `runId` → `runID`. | aberto — 🟢, pagar no próximo commit |
 
 ### 🟢 Nits — mencionados uma vez
@@ -248,11 +282,30 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   diferentes; nenhum dos dois substitui o outro.
 - **2026-09-14** — quando uma transação desfaz, o banco fica idêntico ao estado anterior.
   Nenhuma contagem distingue "não precisou mudar" de "tentou e falhou" — só o registro de
-  execução distingue. É para isso que a tabela `runs` existe.
+  execução distingue. É para isso que a tabela `runs` existe.- **2026-09-15** — `FROM` num Dockerfile não continua o estágio anterior, **corta** com ele. O
+  estágio final nasce de uma base limpa e só recebe o que um `COPY --from` carrega. Duas
+  cozinhas: o que você não levar na mão fica para trás, inclusive o sal.
+- **2026-09-15** — `ports: "5433:5432"` é porta de rua, não número de sala. Quem já está
+  dentro da rede do compose fala direto com a porta interna; o mapeamento existe só para
+  quem vem de fora. O `5433` é arbitrário e resolve um problema exclusivo do laptop (a 5432
+  já está ocupada lá).
+- **2026-09-15** — critério de aceite não é "parou de dar erro", é **qual** erro. O erro de
+  conexão foi a *prova* de que o `config.yaml` tinha sido lido: só chega ao `openConn` quem
+  passou pelo `Load`. Ler a mensagem, não o status de saída.
+- **2026-09-15** — ferramenta que **resolve** nome (`docker run`) protege você; ferramenta
+  que **filtra** nome (`.dockerignore`, `.gitignore`, tag de YAML, variável de ambiente) não
+  tem como distinguir typo de ausência legítima. Em filtro, verifica-se o resultado.
+- **2026-09-15** — identidade é invariante, topologia é variante. Uma string que gruda as
+  duas só consegue atender um observador por vez.
 
 ---
 
 ## Retomada rápida
 
-Próximo passo: **0.2.2** — normalizar `raw_jobs` → `jobs`, com upsert pela chave natural e
-invalidação de `scored_at` quando o conteúdo muda (§4.2 do SPEC).
+Próximo passo: **0.4.2** — `analyzer` Python mínimo no compose: conecta no mesmo Postgres e
+imprime a contagem de `jobs` com `scored_at is null`. Nada além disso.
+
+Estado verificado em 2026-09-15: `docker compose up` numa máquina com o volume já migrado
+constrói a imagem, espera o Postgres ficar saudável, coleta 100 vagas e sai com 0. `go run .`
+do terminal também funciona. Falta commitar — `Dockerfile` e `.dockerignore` estão como
+untracked.

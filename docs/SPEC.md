@@ -14,7 +14,7 @@ Qualquer pessoa clona o repositório, escreve o próprio `cv.md`, ajusta o `conf
 exporta duas variáveis de ambiente e roda `docker compose up`.
 
 **Não é** um job board, não é um agregador público, não tem multi-usuário,
-não tem front-end web (a não ser as páginas mínimas do FastAPI na Etapa 5).
+não tem front-end web (a não ser as páginas mínimas do FastAPI na Fase 5).
 
 ---
 
@@ -36,13 +36,13 @@ O critério é: cada linguagem faz o que a outra faria mal.
 |---|---|
 | `collector` | Roda no cron. Busca as fontes, grava `raw_jobs`, normaliza para `jobs`, registra em `runs`. |
 | `radar` | CLI do usuário: `init`, `label`, `digest`, `status`. |
-| `api` | Servidor HTTP. Nasce na Etapa 5. |
+| `api` | Servidor HTTP. Nasce na Fase 5. |
 
 ### Serviço Python
 
 | Serviço | Papel |
 |---|---|
-| `analyzer` | Laço próprio: acorda, procura trabalho pendente, extrai skills, calcula score, escreve em `scores`. Vira serviço HTTP (FastAPI) na Etapa 5 **sem deixar de usar o banco**. |
+| `analyzer` | Laço próprio: acorda, procura trabalho pendente, extrai skills, calcula score, escreve em `scores`. Vira serviço HTTP (FastAPI) na Fase 5 **sem deixar de usar o banco**. |
 
 ---
 
@@ -67,7 +67,7 @@ memória, socket, arquivo nem processo — só schema.
    lê jobs+scores               ▲
    escreve labels               │
                           ┌─────┴──────┐
-                          │    api     │  Etapa 5
+                          │    api     │  Fase 5
                           │    (Go)    │
                           └────────────┘
 ```
@@ -81,7 +81,7 @@ de vagas por dia, o custo do acoplamento é menor que o custo de uma fila.
 
 **Consequência conhecida — concorrência.** O `analyzer` seleciona vagas pendentes.
 Se duas instâncias subirem, ambas pegam as mesmas linhas e trabalham duas vezes.
-O Postgres tem a resposta pronta para isso; ela será exigida na Etapa 3.
+O Postgres tem a resposta pronta para isso; ela será exigida na Fase 3.
 
 ---
 
@@ -116,8 +116,14 @@ mais nova em toda consulta) e encheria `scores` de notas de versões mortas.
 ### 4.3 `scores` com chave `(job_id, model_version)`
 
 Permite comparar versões do modelo sobre exatamente as mesmas vagas. É o que torna a
-Etapa 4 honesta: baseline e embeddings coexistem na tabela e são comparados de verdade,
+Fase 4 honesta: baseline e embeddings coexistem na tabela e são comparados de verdade,
 não de memória.
+
+### 4.4 `jev_answers` com chave `(job_id, question_set_version)`
+
+Respostas do Jev (Fase 4b) guardadas por versão do question set. Mudar qualquer pergunta
+exige subir o `question_set_version`, e ele entra no `model_version` de todo score que
+dependa dessas respostas.
 
 ---
 
@@ -127,8 +133,8 @@ Três tipos, dificuldade crescente:
 
 | Tipo | Fontes | Dificuldade |
 |---|---|---|
-| **Boards com feed aberto** | Remote OK, Remotive, Himalayas, Arbeitnow | JSON estruturado, sem auth. Etapa 0–1. |
-| **ATS por empresa** | Greenhouse, Lever, Ashby | Sem busca global — cobertura = tamanho da sua lista de empresas no `config.yaml`. Etapa 1. |
+| **Boards com feed aberto** | Remote OK, Remotive, Himalayas, Arbeitnow | JSON estruturado, sem auth. Fase 0–1. |
+| **ATS por empresa** | Greenhouse, Lever, Ashby | Sem busca global — cobertura = tamanho da sua lista de empresas no `config.yaml`. Fase 1. |
 | **Comunidade** | Repositórios de vagas no GitHub (API de issues), Hacker News "Who is hiring" | Texto livre, sem estrutura. É o que **justifica NLP**. Hacker News por último. |
 
 ---
@@ -142,9 +148,9 @@ Razões: o `collector` roda em container sem display, então qualquer UI desktop
 inútil onde o sistema realmente vive; parsing de PDF é custo sem aprendizado relevante
 aqui; e markdown deixa o currículo no **mesmo formato textual da descrição de vaga**,
 permitindo que **um único extrator de skills** rode nos dois lados. É isso que faz o
-matching da Etapa 3 fechar com um componente em vez de dois.
+matching da Fase 3a fechar com um componente em vez de dois.
 
-Se um dia houver UI de configuração, ela nasce como página do FastAPI na Etapa 5.
+Se um dia houver UI de configuração, ela nasce como página do FastAPI na Fase 5.
 
 ### `config.yaml` (versionável, sem segredo)
 - fontes ligadas/desligadas
@@ -158,6 +164,7 @@ Se um dia houver UI de configuração, ela nasce como página do FastAPI na Etap
 ### Variáveis de ambiente (nunca em arquivo versionado)
 - `DATABASE_URL`
 - `DISCORD_WEBHOOK_URL`
+- `JEV_API_KEY` (opcional — sem ela, o projeto pontua com o cosseno)
 
 ---
 
@@ -171,7 +178,7 @@ job-radar/
 ├── cmd/
 │   ├── collector/
 │   ├── radar/
-│   └── api/                 # Etapa 5
+│   └── api/                 # Fase 5
 ├── internal/
 │   ├── source/              # interface Source + uma impl por fonte
 │   ├── store/               # acesso a Postgres
@@ -181,7 +188,7 @@ job-radar/
 │   ├── pyproject.toml
 │   └── analyzer/
 ├── db/migrations/
-├── deploy/k8s/              # Etapa 6
+├── deploy/k8s/              # Fase 6
 ├── testdata/
 ├── docs/
 ├── compose.yaml
@@ -207,11 +214,11 @@ Tão importante quanto o que está dentro.
 
 ## 9. Tensão registrada: compose vs Kubernetes
 
-O produto promete `docker compose up`. A Etapa 6 entrega Kubernetes.
+O produto promete `docker compose up`. A Fase 6 entrega Kubernetes.
 
 São **dois caminhos de deploy paralelos**, não uma migração. O k8s existe pelo portfólio
 e pelo aprendizado; o compose é o contrato com quem clona o repositório. Regra: nenhuma
-mudança da Etapa 6 pode quebrar o `docker compose up`. O README continua ensinando compose.
+mudança da Fase 6 pode quebrar o `docker compose up`. O README continua ensinando compose.
 
 ---
 
@@ -221,4 +228,27 @@ mudança da Etapa 6 pode quebrar o `docker compose up`. O README continua ensina
 - Toda execução do `collector` deixa rastro em `runs` — inclusive quando falha
 - Migrations sempre com `up` **e** `down` (goose)
 - Commits em inglês, imperativo, pequenos
-- README atualizado ao fim de cada etapa
+- README atualizado ao fim de cada fase
+
+### Avaliação
+
+- O conjunto de teste congelado nunca entra em treino, ajuste de hiperparâmetro nem
+  reescrita de pergunta
+- O `radar label` nunca mostra score de modelo nenhum enquanto o aluno rotula
+- Todo número reportado vem com o `model_version` que o gerou
+
+---
+
+## 11. Jev (a partir da Fase 4b)
+
+LLM usado como **extrator de features**, não como juiz do match.
+
+- Opcional no `config.yaml`: sem chave, o projeto pontua com o cosseno. Um teste prova isso.
+- Provider trocado só pela base URL (TypeSafe, OpenRouter, OpenCode, Laya local). Nada
+  acoplado a um provider específico.
+- Perguntas em inglês, atômicas, com condições literais, **sempre sobre a vaga, nunca sobre
+  o match**.
+- Números, datas e salário são extraídos e comparados no código, nunca pelo Jev.
+- O texto passa pelo corte de boilerplate (Fase 2) antes de ir para o Jev.
+- Fontes em PT-BR são avaliadas em lote separado.
+- Chamadas testáveis sem rede (resposta gravada em `testdata/`).
