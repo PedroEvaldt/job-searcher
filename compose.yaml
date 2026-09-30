@@ -28,5 +28,15 @@ services:
       timeout: 5s
       retries: 5
 
+  analyzer:
+    build:
+      context: ./analyzer/
+      dockerfile: ./Dockerfile
+    image: analyzer:latest
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    depends_on:
+      app:
+        condition: service_completed_successfully
 volumes:
   postgres_data:
