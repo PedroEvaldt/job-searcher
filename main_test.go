@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -26,9 +25,6 @@ const (
 	rjCount = 100
 	jCount  = 100
 )
-
-//go:embed db/migrations/*.sql
-var migrationsFS embed.FS
 
 var (
 	db  *sql.DB

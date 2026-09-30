@@ -4,19 +4,28 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/pressly/goose/v3"
 	"go.yaml.in/yaml/v3"
 )
+
+//go:embed db/migrations/*.sql
+var migrationsFS embed.FS
 
 var source = "https://remoteok.com/api"
 
@@ -74,6 +83,51 @@ func main() {
 	}
 }
 
+func migrate(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
+	migrationsFS, err := fs.Sub(migrationsFS, "db/migrations")
+	if err != nil {
+		return fmt.Errorf("failed to remove FS prefix: %w", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationsFS)
+	if err != nil {
+		return fmt.Errorf("failed to get goose provider: %w", err)
+	}
+	migrations, err := provider.Up(ctx)
+	if err != nil {
+		var partialErr *goose.PartialError
+		if errors.As(err, &partialErr) {
+			logResults(logger, partialErr.Applied)
+			if f := partialErr.Failed; f != nil {
+				logger.Error("migration failed",
+					"version", f.Source.Version,
+					"file", filepath.Base(f.Source.Path),
+					"duration", f.Duration,
+					"error", f.Error)
+			}
+		}
+		return fmt.Errorf("migrations failed: %w", err)
+	}
+
+	if len(migrations) == 0 {
+		logger.Info("no migrations pending")
+	} else {
+		logResults(logger, migrations)
+	}
+	return nil
+}
+
+func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
+	for _, migration := range migrations {
+		logger.Info("migration applied",
+			"version", migration.Source.Version,
+			"file", filepath.Base(migration.Source.Path),
+			"type", migration.Source.Type,
+			"direction", migration.Direction,
+			"duration", migration.Duration,
+			"empty", migration.Empty)
+	}
+}
+
 func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	ctx := context.Background()
 	conn, err := openConn(ctx, dbURL)
@@ -86,7 +140,21 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 			logger.Error("failed to close connection", "error", err)
 		}
 	}()
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			logger.Error("failed to close database", "error", err)
+		}
+	}()
 
+	err = migrate(ctx, db, logger)
+	if err != nil {
+		return fmt.Errorf("failed to migrate: %w", err)
+	}
 	for _, source := range cfg.Sources {
 		if source.Enabled {
 			err = processSource(ctx, conn, logger, source)
