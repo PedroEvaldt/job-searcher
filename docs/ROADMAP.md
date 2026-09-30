@@ -168,8 +168,12 @@ projeto lendo só o README.
       ✅ 2026-09-30 — `processSource` com `(err error)`: fonte `fake` grava em `runs.error`
       o mesmo `failed to get source id: ...` do `WARN` (run 45). Log por item em `Debug` +
       uma linha `source collected` por fonte: execução normal caiu de 100+ para 2 linhas.
-- [ ] **0.5.2** README: o que é, pré-requisitos, `.env.example`, `docker compose up`, como
+- [x] **0.5.2** README: o que é, pré-requisitos, `.env.example`, `docker compose up`, como
       rodar os testes.
+      ✅ 2026-09-30 — escrito pelo mentor a pedido. Teste do leitor feito pelo mentor num clone
+      do commit `5baa59d`: `up --build` → 3 migrations, `fetched=100 failed=0`, `analyzer`
+      conta 99; `go test` verde. Achado: `ruff` falha no clone (D27).
+      **Fase 0 fechada.**
 
 ---
 

@@ -6,9 +6,8 @@
 
 ## Onde estou
 
-**Fase 0 · Tarefa 0.5 · Subtarefa 0.5.2** — critério da Fase 0 atingido em 2026-09-30
-(`docker compose up` num clone limpo migra, coleta e o Python conta). Tarefas 0.1 a 0.4
-fechadas. 0.5.1 (débitos) fechada; falta o README (0.5.2).
+**Fase 0 fechada em 2026-09-30.** Próximo: expandir a Fase 1 no `ROADMAP.md` e apresentar a
+primeira subtarefa dela.
 
 Última sessão: **2026-09-30**.
 
@@ -204,6 +203,13 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   `(err error)` na assinatura, `return X` atribui `X` ao resultado **antes** dos `defer` — o
   `runs.error` passou a guardar o erro envolvido. D18: `Debug` por item + uma linha por fonte;
   o coletor saiu de 100+ linhas para 2.
+- ✅ **0.5.2 — README** (escrito pelo mentor a pedido). O aluno declarou o teste do leitor feito,
+  mas as imagens não tinham sido reconstruídas; o mentor repetiu o teste num clone:
+  quick start e `go test` passam. **Fase 0 fechada.**
+- **"Funciona na minha máquina", versão permissão de arquivo:** o SSD do projeto marca todo
+  arquivo como executável e o repo tem `core.fileMode=false`. O `main.py` tem shebang, o git
+  o guarda como `100644`, e num clone em `/tmp` o `ruff` acusa `EXE001`. No diretório de dev,
+  passa. Só um clone num filesystem normal mostra — mesmo padrão do D25.
 
 ## Decisões tomadas
 
@@ -266,6 +272,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | aberto — dono: Etapa 1 |
 | D23 | `compose.yaml:15` | `container_name: postgres_db` fixa o nome fora do namespace do projeto: impede subir uma segunda instância (`docker compose -p outro up`) e, portanto, impede testar a corrida do healthcheck sem destruir o volume de dados real. | aberto — dono: Etapa 6, quando houver mais de um ambiente |
 | D24 | `compose.yaml:26` | Healthcheck usa `$POSTGRES_USER` (expandido pelo **Compose**, em tempo de parse) em vez de `$$POSTGRES_USER` (expandido pelo shell do container, em tempo de execução). Funciona, mas o valor vaza literal no `docker inspect` e o padrão não sobrevive ao k8s, onde não há Compose para interpolar. | aberto — 🟢, dono: Etapa 6 |
+| D27 | `analyzer/main.py:1` | Shebang num arquivo sem bit de execução no git (`100644`): `ruff check` falha com `EXE001` em qualquer clone, mas passa no SSD de dev, que marca tudo como executável. O script é rodado por `uv run`, nunca direto. | aberto — 🟢, 1 min, primeiro commit da Fase 1 |
 | D25 | `compose.yaml` (`app`, `analyzer`) | `build:` + `image:` com tag fixa: o `up` só constrói se a tag **não existir**, e tag é global no Docker, não por projeto. Verificado em 2026-09-30: o clone limpo da 0.4.3 rodou a imagem de 29/09, sem o `migrate`. Mitigação hoje: `--build` após mudar código. | aberto — reavaliar na Fase 6 (tags versionadas) |
 | D26 | `analyzer/main.py:22` | Erro de query (ex.: `UndefinedTable`) sai como traceback cru; só a falha de conexão tem mensagem de uma linha. | aberto — 🟢, pagar quando o analyzer ganhar lógica real |
 | ~~D22~~ | `main.go:21` | `var source = "https://remoteok.com/api"` morta desde a chegada do `config.yaml`, e sombreada pela variável do laço. Junto: `Url` → `URL`, `runId` → `runID`. | ✅ pago 2026-09-30 (0.5.1, feito pelo mentor a pedido — mecânico) |
@@ -344,7 +351,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-Próximo passo: **0.5.2** — README. Depois a Fase 1 é expandida no ROADMAP.
+Próximo passo: pagar o D27 (1 min) e expandir a **Fase 1** no `ROADMAP.md` (tarefas e
+subtarefas), depois apresentar a 1.1.1.
 
 Estado verificado em 2026-09-30: clone limpo sem imagem prévia → build, 3 migrations,
 coleta, `analyzer` conta. Banco de dev intacto (363 vagas). Depois de mudar código, usar
