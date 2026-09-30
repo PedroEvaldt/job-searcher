@@ -138,8 +138,13 @@ rede do compose, imagem distroless/alpine.
       Verificado: imagem apagada → `docker compose up` reconstrói, espera `Healthy` e
       coleta (run 32, `fetched=100 failed=0 error NULL`); `go run .` do terminal também
       volta a funcionar, com a senha existindo 1× no repositório.
-- [ ] **0.4.2** `analyzer` Python mínimo no compose: conecta no Postgres e imprime a
+- [x] **0.4.2** `analyzer` Python mínimo no compose: conecta no Postgres e imprime a
       contagem de `jobs` com `scored_at is null`. Nada além disso.
+      ✅ 2026-09-29 — projeto `uv` com `psycopg[binary]`, só `DATABASE_URL` (sem dotenv),
+      variável ausente e banco fora do ar saem com uma linha no stderr e `exit=1`;
+      `depends_on: app: service_completed_successfully`. `ruff` e `mypy --strict` limpos.
+      Verificado: `docker compose up` → `app` sai 0 às 23:14:20.09, `analyzer` sobe às
+      23:14:20.44 e imprime 363 = `psql`.
 - [ ] **0.4.3** Máquina limpa de verdade: banco sem schema vira banco com schema sem
       ninguém rodar `make gup` à mão, e quem clona sabe quais variáveis exportar
       (`.env.example`, D6). Fecha o critério de aceite da Tarefa 0.4.

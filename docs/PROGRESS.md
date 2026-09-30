@@ -6,11 +6,11 @@
 
 ## Onde estou
 
-**Fase 0 · Tarefa 0.4 · Subtarefa 0.4.2** — 8 de 10 subtarefas concluídas. Tarefas 0.1, 0.2
-e 0.3 fechadas; 0.4.1 fechada. Faltam o analyzer Python mínimo (0.4.2) e a máquina limpa
-de verdade (0.4.3, criada em 2026-09-15).
+**Fase 0 · Tarefa 0.4 · Subtarefa 0.4.3** — 9 de 10 subtarefas concluídas. Tarefas 0.1, 0.2
+e 0.3 fechadas; 0.4.1 e 0.4.2 fechadas. Falta a máquina limpa de verdade (0.4.3), que fecha
+a Fase 0.
 
-Última sessão: **2026-09-29** — SPEC e ROADMAP sincronizados com o `CLAUDE.md` novo (Etapa → Fase, 3a/3b, 4a/4b/4c, Jev, invariantes de avaliação).
+Última sessão: **2026-09-29**.
 
 ---
 
@@ -165,6 +165,26 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   volume local já está inicializado — só aparece na máquina de quem clona, que é exatamente
   o cenário do critério de aceite da Tarefa 0.4.
 
+### 2026-09-29
+
+- **Sincronização com o `CLAUDE.md` novo:** "Etapa" → "Fase", 3a/3b, 4a/4b/4c, Jev, invariantes
+  de avaliação em `SPEC.md` e `ROADMAP.md`.
+- ✅ **0.4.2 — o Python enxerga o banco.** `analyzer/` como projeto `uv`, `psycopg[binary]`
+  (a variante pura exige a libpq do sistema, ausente na slim), Dockerfile em duas camadas
+  (`uv sync --no-install-project` antes do `COPY . .`, mesma ideia do `go mod download`).
+  Verificado: `app` sai 0 → `analyzer` sobe e imprime 363 = `psql`.
+- **Quatro armadilhas no caminho:**
+  - `dockerfile:` é resolvido **a partir do `context`** — `./analyzer/` + `./analyzer/Dockerfile`
+    virou `analyzer/analyzer/Dockerfile`.
+  - `uv run` sincroniza antes de executar e inclui o grupo `dev` por padrão: o container
+    baixava mypy e ruff a cada subida.
+  - `load_dotenv()` **sobe diretórios** a partir do script até achar um `.env`. Com ele no
+    código, o teste de "variável ausente" era impossível: ele recolocava a variável que o
+    teste tinha tirado. É o "filtro × resolvedor" de 15/09 com outro rosto.
+  - `if` que imprime e não retorna não é tratamento de erro, é log.
+- **`service_completed_successfully` × `service_healthy`:** o `analyzer` depende de o coletor
+  ter **terminado**, não de o banco estar de pé.
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -302,8 +322,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-Próximo passo: **0.4.2** — `analyzer` Python mínimo no compose: conecta no mesmo Postgres e
-imprime a contagem de `jobs` com `scored_at is null`. Nada além disso.
+Próximo passo: **0.4.3** — máquina limpa: migrations aplicadas pelo próprio coletor ao subir
+(reaproveitando o `embed.FS` + `goose.NewProvider` do `main_test.go`) e `.env.example` (D6).
+Fecha a Fase 0.
 
 Estado verificado em 2026-09-15: `docker compose up` numa máquina com o volume já migrado
 constrói a imagem, espera o Postgres ficar saudável, coleta 100 vagas e sai com 0. `go run .`
