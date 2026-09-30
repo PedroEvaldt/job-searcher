@@ -6,11 +6,11 @@
 
 ## Onde estou
 
-**Fase 0 · Tarefa 0.4 · Subtarefa 0.4.3** — 9 de 10 subtarefas concluídas. Tarefas 0.1, 0.2
-e 0.3 fechadas; 0.4.1 e 0.4.2 fechadas. Falta a máquina limpa de verdade (0.4.3), que fecha
-a Fase 0.
+**Fase 0 · Tarefa 0.5 · Subtarefa 0.5.2** — critério da Fase 0 atingido em 2026-09-30
+(`docker compose up` num clone limpo migra, coleta e o Python conta). Tarefas 0.1 a 0.4
+fechadas. 0.5.1 (débitos) fechada; falta o README (0.5.2).
 
-Última sessão: **2026-09-29**.
+Última sessão: **2026-09-30**.
 
 ---
 
@@ -185,6 +185,26 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **`service_completed_successfully` × `service_healthy`:** o `analyzer` depende de o coletor
   ter **terminado**, não de o banco estar de pé.
 
+### 2026-09-30
+
+- ✅ **0.4.3 — máquina limpa.** O coletor migra ao subir: `//go:embed` saiu do `_test.go`
+  (que o `go build` ignora) para o `main.go`, junto com o import `_ ".../pgx/v5/stdlib"`, que
+  só **registra** o driver `"pgx"` — sem ele, erro em runtime, não em compilação. Log por
+  migration aplicada e `goose.PartialError` via `errors.As`, que diz o que entrou e o que
+  quebrou. **Tarefa 0.4 e critério da Fase 0 fechados.**
+- **O primeiro teste de clone passou pelo motivo errado — e falhou.** O compose reaproveitou a
+  `job-searcher:latest` de 29/09, sem o `migrate` (D25). Diagnosticado lendo o **qual** erro:
+  `relation "runs" does not exist` no `app` e nenhuma linha de migration. E o `app` saiu 0
+  mesmo sem nenhuma tabela — D21 ao vivo, com o `analyzer` subindo em cima.
+- **`defer` antes do `if err`, de novo** (`sql.Open`) — mesmo padrão do D15 de 09/09.
+- **`.env.example` com `${}`:** a `DATABASE_URL` é montada a partir das outras chaves; a senha
+  de exemplo existe uma vez. Porta `5433` (visão do terminal), não `5432` — no laptop, a 5432
+  é **outro** Postgres, e o `migrate` criaria o schema lá sem erro nenhum.
+- ✅ **0.5.1 — débitos do fim da fase.** D22 feito pelo mentor a pedido (mecânico). D20: com
+  `(err error)` na assinatura, `return X` atribui `X` ao resultado **antes** dos `defer` — o
+  `runs.error` passou a guardar o erro envolvido. D18: `Debug` por item + uma linha por fonte;
+  o coletor saiu de 100+ linhas para 2.
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -228,7 +248,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D3  | `main.go`      | Struct `Job` declarada dentro de `main()`. Aceitável hoje; vira problema quando a segunda fonte chegar (Etapa 1).               | ✅ pago 2026-09-03 — `Job`, `JobID` e `JobExternals` movidas para `models.go` |
 | ~~D4~~ | `compose.yaml` | Credenciais do Postgres hardcoded no arquivo versionado.                                                                   | ✅ pago 2026-09-15 (0.4.1) — `${}` nos 4 pontos, incluindo o `-U`/`-d` do healthcheck; senha existe 1× no repositório |
 | ~~D5~~ | —          | `testdata/*.json` existe mas nenhum teste usa.                                                                                  | ✅ pago 2026-09-14 (0.3.2) — `TestFetch` serve o fixture por `httptest.Server` |
-| D6  | `.env`         | Sem `.env.example` para quem clona. **Piorou em 2026-09-15:** eram 1 variável, agora são 4 — um clone recebe quatro interpolações vazias e um erro confuso. | aberto — dono: 0.4.3 |
+| ~~D6~~ | `.env`         | Sem `.env.example` para quem clona. **Piorou em 2026-09-15:** eram 1 variável, agora são 4 — um clone recebe quatro interpolações vazias e um erro confuso. | ✅ pago 2026-09-30 (0.4.3) — `.env.example` com `DATABASE_URL` montada por `${}` |
 | D7  | `main.go:56`   | `http.Get` sem timeout — o padrão espera para sempre. No cron, um servidor que aceita a conexão e não responde pendura o coletor e o ciclo seguinte sobe outro em cima. | aberto — dono: Etapa 1, junto com rate limit por fonte |
 | D8  | `main.go:99`   | `content_hash` calculado sobre JSON compactado, mas `json.Compact` não canoniza ordem de chaves. Se a fonte reordenar chaves, todos os hashes mudam de uma vez e nascem "novas versões" falsas. | aberto — sem dono; sintoma seria inexplicável se ocorrer |
 | D9  | `main.go:86`   | Falha de `Unmarshal` é logada sem identificar o item — e não há como identificar, já que o parse é justamente o que falhou. Alarme sem endereço. | aberto — reavaliar em 0.2.3 junto com `runs.failed` |
@@ -240,13 +260,15 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
 | D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
 | D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | 🔶 parcial — caminho relativo desde 2026-09-09; a DSN literal repetida 3× continua aberta (ver D4) |
-| D18 | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | aberto — dono: fim da Etapa 0 |
+| ~~D18~~ | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | ✅ pago 2026-09-30 (0.5.1) — `Debug` por item + `source collected` por fonte |
 | D19 | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | aberto — dono: Etapa 1, quando houver 3 fontes e frequência medida |
-| D20 | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | aberto — pagar até o fim da Etapa 0 |
-| D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). | aberto — dono: Etapa 1 |
+| ~~D20~~ | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | ✅ pago 2026-09-30 (0.5.1) — resultado nomeado; verificado com fonte `fake` (run 45) |
+| D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | aberto — dono: Etapa 1 |
 | D23 | `compose.yaml:15` | `container_name: postgres_db` fixa o nome fora do namespace do projeto: impede subir uma segunda instância (`docker compose -p outro up`) e, portanto, impede testar a corrida do healthcheck sem destruir o volume de dados real. | aberto — dono: Etapa 6, quando houver mais de um ambiente |
 | D24 | `compose.yaml:26` | Healthcheck usa `$POSTGRES_USER` (expandido pelo **Compose**, em tempo de parse) em vez de `$$POSTGRES_USER` (expandido pelo shell do container, em tempo de execução). Funciona, mas o valor vaza literal no `docker inspect` e o padrão não sobrevive ao k8s, onde não há Compose para interpolar. | aberto — 🟢, dono: Etapa 6 |
-| D22 | `main.go:21` | `var source = "https://remoteok.com/api"` morta desde a chegada do `config.yaml`, e sombreada pela variável do laço. Junto: `Url` → `URL`, `runId` → `runID`. | aberto — 🟢, pagar no próximo commit |
+| D25 | `compose.yaml` (`app`, `analyzer`) | `build:` + `image:` com tag fixa: o `up` só constrói se a tag **não existir**, e tag é global no Docker, não por projeto. Verificado em 2026-09-30: o clone limpo da 0.4.3 rodou a imagem de 29/09, sem o `migrate`. Mitigação hoje: `--build` após mudar código. | aberto — reavaliar na Fase 6 (tags versionadas) |
+| D26 | `analyzer/main.py:22` | Erro de query (ex.: `UndefinedTable`) sai como traceback cru; só a falha de conexão tem mensagem de uma linha. | aberto — 🟢, pagar quando o analyzer ganhar lógica real |
+| ~~D22~~ | `main.go:21` | `var source = "https://remoteok.com/api"` morta desde a chegada do `config.yaml`, e sombreada pela variável do laço. Junto: `Url` → `URL`, `runId` → `runID`. | ✅ pago 2026-09-30 (0.5.1, feito pelo mentor a pedido — mecânico) |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -322,11 +344,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-Próximo passo: **0.4.3** — máquina limpa: migrations aplicadas pelo próprio coletor ao subir
-(reaproveitando o `embed.FS` + `goose.NewProvider` do `main_test.go`) e `.env.example` (D6).
-Fecha a Fase 0.
+Próximo passo: **0.5.2** — README. Depois a Fase 1 é expandida no ROADMAP.
 
-Estado verificado em 2026-09-15: `docker compose up` numa máquina com o volume já migrado
-constrói a imagem, espera o Postgres ficar saudável, coleta 100 vagas e sai com 0. `go run .`
-do terminal também funciona. Falta commitar — `Dockerfile` e `.dockerignore` estão como
-untracked.
+Estado verificado em 2026-09-30: clone limpo sem imagem prévia → build, 3 migrations,
+coleta, `analyzer` conta. Banco de dev intacto (363 vagas). Depois de mudar código, usar
+`docker compose up --build` (D25).

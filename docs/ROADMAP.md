@@ -145,9 +145,31 @@ rede do compose, imagem distroless/alpine.
       `depends_on: app: service_completed_successfully`. `ruff` e `mypy --strict` limpos.
       Verificado: `docker compose up` → `app` sai 0 às 23:14:20.09, `analyzer` sobe às
       23:14:20.44 e imprime 363 = `psql`.
-- [ ] **0.4.3** Máquina limpa de verdade: banco sem schema vira banco com schema sem
+- [x] **0.4.3** Máquina limpa de verdade: banco sem schema vira banco com schema sem
       ninguém rodar `make gup` à mão, e quem clona sabe quais variáveis exportar
       (`.env.example`, D6). Fecha o critério de aceite da Tarefa 0.4.
+      ✅ 2026-09-30 — coletor aplica as migrations ao subir (`embed.FS` movido do teste para
+      produção, `goose.NewProvider` sobre `*sql.DB` via `pgx/stdlib`, log por migration e
+      `goose.PartialError` tratado). `.env.example` monta a `DATABASE_URL` por `${}` a partir
+      das outras chaves. Verificado em clone em `/tmp/radar-clean`, sem imagem prévia:
+      build das duas imagens, 3 migrations aplicadas, `analyzer` com contagem > 0; segundo
+      `up` sem reaplicar. **Tarefa 0.4 fechada.**
+
+### Tarefa 0.5 — Fechamento da Fase 0
+
+**Objetivo:** pagar os débitos agendados para o fim da fase e deixar o README ensinando a
+rodar o projeto.
+
+**Critério de aceite:** nenhum débito com dono "fim da Fase 0" aberto; outra pessoa roda o
+projeto lendo só o README.
+
+- [x] **0.5.1** Débitos de Go do fim da fase: D20 (`runs.error` sem o contexto do erro),
+      D18 (INFO por item) e D22 (variável morta + nomes).
+      ✅ 2026-09-30 — `processSource` com `(err error)`: fonte `fake` grava em `runs.error`
+      o mesmo `failed to get source id: ...` do `WARN` (run 45). Log por item em `Debug` +
+      uma linha `source collected` por fonte: execução normal caiu de 100+ para 2 linhas.
+- [ ] **0.5.2** README: o que é, pré-requisitos, `.env.example`, `docker compose up`, como
+      rodar os testes.
 
 ---
 

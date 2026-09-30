@@ -27,8 +27,6 @@ import (
 //go:embed db/migrations/*.sql
 var migrationsFS embed.FS
 
-var source = "https://remoteok.com/api"
-
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -42,7 +40,7 @@ type Config struct {
 type Source struct {
 	Name    string `yaml:"name"`
 	Enabled bool   `yaml:"enabled"`
-	Url     string `yaml:"url"`
+	URL     string `yaml:"url"`
 }
 
 func Load(path string) (*Config, error) {
@@ -167,7 +165,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	return nil
 }
 
-func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source) error {
+func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source) (err error) {
 	var (
 		fetched     int
 		failed      int
@@ -175,12 +173,12 @@ func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, sou
 		sourceIDPtr *int
 	)
 
-	runId, err := openRun(ctx, conn)
+	runID, err := openRun(ctx, conn)
 	if err != nil {
 		return fmt.Errorf("failed to open run: %w", err)
 	}
 	defer func() {
-		closeErr := closeRun(ctx, conn, fetched, failed, runId, sourceIDPtr, err)
+		closeErr := closeRun(ctx, conn, fetched, failed, runID, sourceIDPtr, err)
 		if closeErr != nil {
 			logger.Error("failed to close run", "error", closeErr)
 		}
@@ -191,7 +189,7 @@ func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, sou
 	}
 	sourceIDPtr = &sourceID
 
-	items, err := fetchData(source.Url)
+	items, err := fetchData(source.URL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}
@@ -201,6 +199,7 @@ func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, sou
 	if err != nil {
 		return fmt.Errorf("failed to collect and insert data: %w", err)
 	}
+	logger.Info("source collected", "source", source.Name, "fetched", fetched, "failed", failed)
 	return nil
 }
 
@@ -309,7 +308,7 @@ func insertRawJobs(ctx context.Context, conn querier, logger *slog.Logger, items
 		err = conn.QueryRow(ctx, sql, sourceID, jobID.ID, item, hash).Scan(&rawJobID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				logger.Info("item already exists, jumping", "source_id", sourceID, "external_id", jobID.ID)
+				logger.Debug("item already exists, jumping", "source_id", sourceID, "external_id", jobID.ID)
 				continue
 			}
 			logger.Error("failed to insert item into raw_jobs", "error", err)

@@ -139,7 +139,7 @@ func TestFetch(t *testing.T) {
 			w.Write(body)
 		}))
 		t.Cleanup(func() { srv.Close() })
-		cfg.Sources[i].Url = srv.URL
+		cfg.Sources[i].URL = srv.URL
 	}
 
 	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
