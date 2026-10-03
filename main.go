@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/PedroEvaldt/job-searcher/internal/sources"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -27,22 +27,37 @@ import (
 //go:embed db/migrations/*.sql
 var migrationsFS embed.FS
 
+type Source interface {
+	Fetch(string) ([]json.RawMessage, error)
+	ExternalID(json.RawMessage) (string, error)
+	ToJob(json.RawMessage) (sources.Job, error)
+}
+
+func For(name string) (Source, error) {
+	switch name {
+	case "remoteok":
+		return sources.RemoteOK{}, nil
+	case "remotive":
+		return sources.Remotive{}, nil
+	default:
+		return nil, fmt.Errorf("unknown source: %s", name)
+	}
+}
+
+// querier is the minimal set of pgx methods the store helpers need. Declaring it
+// at the consumer lets those helpers accept either a *pgx.Conn or a pgx.Tx.
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// Config is the parsed config.yaml: the list of sources the collector may pull from.
 type Config struct {
-	Sources []Source `yaml:"sources"`
+	SourcesConfig []sources.SourceConfig `yaml:"sources"`
 }
 
-type Source struct {
-	Name    string `yaml:"name"`
-	Enabled bool   `yaml:"enabled"`
-	URL     string `yaml:"url"`
-}
-
+// Load reads the YAML file at path and unmarshals it into a Config.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -50,18 +65,22 @@ func Load(path string) (*Config, error) {
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal: %w", err)
 	}
 	return &cfg, nil
 }
 
+// main wires the process together: load .env and DATABASE_URL, load config.yaml,
+// then run a single collection pass. It is the only place that exits the process.
 func main() {
 	logger := slog.Default()
 
 	err := godotenv.Load()
 	if err != nil {
-		logger.Warn("failed to load env configs", "error", err)
+		logger.Debug("failed to load env configs", "error", err)
 	}
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -81,6 +100,9 @@ func main() {
 	}
 }
 
+// migrate applies every pending goose migration embedded under db/migrations,
+// logging each one. Running it at startup lets a fresh database come up with the
+// full schema without anyone invoking goose by hand.
 func migrate(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 	migrationsFS, err := fs.Sub(migrationsFS, "db/migrations")
 	if err != nil {
@@ -114,6 +136,7 @@ func migrate(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 	return nil
 }
 
+// logResults logs one INFO line per migration that goose reported.
 func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 	for _, migration := range migrations {
 		logger.Info("migration applied",
@@ -126,6 +149,9 @@ func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 	}
 }
 
+// run performs one full collection pass: open the Postgres connection, apply
+// migrations, then process each enabled source in turn. A failure in one source is
+// logged and skipped, not fatal to the others.
 func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	ctx := context.Background()
 	conn, err := openConn(ctx, dbURL)
@@ -153,11 +179,16 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
 	}
-	for _, source := range cfg.Sources {
-		if source.Enabled {
-			err = processSource(ctx, conn, logger, source)
+	for _, sourceConfig := range cfg.SourcesConfig {
+		if sourceConfig.Enabled {
+			source, err := For(sourceConfig.Name)
 			if err != nil {
-				logger.Warn("failed to process source", "source", source.Name, "error", err)
+				logger.Warn("config name does not match valid source", "error", err)
+				continue
+			}
+			err = processSource(ctx, conn, logger, source, sourceConfig)
+			if err != nil {
+				logger.Warn("failed to process source", "source", sourceConfig.Name, "error", err)
 				continue
 			}
 		}
@@ -165,7 +196,11 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	return nil
 }
 
-func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source) (err error) {
+// processSource handles a single source end to end and records the attempt in the
+// runs table. It opens the run row first (closed via a deferred closeRun over the
+// named return) so even a failure before fetching leaves a trace, then resolves the
+// source id, fetches its items, and stores them.
+func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source, sourceConfig sources.SourceConfig) (err error) {
 	var (
 		fetched     int
 		failed      int
@@ -183,26 +218,27 @@ func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, sou
 			logger.Error("failed to close run", "error", closeErr)
 		}
 	}()
-	sourceID, err = getSourceID(ctx, conn, source.Name)
+	sourceID, err = getSourceID(ctx, conn, sourceConfig.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get source id: %w", err)
 	}
 	sourceIDPtr = &sourceID
 
-	items, err := fetchData(source.URL)
+	items, err := source.Fetch(sourceConfig.URL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}
 
 	fetched = len(items)
-	failed, err = collectAndStoreData(ctx, conn, logger, items, sourceID)
+	failed, err = collectAndStoreData(ctx, conn, logger, items, source, sourceID)
 	if err != nil {
 		return fmt.Errorf("failed to collect and insert data: %w", err)
 	}
-	logger.Info("source collected", "source", source.Name, "fetched", fetched, "failed", failed)
+	logger.Info("source collected", "source", sourceConfig.Name, "fetched", fetched, "failed", failed)
 	return nil
 }
 
+// openConn opens a pgx connection and verifies it is reachable with a Ping.
 func openConn(ctx context.Context, dbURL string) (*pgx.Conn, error) {
 	conn, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
@@ -215,6 +251,7 @@ func openConn(ctx context.Context, dbURL string) (*pgx.Conn, error) {
 	return conn, nil
 }
 
+// openRun inserts a new row into runs with started_at = now() and returns its id.
 func openRun(ctx context.Context, conn *pgx.Conn) (int, error) {
 	var id int
 	sql := "INSERT INTO runs (started_at) VALUES (now()) RETURNING id;"
@@ -225,6 +262,8 @@ func openRun(ctx context.Context, conn *pgx.Conn) (int, error) {
 	return id, nil
 }
 
+// closeRun fills in the final counters, source id and error (if any) on the run row
+// opened by openRun. A nil pointer is stored as NULL.
 func closeRun(ctx context.Context, conn *pgx.Conn, fetched, failed, id int, sourceID *int, runErr error) error {
 	var runErrStr *string
 	sql := "UPDATE runs SET fetched = $1, failed = $2, source_id = $3, error = $4 WHERE id = $5;"
@@ -239,39 +278,66 @@ func closeRun(ctx context.Context, conn *pgx.Conn, fetched, failed, id int, sour
 	return nil
 }
 
-func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
-	failed, err := insertRawJobs(ctx, conn, logger, items, sourceID)
+func compactJSON(item json.RawMessage) (string, error) {
+	var compactedJSON bytes.Buffer
+	err := json.Compact(&compactedJSON, item)
 	if err != nil {
-		return failed, fmt.Errorf("failed to insert raw jobs: %w", err)
+		return "", fmt.Errorf("failed to compact raw json: %w", err)
 	}
+	h := sha256.Sum256(compactedJSON.Bytes())
+	hash := hex.EncodeToString(h[:])
+	return hash, nil
+}
 
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return failed, fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer func() {
-		rollbackErr := tx.Rollback(ctx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			logger.Error("failed to rollback transaction", "error", rollbackErr)
-		}
-	}()
-	jobsMap, err := normalizeRawJobs(ctx, tx)
-	if err != nil {
-		return failed, fmt.Errorf("failed to normalize raw jobs: %w", err)
-	}
-	for externals, job := range jobsMap {
-		err = insertJob(ctx, tx, externals.RawJobID, externals.SourceID, externals.ExternalID, job)
+// collectAndStoreData persists one source's items in two stages: first append the
+// raw payloads to raw_jobs (outside any transaction, since that table is append-only
+// and idempotent), then, inside a single transaction, normalize raw_jobs into the
+// jobs table so a reader never sees a half-written batch. Returns the number of items
+// that failed to land in raw_jobs.
+func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, source Source, sourceID int) (int, error) {
+	failed := 0
+	for _, item := range items {
+		externalID, err := source.ExternalID(item)
 		if err != nil {
-			return failed, fmt.Errorf("failed to insert job %s: %w", job.ID, err)
+			logger.Warn("failed to get external id", "error", err)
+			failed++
+			continue
 		}
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return failed, fmt.Errorf("failed to commit transaction: %w", err)
+		hash, err := compactJSON(item)
+		if err != nil {
+			logger.Warn("failed to hash payload", "external_id", externalID, "error", err)
+			failed++
+			continue
+		}
+		rawJobID, existed, err := insertRawJobs(ctx, conn, logger, item, sourceID, externalID, hash)
+
+		if existed {
+			continue
+		}
+		if err != nil {
+			// insertRawJobs already logged the detail.
+			failed++
+			continue
+		}
+
+		job, err := source.ToJob(item)
+		if err != nil {
+			logger.Warn("failed to map item to job", "external_id", externalID, "error", err)
+			failed++
+			continue
+		}
+		err = insertJob(ctx, conn, rawJobID, sourceID, externalID, job)
+		if err != nil {
+			logger.Warn("failed to insert job", "external_id", externalID, "error", err)
+			failed++
+			continue
+		}
 	}
 	return failed, nil
 }
 
+// getSourceID looks up the surrogate id of a source by its natural name in the
+// sources table.
 func getSourceID(ctx context.Context, conn *pgx.Conn, source string) (int, error) {
 	sql := "SELECT id from sources WHERE name = $1"
 
@@ -283,80 +349,30 @@ func getSourceID(ctx context.Context, conn *pgx.Conn, source string) (int, error
 	return id, nil
 }
 
-func insertRawJobs(ctx context.Context, conn querier, logger *slog.Logger, items []json.RawMessage, sourceID int) (int, error) {
-	failed := 0
-	for _, item := range items {
-		var jobID JobID
-		if err := json.Unmarshal(item, &jobID); err != nil {
-			logger.Error("failed to unmarshal raw json to job", "error", err)
-			failed++
-			continue
-		}
-		if jobID.ID == "" {
-			continue
-		}
-		var compactedBuffer bytes.Buffer
-		err := json.Compact(&compactedBuffer, item)
-		if err != nil {
-			return failed, fmt.Errorf("failed to compact raw json: %w", err)
-		}
-		h := sha256.Sum256(compactedBuffer.Bytes())
-		hash := hex.EncodeToString(h[:])
-
-		var rawJobID int
-		sql := "INSERT INTO raw_jobs (source_id, external_id, payload, content_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (source_id, external_id, content_hash) DO NOTHING RETURNING id;"
-		err = conn.QueryRow(ctx, sql, sourceID, jobID.ID, item, hash).Scan(&rawJobID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				logger.Debug("item already exists, jumping", "source_id", sourceID, "external_id", jobID.ID)
-				continue
-			}
-			logger.Error("failed to insert item into raw_jobs", "error", err)
-			failed++
-			continue
-		}
-		logger.Info("new raw_job inserted", "id", rawJobID)
-	}
-	return failed, nil
-}
-
-func normalizeRawJobs(ctx context.Context, conn querier) (map[JobExternals]Job, error) {
-	sql := "SELECT id, source_id, external_id, payload FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY source_id, external_id ORDER BY fetched_at DESC) AS rn FROM raw_jobs)t WHERE rn = 1;"
-	rows, err := conn.Query(ctx, sql)
+// insertRawJobs appends each item's raw payload to raw_jobs, keyed by
+// (source_id, external_id, content_hash). A payload whose hash already exists is
+// skipped via ON CONFLICT DO NOTHING and is not counted as a failure; only items
+// that cannot be parsed or inserted increment the returned failed count.
+func insertRawJobs(ctx context.Context, conn querier, logger *slog.Logger, item json.RawMessage, sourceID int, externalID, hash string) (int, bool, error) {
+	var rawJobID int
+	sql := "INSERT INTO raw_jobs (source_id, external_id, payload, content_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (source_id, external_id, content_hash) DO NOTHING RETURNING id;"
+	err := conn.QueryRow(ctx, sql, sourceID, externalID, item, hash).Scan(&rawJobID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query raw jobs: %w", err)
-	}
-	defer rows.Close()
-	jobs := make(map[JobExternals]Job, 0)
-	for rows.Next() {
-		var (
-			id         int
-			sourceID   int
-			externalID string
-			payload    json.RawMessage
-			job        Job
-		)
-		err := rows.Scan(&id, &sourceID, &externalID, &payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan raw job: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Debug("item already exists, jumping", "source_id", sourceID, "external_id", externalID)
+			return 0, true, nil
 		}
-		if err := json.Unmarshal(payload, &job); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
-		}
-		external := JobExternals{
-			RawJobID:   id,
-			SourceID:   sourceID,
-			ExternalID: externalID,
-		}
-		jobs[external] = job
+		logger.Error("failed to insert item into raw_jobs", "error", err)
+		return 0, false, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate rows: %w", err)
-	}
-	return jobs, nil
+	logger.Info("new raw_job inserted", "id", rawJobID)
+	return rawJobID, false, nil
 }
 
-func insertJob(ctx context.Context, conn querier, rawjobID, sourceID int, externalID string, job Job) error {
+// insertJob upserts one normalized job into the jobs table. On conflict it updates
+// the row in place and resets scored_at to NULL whenever the underlying raw_job
+// changed, pushing a job whose text changed back into the scoring queue.
+func insertJob(ctx context.Context, conn querier, rawjobID, sourceID int, externalID string, job sources.Job) error {
 	sql := `
 		INSERT into jobs (raw_job_id, source_id, external_id, title, company, url, description) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7) 
@@ -372,25 +388,9 @@ func insertJob(ctx context.Context, conn querier, rawjobID, sourceID int, extern
 							ELSE NULL
 						END;
 		`
-	_, err := conn.Exec(ctx, sql, rawjobID, sourceID, externalID, job.Position, job.Company, job.URL, job.Description)
+	_, err := conn.Exec(ctx, sql, rawjobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description)
 	if err != nil {
 		return fmt.Errorf("failed to insert job: %w", err)
 	}
 	return nil
-}
-
-func fetchData(sourceURL string) ([]json.RawMessage, error) {
-	resp, err := http.Get(sourceURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch %s: %w", sourceURL, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("failed to fetch %s, statusCode %v", sourceURL, resp.StatusCode)
-	}
-	var items []json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("failed to decode request body: %w", err)
-	}
-	return items, nil
 }

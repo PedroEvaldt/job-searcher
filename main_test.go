@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PedroEvaldt/job-searcher/internal/sources"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
@@ -22,8 +23,8 @@ import (
 )
 
 const (
-	rjCount = 100
-	jCount  = 100
+	rjCount = 117
+	jCount  = 117
 )
 
 var (
@@ -55,7 +56,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSources(t *testing.T) {
-	expected := 1
+	expected := 2
 	err := pingDB(db)
 	if err != nil {
 		t.Fatalf("database not ready for testing sources: %v", err)
@@ -122,14 +123,18 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("database not ready for testing fetching: %v", err)
 	}
 	cfg := Config{
-		Sources: []Source{
+		SourcesConfig: []sources.SourceConfig{
 			{
 				Name:    "remoteok",
 				Enabled: true,
 			},
+			{
+				Name:    "remotive",
+				Enabled: true,
+			},
 		},
 	}
-	for i, source := range cfg.Sources {
+	for i, source := range cfg.SourcesConfig {
 		body, err := os.ReadFile(fmt.Sprintf("testdata/%s.json", source.Name))
 		if err != nil {
 			t.Fatalf("failed to read json file: %v", err)
@@ -139,7 +144,7 @@ func TestFetch(t *testing.T) {
 			w.Write(body)
 		}))
 		t.Cleanup(func() { srv.Close() })
-		cfg.Sources[i].URL = srv.URL
+		cfg.SourcesConfig[i].URL = srv.URL
 	}
 
 	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
@@ -201,8 +206,8 @@ func TestFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to query runs rows: %v", err)
 	}
-	if runsCount != 2 {
-		t.Errorf("expected 2; got %d", runsCount)
+	if runsCount != 4 {
+		t.Errorf("expected 4; got %d", runsCount)
 		return
 	}
 
