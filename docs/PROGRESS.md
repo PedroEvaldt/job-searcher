@@ -6,10 +6,12 @@
 
 ## Onde estou
 
-**Fase 0 fechada em 2026-09-30.** Próximo: expandir a Fase 1 no `ROADMAP.md` e apresentar a
-primeira subtarefa dela.
+**Tarefa 1.1 fechada em 2026-10-03, débitos de desenho quitados** (D28 interface no consumidor,
+D29 transação removida + isolação de falha por item, D30 erro engolido, D31 `KnownFields`).
+Teste verde (117/117/4), suíte inteira passa. Fica aberto só o **D32** (dono: Fase 2). Próximo:
+abrir a **Tarefa 1.2 — Himalayas**, o teste de fogo da interface.
 
-Última sessão: **2026-09-30**.
+Última sessão: **2026-10-03**.
 
 ---
 
@@ -211,6 +213,41 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   o guarda como `100644`, e num clone em `/tmp` o `ruff` acusa `EXE001`. No diretório de dev,
   passa. Só um clone num filesystem normal mostra — mesmo padrão do D25.
 
+### 2026-10-02 — abertura da Fase 1 (diagnóstico)
+
+- **Diagnóstico de início de sessão sobre o código real:** `go build`/`go vet` limpos,
+  `ruff check` no analyzer limpo, árvore de trabalho limpa. **Nenhum 🔴.** (Testes de
+  integração não re-rodados — exigem Docker/testcontainers; último verde em 2026-09-30, sem
+  mudança de código desde então.)
+- ✅ **D27 encontrado já resolvido.** O shebang saiu de `analyzer/main.py` (começa em
+  `import os`), modo git `100644`, `ruff` passa em ambiente limpo. Fechado sem trabalho.
+- **`testdata/remotive.json` e `testdata/himalayas.json` já commitados** (`d380b68`). Matéria
+  -prima da Fase 1 pronta; as fontes ainda não existem no código.
+- **Mapa de onde o Remote OK está assado** (base da Tarefa 1.1): seed de `sources` só tem
+  `remoteok`; `fetchData` decodifica array cru no topo; `JobID.ID`/`Job` em `models.go` usam
+  `id` (string), `position`, `company`. O Remotive responde **objeto** no topo, `id`
+  **numérico** e outros nomes de campo. Quatro paredes → justificam a interface `Source`.
+- Roadmap da Fase 1 escrito: 1.1 (segunda fonte + interface) em detalhe; 1.2–1.7 em resumo.
+
+### 2026-10-03 — Tarefa 1.1 (Remotive + interface `Source`)
+
+- ✅ **1.1 fechada.** `internal/sources/` com `Source` (3 métodos: `Fetch`, `ExternalID`, `ToJob`),
+  `RemoteOK`, `Remotive` e factory `For(name)`. `models.go` apagado; `Config` agora carrega
+  `[]sources.SourceConfig`. Migration `004_add_remotive.sql`. `TestFetch` cobre as duas fontes:
+  100 (Remote OK, pós `items[1:]`) + 17 (Remotive) = 117; `runs` = 4 (2 fontes × 2 `run()`).
+- **A API mente sobre si mesma.** `remotive.json` declara `"job-count": 18`, mas o array `jobs`
+  tem 17. O `got 117` do teste estava **certo** — não havia vaga sumindo. Lição: campo
+  auto-reportado de fonte externa se confere contando, nunca se confia.
+- **`enable` vs `enabled`, de novo** (era 2026-09-09). Chave errada no `config.yaml` → campo no
+  valor-zero (`false`) → Remotive pulado em silêncio, `exit=0`. `Load()` ainda usa
+  `yaml.Unmarshal` cru, sem `KnownFields` — a guarda que transformaria o silêncio em erro
+  continua **não** instalada. Ver D31.
+- **WARN do `godotenv` rebaixado para `Debug`.** O ruído vinha do ramo de erro, não do `Load()`;
+  no container o `.env` falta por design. Alarme que toca em toda subida saudável treina o olho
+  a ignorar alarme.
+- **Débitos de desenho abertos** (o aluno pulou o passo "na marra", então a conversa de desenho
+  ficou para depois do verde): D28, D29, D30, D31. A pagar antes da 1.2.
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -272,10 +309,15 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | aberto — dono: Etapa 1 |
 | D23 | `compose.yaml:15` | `container_name: postgres_db` fixa o nome fora do namespace do projeto: impede subir uma segunda instância (`docker compose -p outro up`) e, portanto, impede testar a corrida do healthcheck sem destruir o volume de dados real. | aberto — dono: Etapa 6, quando houver mais de um ambiente |
 | D24 | `compose.yaml:26` | Healthcheck usa `$POSTGRES_USER` (expandido pelo **Compose**, em tempo de parse) em vez de `$$POSTGRES_USER` (expandido pelo shell do container, em tempo de execução). Funciona, mas o valor vaza literal no `docker inspect` e o padrão não sobrevive ao k8s, onde não há Compose para interpolar. | aberto — 🟢, dono: Etapa 6 |
-| D27 | `analyzer/main.py:1` | Shebang num arquivo sem bit de execução no git (`100644`): `ruff check` falha com `EXE001` em qualquer clone, mas passa no SSD de dev, que marca tudo como executável. O script é rodado por `uv run`, nunca direto. | aberto — 🟢, 1 min, primeiro commit da Fase 1 |
+| ~~D27~~ | `analyzer/main.py:1` | Shebang num arquivo sem bit de execução no git (`100644`): `ruff check` falhava com `EXE001` em clone. | ✅ pago — shebang removido; `ruff` limpo em ambiente novo. Confirmado no diagnóstico de 2026-10-02 |
 | D25 | `compose.yaml` (`app`, `analyzer`) | `build:` + `image:` com tag fixa: o `up` só constrói se a tag **não existir**, e tag é global no Docker, não por projeto. Verificado em 2026-09-30: o clone limpo da 0.4.3 rodou a imagem de 29/09, sem o `migrate`. Mitigação hoje: `--build` após mudar código. | aberto — reavaliar na Fase 6 (tags versionadas) |
 | D26 | `analyzer/main.py:22` | Erro de query (ex.: `UndefinedTable`) sai como traceback cru; só a falha de conexão tem mensagem de uma linha. | aberto — 🟢, pagar quando o analyzer ganhar lógica real |
 | ~~D22~~ | `main.go:21` | `var source = "https://remoteok.com/api"` morta desde a chegada do `config.yaml`, e sombreada pela variável do laço. Junto: `Url` → `URL`, `runId` → `runID`. | ✅ pago 2026-09-30 (0.5.1, feito pelo mentor a pedido — mecânico) |
+| ~~D28~~ | `internal/sources/sources.go:24` | A interface `Source` mora no pacote que a **implementa**, não no que a **consome** (`main`). Viola o §8 ("interfaces pequenas, definidas no consumidor"). | ✅ pago 2026-10-03 — interface `Source` + `For` movidos para o `main`; `sources` exporta só tipos concretos + `Job`; "accept interfaces, return concrete types". O aluno tentou subir `Job` junto para o `main` (o anti-move que o mentor sinalizou) e o import cycle provou a regra: interface sobe, dado desce. |
+| ~~D29~~ | `main.go` (`collectAndStoreData`) | Transação por item decorativa (envolvia um único `Exec`) + `defer tx.Rollback` dentro do `for`. | ✅ pago 2026-10-03 — decisão **(a)**: transação removida, `insertJob` roda solto, `defer` fora do laço. Erro **de item** (`compactJSON`, `ToJob`, `insertJob`, `insertRawJobs`) agora é `Warn`+`failed++`+`continue`, não `return` — isso realiza a isolação de falha que (a) prometia e evita a pílula envenenada que o `return` reintroduzia. Falha sistêmica aparece como `failed==fetched` (dono: D21/D12). |
+| ~~D30~~ | `main.go` (`collectAndStoreData`) | `err` do `compactJson` sobrescrito antes de ser checado. | ✅ pago 2026-10-03 — erro checado antes de usar o `hash`; `compactJson` → `compactJSON` (inicialismo). |
+| ~~D31~~ | `main.go` (`Load`) | `yaml.Unmarshal` cru, sem `KnownFields`: chave desconhecida ignorada em silêncio (o `enable`×`enabled`). | ✅ pago 2026-10-03 — `yaml.NewDecoder` + `KnownFields(true)`: chave desconhecida no `config.yaml` agora é erro de parse, não comportamento faltando. Fecha a **classe** do bug. (D29-final e D31 digitados pelo mentor a pedido do aluno — ele descreveu a solução, sem tempo de digitar.) |
+| D32 | `main.go` (`collectAndStoreData`) | O refactor da 1.1 trocou o `normalizeRawJobs` (varredura idempotente de `raw_jobs` → `jobs`) por "normalizar só o item recém-inserido + `if existed continue`". Dois efeitos: (1) `jobs` deixou de se auto-curar — `raw_job` que grava mas cujo `insertJob` falha vira **órfão** permanente (na run seguinte cai no `existed`); (2) matou o reprocessamento prometido no SPEC §4.1 ("rodar o normalizador de novo sobre o histórico"). | aberto — dono: Fase 2 (quando o normalizador melhorar); conserto provável = normalização como passo idempotente separado sobre `raw_jobs` |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -351,9 +393,14 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-Próximo passo: pagar o D27 (1 min) e expandir a **Fase 1** no `ROADMAP.md` (tarefas e
-subtarefas), depois apresentar a 1.1.1.
+Próximo passo: **abrir a Tarefa 1.2 (Himalayas)** — a terceira fonte entra pela mesma interface
+`Source`; se doer, a interface está errada e volta para o desenho. Débitos de desenho da 1.1
+todos pagos (D28–D31); aberto só o D32 (reprocessamento/auto-cura, dono Fase 2).
 
-Estado verificado em 2026-09-30: clone limpo sem imagem prévia → build, 3 migrations,
-coleta, `analyzer` conta. Banco de dev intacto (363 vagas). Depois de mudar código, usar
-`docker compose up --build` (D25).
+Nota pequena aberta: `collectAndStoreData` agora nunca devolve erro não-nil (todo caminho de item
+faz `continue`), então o `if err != nil` em `processSource` que a chama virou morto. Resolver
+junto do D21/D12 na 1.3, quando o agregado `failed/fetched` virar o sinal de falha da run.
+
+Estado verificado em 2026-10-03: `go build`/`go vet`/`gofmt` limpos, `TestFetch` verde
+(117/117/4), suíte inteira passa. Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
+usa a porta `5433` (ver `.env.example`).

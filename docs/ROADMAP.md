@@ -33,7 +33,7 @@ ser o critério da Fase 1; rotulagem concentrada na 3b.
 
 ---
 
-## 📍 Fase 0 — Uma fonte só, ponta a ponta
+## Fase 0 — Uma fonte só, ponta a ponta ✅ (fechada 2026-09-30)
 
 **Objetivo de aprendizado:** fazer o caminho mais fino possível atravessar Go, Postgres
 e Python, provando que a integração funciona **antes** de qualquer feature. Ao fim
@@ -177,9 +177,61 @@ projeto lendo só o README.
 
 ---
 
-## Fases seguintes (resumo)
+## 📍 Fase 1 — Coleta de verdade
 
-**Fase 1 — Coleta de verdade.** Remotive e Himalayas entram atrás da interface `Source`; depois dedupe, rate limit, métricas e cron. Termina rodando 7 dias sozinho.
+**Objetivo de aprendizado:** sair de uma fonte para N fontes com formatos de API
+diferentes, atrás de uma abstração que **nasce da dor da duplicação** (não antes dela),
+e endurecer o coletor para rodar sozinho por 7 dias: timeout, `context`, falha visível,
+limiar de erro, rate limit e agendamento.
+
+**Pronto quando:** o coletor roda sozinho por 7 dias, coletando de pelo menos três fontes
+atrás da interface `Source`, com dedupe, rate limit por fonte e toda execução medida em `runs`.
+
+### Tarefa 1.1 — Segunda fonte e a interface `Source`
+
+**Objetivo:** o coletor passa a trazer vagas do Remotive além do Remote OK, e a lógica
+específica de cada fonte deixa de estar assada em `fetchData`/`models.go` e passa a viver
+atrás de uma interface pequena, definida no consumidor.
+
+**Critério de aceite:** com `remoteok` e `remotive` ligadas no `config.yaml`, uma coleta
+grava linhas das duas fontes em `jobs` (`SELECT source_id, count(*) FROM jobs GROUP BY
+source_id` mostra as duas, com `title` e `company` preenchidos); rodar duas vezes seguidas
+não duplica; um teste de integração alimenta o fixture do Remotive e afirma que ele vira `jobs`.
+
+**Conceitos novos:** interface definida no consumidor, polimorfismo em Go, mapeamento de
+formatos heterogêneos para um modelo comum, seed de fonte nova como migration própria.
+
+**Onde ler:** [Effective Go — Interfaces](https://go.dev/doc/effective_go#interfaces) ·
+[Go blog — JSON and Go](https://go.dev/blog/json)
+
+- [x] **1.1.1 / 1.1.2 / 1.1.3** — feitas juntas em 2026-10-03. O aluno pulou o passo "na marra"
+      e foi direto à interface. Migration `004_add_remotive.sql` (idempotente, `down` só da própria
+      linha); `internal/sources/` com `Source` + `RemoteOK`/`Remotive` + factory `For(name)`;
+      `TestFetch` estendido às duas fontes (117/117/4), verde. **Critério de aceite da 1.1 atendido.**
+      Débitos de desenho abertos na mesma data: D28 (interface no implementador, não no consumidor),
+      D29 (transação por item decorativa + `defer` no `for`), D30 (erro de `compactJson` descartado).
+
+### Tarefa 1.2 — Terceira fonte (Himalayas) *(resumo — detalhar ao chegar)*
+
+Himalayas entra pela mesma interface, provando que a abstração generaliza. Se doer, a
+interface está errada e volta para a 1.1.2.
+
+### Tarefa 1.3 — Rodar sozinho sem mentir *(resumo)*
+
+Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration de
+`finished_at` + limiar `failed/fetched` (D12), `defer`/panic (D11).
+
+### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*
+
+### Tarefa 1.5 — Deduplicação *(resumo)* — mesma vaga aparecendo em duas fontes.
+
+### Tarefa 1.6 — Agendamento e as 7 dias *(resumo)* — cron/ticker; roda uma semana sozinho.
+
+### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D19), README.
+
+---
+
+## Fases seguintes (resumo)
 
 **Fase 2 — Olhar o dado.** EDA em Python, boilerplate medido, política de localização, vagas PT-BR. Sai com 5 defeitos concretos e uma função de corte de boilerplate testada.
 
