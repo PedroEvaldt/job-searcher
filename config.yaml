@@ -2,3 +2,6 @@ sources:
   - name: remoteok
     enabled: true
     url: https://remoteok.com/api
+  - name: remotive
+    enabled: true
+    url: https://remotive.com/api/remote-jobs
