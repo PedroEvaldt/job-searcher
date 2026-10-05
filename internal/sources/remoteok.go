@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/PedroEvaldt/job-searcher/internal/client"
 )
 
-type RemoteOK struct{}
+type RemoteOK struct {
+	C *client.Client
+}
 
-func (r RemoteOK) Fetch(url string) ([]json.RawMessage, error) {
-	body, err := httpGetBody(context.Background(), url)
+func (r RemoteOK) Fetch(ctx context.Context, url string) ([]json.RawMessage, error) {
+	body, err := r.C.HTTPGetBody(ctx, url)
 	if err != nil {
 		return nil, err
 	}

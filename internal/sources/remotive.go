@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/PedroEvaldt/job-searcher/internal/client"
 )
 
-type Remotive struct{}
+type Remotive struct {
+	C *client.Client
+}
 
-func (r Remotive) Fetch(url string) ([]json.RawMessage, error) {
-	body, err := httpGetBody(context.Background(), url)
+func (r Remotive) Fetch(ctx context.Context, url string) ([]json.RawMessage, error) {
+	body, err := r.C.HTTPGetBody(ctx, url)
 	if err != nil {
 		return nil, err
 	}

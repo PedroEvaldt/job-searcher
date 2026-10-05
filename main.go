@@ -14,7 +14,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/PedroEvaldt/job-searcher/internal/client"
 	"github.com/PedroEvaldt/job-searcher/internal/sources"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -27,21 +29,12 @@ import (
 //go:embed db/migrations/*.sql
 var migrationsFS embed.FS
 
+const CollectionTimeOut = 60 * time.Second
+
 type Source interface {
-	Fetch(string) ([]json.RawMessage, error)
+	Fetch(context.Context, string) ([]json.RawMessage, error)
 	ExternalID(json.RawMessage) (string, error)
 	ToJob(json.RawMessage) (sources.Job, error)
-}
-
-func For(name string) (Source, error) {
-	switch name {
-	case "remoteok":
-		return sources.RemoteOK{}, nil
-	case "remotive":
-		return sources.Remotive{}, nil
-	default:
-		return nil, fmt.Errorf("unknown source: %s", name)
-	}
 }
 
 // querier is the minimal set of pgx methods the store helpers need. Declaring it
@@ -55,6 +48,19 @@ type querier interface {
 // Config is the parsed config.yaml: the list of sources the collector may pull from.
 type Config struct {
 	SourcesConfig []sources.SourceConfig `yaml:"sources"`
+}
+
+func For(name string, c *client.Client) (Source, error) {
+	switch name {
+	case "remoteok":
+		return sources.RemoteOK{C: c}, nil
+	case "remotive":
+		return sources.Remotive{C: c}, nil
+	case "himalayas":
+		return sources.Himalayas{C: c}, nil
+	default:
+		return nil, fmt.Errorf("unknown source: %s", name)
+	}
 }
 
 // Load reads the YAML file at path and unmarshals it into a Config.
@@ -94,7 +100,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(logger, dbURL, cfg); err != nil {
+	if err := run(logger, dbURL, cfg, CollectionTimeOut); err != nil {
 		logger.Error("failed to run", "error", err)
 		os.Exit(1)
 	}
@@ -152,14 +158,16 @@ func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 // run performs one full collection pass: open the Postgres connection, apply
 // migrations, then process each enabled source in turn. A failure in one source is
 // logged and skipped, not fatal to the others.
-func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
-	ctx := context.Background()
-	conn, err := openConn(ctx, dbURL)
+func run(logger *slog.Logger, dbURL string, cfg *Config, timeout time.Duration) (err error) {
+	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := openConn(dbCtx, dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to open db conn: %w", err)
 	}
 	defer func() {
-		err := conn.Close(ctx)
+		err := conn.Close(dbCtx)
 		if err != nil {
 			logger.Error("failed to close connection", "error", err)
 		}
@@ -175,18 +183,20 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 		}
 	}()
 
-	err = migrate(ctx, db, logger)
+	err = migrate(dbCtx, db, logger)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
 	}
 	for _, sourceConfig := range cfg.SourcesConfig {
 		if sourceConfig.Enabled {
-			source, err := For(sourceConfig.Name)
+			c := client.NewClient(30 * time.Second)
+			source, err := For(sourceConfig.Name, c)
 			if err != nil {
 				logger.Warn("config name does not match valid source", "error", err)
 				continue
 			}
-			err = processSource(ctx, conn, logger, source, sourceConfig)
+
+			err = processSource(conn, logger, source, sourceConfig, timeout)
 			if err != nil {
 				logger.Warn("failed to process source", "source", sourceConfig.Name, "error", err)
 				continue
@@ -200,7 +210,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 // runs table. It opens the run row first (closed via a deferred closeRun over the
 // named return) so even a failure before fetching leaves a trace, then resolves the
 // source id, fetches its items, and stores them.
-func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source, sourceConfig sources.SourceConfig) (err error) {
+func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceConfig sources.SourceConfig, timeout time.Duration) (err error) {
 	var (
 		fetched     int
 		failed      int
@@ -208,23 +218,30 @@ func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, sou
 		sourceIDPtr *int
 	)
 
-	runID, err := openRun(ctx, conn)
+	runCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runID, err := openRun(runCtx, conn)
 	if err != nil {
 		return fmt.Errorf("failed to open run: %w", err)
 	}
+
 	defer func() {
-		closeErr := closeRun(ctx, conn, fetched, failed, runID, sourceIDPtr, err)
+		closeErr := closeRun(conn, fetched, failed, runID, sourceIDPtr, err)
 		if closeErr != nil {
 			logger.Error("failed to close run", "error", closeErr)
 		}
 	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	sourceID, err = getSourceID(ctx, conn, sourceConfig.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get source id: %w", err)
 	}
 	sourceIDPtr = &sourceID
 
-	items, err := source.Fetch(sourceConfig.URL)
+	items, err := source.Fetch(ctx, sourceConfig.URL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}
@@ -264,7 +281,10 @@ func openRun(ctx context.Context, conn *pgx.Conn) (int, error) {
 
 // closeRun fills in the final counters, source id and error (if any) on the run row
 // opened by openRun. A nil pointer is stored as NULL.
-func closeRun(ctx context.Context, conn *pgx.Conn, fetched, failed, id int, sourceID *int, runErr error) error {
+func closeRun(conn *pgx.Conn, fetched, failed, id int, sourceID *int, runErr error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var runErrStr *string
 	sql := "UPDATE runs SET fetched = $1, failed = $2, source_id = $3, error = $4 WHERE id = $5;"
 	if runErr != nil {

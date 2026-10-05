@@ -5,3 +5,6 @@ sources:
   - name: remotive
     enabled: true
     url: https://remotive.com/api/remote-jobs
+  - name: himalayas
+    enabled: true
+    url: https://himalayas.app/jobs/api
