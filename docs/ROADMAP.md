@@ -7,19 +7,19 @@ Quando a Fase 0 fechar, a Fase 1 é expandida.
 
 ## Visão geral
 
-| Fase   | Nome                          | Pronto quando                                                                                          |
-| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **0**  | Uma fonte só, ponta a ponta   | `docker compose up` coleta, o teste de integração passa e o Python enxerga o banco                     |
-| 1      | Coleta de verdade             | Mais fontes atrás de `Source`, normalização, dedupe, rate limit, métricas — roda 7 dias sozinho        |
-| 2      | Olhar o dado                  | EDA + boilerplate medido, política de localização, vagas PT-BR — 5 defeitos listados + corte de boilerplate com teste |
-| 3a     | Extração no código            | Skills, anos exigidos, salário, idade da vaga; ranking TF-IDF — extrator acerta as skills do currículo |
-| 3b     | Rotulagem e avaliação         | `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele                            |
-| 4a     | Embeddings                    | sentence-transformers + pgvector vs baseline — sabe qual ganha e por quanto, no conjunto congelado     |
-| 4b     | Jev como extrator de features | Question set v1, `jev_answers` — concordância por pergunta e custo por mil vagas medidos; roda sem chave |
-| 4c     | sklearn                       | Features do Jev + cosseno + features do código — três abordagens comparadas no conjunto congelado      |
-| 5      | FastAPI e digest              | Primeiro digest chega no Discord sem você rodar nada à mão                                             |
-| 6      | Kubernetes                    | `kubectl apply -k deploy/k8s` sobe tudo do zero                                                        |
-| 7      | Fechamento                    | Outra pessoa roda seguindo só o README                                                                 |
+| Fase  | Nome                          | Pronto quando                                                                                                         |
+| ----- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| ✅ 0  | Uma fonte só, ponta a ponta   | `docker compose up` coleta, o teste de integração passa e o Python enxerga o banco                                    |
+| **1** | Coleta de verdade             | Mais fontes atrás de `Source`, normalização, dedupe, rate limit, métricas — roda 7 dias sozinho                       |
+| 2     | Olhar o dado                  | EDA + boilerplate medido, política de localização, vagas PT-BR — 5 defeitos listados + corte de boilerplate com teste |
+| 3a    | Extração no código            | Skills, anos exigidos, salário, idade da vaga; ranking TF-IDF — extrator acerta as skills do currículo                |
+| 3b    | Rotulagem e avaliação         | `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele                                           |
+| 4a    | Embeddings                    | sentence-transformers + pgvector vs baseline — sabe qual ganha e por quanto, no conjunto congelado                    |
+| 4b    | Jev como extrator de features | Question set v1, `jev_answers` — concordância por pergunta e custo por mil vagas medidos; roda sem chave              |
+| 4c    | sklearn                       | Features do Jev + cosseno + features do código — três abordagens comparadas no conjunto congelado                     |
+| 5     | FastAPI e digest              | Primeiro digest chega no Discord sem você rodar nada à mão                                                            |
+| 6     | Kubernetes                    | `kubectl apply -k deploy/k8s` sobe tudo do zero                                                                       |
+| 7     | Fechamento                    | Outra pessoa roda seguindo só o README                                                                                |
 
 **Mudanças aplicadas ao plano original (Sessão Zero):**
 
@@ -211,23 +211,109 @@ formatos heterogêneos para um modelo comum, seed de fonte nova como migration p
       Débitos de desenho abertos na mesma data: D28 (interface no implementador, não no consumidor),
       D29 (transação por item decorativa + `defer` no `for`), D30 (erro de `compactJson` descartado).
 
-### Tarefa 1.2 — Terceira fonte (Himalayas) *(resumo — detalhar ao chegar)*
+### Tarefa 1.2 — Terceira fonte (Himalayas) _(resumo — detalhar ao chegar)_
 
 Himalayas entra pela mesma interface, provando que a abstração generaliza. Se doer, a
 interface está errada e volta para a 1.1.2.
 
-### Tarefa 1.3 — Rodar sozinho sem mentir *(resumo)*
+### Tarefa 1.3 — Rodar sozinho sem mentir _(resumo)_
 
 Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration de
 `finished_at` + limiar `failed/fetched` (D12), `defer`/panic (D11).
 
-### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*
+### Tarefa 1.4 — Rate limit e retry por fonte _(resumo)_
 
-### Tarefa 1.5 — Deduplicação *(resumo)* — mesma vaga aparecendo em duas fontes.
+### Tarefa 1.5 — Deduplicação _(resumo)_ — mesma vaga aparecendo em duas fontes.
 
-### Tarefa 1.6 — Agendamento e as 7 dias *(resumo)* — cron/ticker; roda uma semana sozinho.
+### Tarefa 1.6 — Agendamento e as 7 dias _(resumo)_ — cron/ticker; roda uma semana sozinho.
 
-### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D19), README.
+### Tarefa 1.7 — Fechamento da Fase 1 _(resumo)_ — débitos restantes (D17, D19), README.
+
+=======
+**Objetivo de aprendizado:** fazer a abstração nascer da duplicação, não da imaginação, e
+transformar um coletor que funciona quando tudo dá certo num que aguenta rodar sozinho.
+Ao fim desta fase, três fontes passam pela mesma interface `Source`, falhas deixam o
+processo com código ≠ 0, e o coletor roda 7 dias sem você.
+
+### Tarefa 1.1 — Segunda fonte, sem abstrair
+
+**Objetivo:** a Remotive entra no coletor ao lado da Remote OK, copiando o caminho de
+propósito, sem interface ainda.
+
+**Por quê:** as diferenças reais entre duas fontes (envelope, tipo do id, nomes dos campos)
+é que dizem o formato da interface. Abstrair com um caso só é chutar.
+
+**Critério de aceite:** `docker compose up --build` grava vagas das duas fontes em `jobs`,
+com título e empresa preenchidos nas duas; `go test` afirma a contagem por fonte.
+
+**Onde ler:** [Remotive API](https://github.com/remotive-com/remote-jobs-api) ·
+[encoding/json](https://pkg.go.dev/encoding/json)
+
+- [ ] **1.1.1** Coletar a Remotive até `raw_jobs` (migration de seed, envelope, id numérico),
+      com teste por fixture.
+- [ ] **1.1.2** Normalizar por fonte: payload da Remotive vira `jobs` com os campos certos.
+
+### Tarefa 1.2 — A interface `Source` nasce de dois casos
+
+**Objetivo:** extrair a interface a partir das diferenças da 1.1 e provar com uma terceira
+fonte que só implementa a interface.
+
+**Por quê:** se a Himalayas entrar sem tocar no laço principal, a interface está certa.
+
+**Critério de aceite:** adicionar a Himalayas não muda `run`/`processSource`; testes
+table-driven cobrem as três fixtures.
+
+**Onde ler:** [Go Code Review — Interfaces](https://go.dev/wiki/CodeReviewComments#interfaces)
+
+- [ ] **1.2.1** Extrair a interface no consumidor e mover as fontes para `internal/source`.
+- [ ] **1.2.2** Himalayas como terceira fonte (regravar `testdata/himalayas.json`, hoje vazio).
+
+### Tarefa 1.3 — Falhar alto
+
+**Objetivo:** toda falha relevante vira código de saída ≠ 0 e linha legível em `runs`.
+
+**Por quê:** para rodar 7 dias sem você, "deu errado" precisa ser visível sem ler log.
+
+**Critério de aceite:** cada cenário de falha dos débitos abaixo tem uma verificação
+reproduzível e termina com `exit ≠ 0` ou `runs.error` preenchido.
+
+**Onde ler:** [net/http Client timeouts](https://pkg.go.dev/net/http#Client) ·
+[context](https://pkg.go.dev/context)
+
+- [ ] **1.3.1** Timeout e `context` no HTTP (D7).
+- [ ] **1.3.2** `runs` confiável: `finished_at` e limiar `failed/fetched` (D12), todas as
+      fontes falhando → exit ≠ 0 (D21), panic não grava sucesso (D11).
+- [ ] **1.3.3** Pílula envenenada: um item inválido não trava as coletas seguintes (D19).
+
+### Tarefa 1.4 — Educado com as fontes
+
+**Objetivo:** rate limit e retry com backoff por fonte, configuráveis no `config.yaml`.
+
+**Critério de aceite:** um servidor de teste que responde 429/5xx é tentado de novo com
+espera crescente e nunca mais rápido que o limite configurado.
+
+- [ ] **1.4.1** Rate limit por fonte.
+- [ ] **1.4.2** Retry com backoff para 429/5xx, testado com `httptest`.
+
+### Tarefa 1.5 — Dedupe entre fontes
+
+**Objetivo:** a mesma vaga publicada em duas fontes é reconhecida como uma.
+
+**Critério de aceite:** consulta que lista pares duplicados entre fontes, com a regra
+escrita e testada em casos reais do seu banco.
+
+- [ ] **1.5.1** Chave de dedupe (empresa + título normalizados) e onde ela mora no schema.
+
+### Tarefa 1.6 — Rodar sozinho
+
+**Objetivo:** o coletor roda em intervalo, sem você, e há uma forma rápida de ver a saúde.
+
+**Critério de aceite (da fase):** 7 dias seguidos de execuções em `runs`, com as falhas
+explicadas.
+
+- [ ] **1.6.1** Agendamento no compose (intervalo do `config.yaml`).
+- [ ] **1.6.2** Relatório de saúde a partir de `runs` (métricas da fase; Prometheus fica na 6).
+- [ ] **1.6.3** Os 7 dias.
 
 ---
 
