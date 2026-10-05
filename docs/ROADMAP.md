@@ -235,7 +235,10 @@ Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration d
 - [x] **1.3.2** Todas as fontes falhando → `exit≠0` (D21). ✅ 2026-10-05 — `errors.Join` dos erros
       por fonte quando nenhuma teve sucesso (zero ligadas incluso); `TestPartialFailure` +
       `errors.Is` no `TestClientTimeout`; validado por 2 mutações.
-- [ ] Restante da 1.3 (a detalhar): D12, D11.
+- [x] **1.3.3** Limiar `failed/fetched` (D12, parte 1). ✅ 2026-10-05 — fonte com mais de 50% dos
+      itens falhando vira falha (contagens em `runs.error`); zero itens é sucesso.
+      `TestLimiarValidation` table-driven (3 casos), validado por mutações com limiar 0 e 1.0.
+- [ ] **1.3.4** A run fecha com a verdade: `finished_at` (D12, parte 2) e panic não grava sucesso (D11).
 
 ### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*
 

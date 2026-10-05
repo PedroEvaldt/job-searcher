@@ -6,10 +6,9 @@
 
 ## Onde estou
 
-**1.3.1 e 1.3.2 fechadas em 2026-10-05.** Orçamento por fonte (D7) e falha total → `exit≠0` (D21):
-o `run` devolve os erros juntos (`errors.Join`, cada um com o nome da fonte) quando nenhuma fonte
-ligada teve sucesso, inclusive com zero ligadas. Falha parcial continua `exit=0`, visível em `runs`.
-Próximo na 1.3: **D12** (`finished_at` + limiar `failed/fetched`) e **D11** (panic grava `error=NULL`).
+**1.3.1, 1.3.2 e 1.3.3 fechadas em 2026-10-05.** Orçamento por fonte (D7), falha total → `exit≠0`
+(D21) e limiar `failed/fetched` > 50% → a fonte falha, com as contagens em `runs.error` (D12, parte 1).
+Próximo: **1.3.4** — `finished_at` (D12, parte 2) e panic não grava sucesso (D11). Fecha a Tarefa 1.3.
 
 Última sessão: **2026-10-05**.
 
@@ -288,6 +287,23 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - 🟢 Mantidos por decisão do aluno / mencionados uma vez: bloco `failed == fetched` comentado no
   `processSource` (volta no D12), typos `succeded`/`activated`, resto de roteiro em PT e mensagem
   do `pingDB` copiada no `TestPartialFailure`.
+- ✅ **1.3.3 fechada (D12, parte 1).** `processSource` devolve erro quando `failed/fetched` passa de
+  0.5 (`fetched == 0` é sucesso, checado **antes** da divisão — com `int` seria panic, com `float64`
+  seria `NaN` e passaria calado). `collectAndStoreData` passou a devolver só a contagem; o `if`
+  morto e o bloco comentado saíram. `TestLimiarValidation` table-driven com JSON inline da Remotive
+  (`{"id":1}` válido, `{"id":"x"}` inválido): todos inválidos → erro; 1 em 4 → `nil`; vazio → `nil`,
+  afirmando retorno, `fetched`/`failed` e `runs.error`. Mutações em sentidos opostos: limiar 0 →
+  pega no "1 em 4"; limiar 1.0 → pega no "todos inválidos".
+- 🧠 **Pegadinha da divisão inteira, no lugar inesperado:** `const limiar float64 = 1 / 2` vale **0**
+  — a conta é feita entre constantes inteiras e só o resultado vira `float64` (a spec traz
+  `const Θ float64 = 3/2 // Θ == 1.0`). A divisão em runtime estava certa; a da constante, não.
+- 🧠 Três bugs de teste em cascata, cada um escondendo o seguinte: handler que não escrevia o body;
+  `err` do `run` sobrescrito pelo `Scan` (→ `err.Error()` sobre `nil` = panic, que derruba o
+  **binário** inteiro, não só o subteste); `WHERE error IS NOT NULL` com `QueryRow` (casos de
+  sucesso viram "no rows"). E `t.Fatalf` dentro de handler HTTP: `FailNow` só pode ser chamado
+  da goroutine do teste — no handler, `t.Errorf`.
+- 🟢 Mencionados uma vez: `limiar` e `TestLimiarValidation` em PT; subtestes `t1`/`t2`/`t3`;
+  `itens` → `items`; `failedPct` guarda fração, não percentual.
 
 ## Decisões tomadas
 
@@ -338,7 +354,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D9  | `main.go:86`   | Falha de `Unmarshal` é logada sem identificar o item — e não há como identificar, já que o parse é justamente o que falhou. Alarme sem endereço. | aberto — reavaliar em 0.2.3 junto com `runs.failed` |
 | D10 | dados          | Payloads do Remote OK chegam com entidades HTML cruas (`&amp;`) e mojibake (`Donâ\u0080\u0099t`, `å\u008C\u0096`). Um `slug` vazio. `salary_min: 0` significa "não informado", não zero. | aberto — dono: Etapa 2, na normalização de texto |
 | D11 | `main.go:54`   | `defer` roda durante panic e grava `error=NULL`: a run mente dizendo sucesso enquanto o processo morreu de SIGSEGV. Verificado em 2026-09-03. | aberto — dono: Etapa 1 |
-| D12 | `db/migrations/001_init.sql` | `runs` não tem `finished_at` — dá para saber quando começou e o que houve, não quanto durou. E não há limiar de `failed/fetched` que marque a run como fracasso. | aberto — dono: Etapa 1, migration `004` |
+| D12 | `db/migrations/001_init.sql` | `runs` não tem `finished_at` — dá para saber quando começou e o que houve, não quanto durou. E não há limiar de `failed/fetched` que marque a run como fracasso. | 🔶 parcial — limiar pago em 2026-10-05 (1.3.3); `finished_at` fica para a 1.3.4 |
 | D13 | `main_test.go:143` | `err := db.Close()` é sobrescrito pela linha seguinte: se o `Close` falhar e o `Terminate` funcionar, `teardown()` devolve `nil`. O `return err` final é sempre `nil`. | ✅ pago 2026-09-09 — `errors.Join` acumulando os dois |
 | D14 | `main_test.go:90` | Loop `for rows.Next()` sem checar `rows.Err()` depois. | ✅ pago 2026-09-09 |
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
@@ -362,6 +378,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D33 | `main.go` (`insertJob`) | O modelo `sources.Job` carrega `Date`, `Location` e `Tags`, mapeados com cuidado nas três fontes (incl. 3 formatos de data), mas `insertJob` grava só `title/company/url/description`. `Date` é calculado e descartado **mesmo havendo coluna `posted_at`**; `Location`/`Tags` não têm coluna ainda. Owners futuros concretos: Fase 2 (filtro de localização lê `Location`), Fase 3a ("idade da vaga" lê `posted_at`). | aberto — 🟡; migration + colunas quando os donos chegarem |
 | ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
+| D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.2 (relatório de saúde: fonte com 0 itens em N runs seguidas) |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -432,16 +449,21 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   tem como distinguir typo de ausência legítima. Em filtro, verifica-se o resultado.
 - **2026-09-15** — identidade é invariante, topologia é variante. Uma string que gruda as
   duas só consegue atender um observador por vez.
+- **2026-10-05** — `err != nil` prova que **algo** falhou; `errors.Is` prova que falhou **pelo
+  motivo testado**. Na mutação "sem prazo" o `run` ainda devolve erro (de JSON) — um teste só com
+  `err != nil` passaria com o timeout removido. (Respondido pelo aluno na pergunta da 1.3.2.)
+- **2026-10-05** — dois prazos, vence o primeiro: o `Timeout` do client só enxerga o HTTP; o
+  contexto da fonte corta tudo, banco incluso. Branch só protege o que foi commitado; `git restore`
+  sem `--staged` descarta trabalho.
 
 ---
 
 ## Retomada rápida
 
-**1.3.2 fechada em 2026-10-05.** Próximo na 1.3: D12 (`finished_at` + limiar `failed/fetched`,
-com o caso de zero itens; leva junto o `if err != nil` morto do `collectAndStoreData` e o bloco
-comentado `failed == fetched`) e D11 (`defer`/panic grava `error=NULL`). Fora da 1.3: D32
+**1.3.3 fechada em 2026-10-05.** Próximo: **1.3.4** — `finished_at` (resto do D12) e D11
+(`defer`/panic grava `error=NULL`); fecha a Tarefa 1.3. Fora da 1.3: D36 (fonte com 0 itens), D32
 (auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos).
 
 Estado verificado em 2026-10-05: `go build`/`go vet`/`gofmt` limpos, suíte verde
-(`TestFetch` 137/137/6, `TestPartialFailure`, `TestClientTimeout` 0.11s). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
+(`TestFetch` 137/137/6, `TestPartialFailure`, `TestClientTimeout` 0.11s, `TestLimiarValidation` 3/3). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
 usa a porta `5433` (ver `.env.example`).
