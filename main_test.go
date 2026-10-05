@@ -296,6 +296,71 @@ func setupPostgres() (*sql.DB, func() error, error) {
 	return db, teardown, nil
 }
 
+func TestPartialFailure(t *testing.T) {
+	err := pingDB(db)
+	if err != nil {
+		t.Fatalf("database not ready for testing client timeout: %v", err)
+	}
+
+	body, err := os.ReadFile("testdata/remotive.json")
+	if err != nil {
+		t.Fatalf("failed to read json file: %v", err)
+	}
+	goodSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer goodSrv.Close()
+
+	badSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badSrv.Close()
+
+	cfg := Config{
+		SourcesConfig: []sources.SourceConfig{
+			{
+				Name:    "remoteok",
+				Enabled: true,
+				URL:     badSrv.URL,
+			},
+			{
+				Name:    "remotive",
+				Enabled: true,
+				URL:     goodSrv.URL,
+			},
+		},
+	}
+	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
+	if err != nil {
+		t.Fatalf("expected err nil; got %v", err)
+	}
+
+	// 7. Leia de runs o total de linhas e quantas têm error preenchido. Afirme 2 e 1.
+	var runsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM runs;").Scan(&runsCount)
+	if err != nil {
+		t.Fatalf("failed to query runs rows: %v", err)
+	}
+
+	var runsErrCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM runs WHERE error IS NOT NULL;").Scan(&runsErrCount)
+	if err != nil {
+		t.Fatalf("failed to query runs rows: %v", err)
+	}
+
+	if runsCount != 2 {
+		t.Errorf("expected 2 runs; got %d", runsCount)
+	}
+	if runsErrCount != 1 {
+		t.Errorf("expected 1 error in runs; got %d", runsErrCount)
+	}
+}
+
 func TestClientTimeout(t *testing.T) {
 	err := pingDB(db)
 	if err != nil {
@@ -328,7 +393,15 @@ func TestClientTimeout(t *testing.T) {
 	}
 
 	// 100ms budget against a 500ms handler: the source budget must fire first.
-	_ = run(slog.New(slog.DiscardHandler), dsn, &cfg, 100*time.Millisecond)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, 100*time.Millisecond)
+
+	switch {
+	case err == nil:
+		t.Fatalf("expected error got nil")
+	case !errors.Is(err, context.DeadlineExceeded):
+		t.Fatalf("expected DeadlineExceeded; got %v", err)
+	}
+
 	var (
 		runsCount int
 		fetched   int

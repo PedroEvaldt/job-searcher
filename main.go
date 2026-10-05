@@ -187,21 +187,33 @@ func run(logger *slog.Logger, dbURL string, cfg *Config, timeout time.Duration) 
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
 	}
+	var runErrs []error
+	var success bool
 	for _, sourceConfig := range cfg.SourcesConfig {
 		if sourceConfig.Enabled {
 			c := client.NewClient(30 * time.Second)
 			source, err := For(sourceConfig.Name, c)
 			if err != nil {
+				runErrs = append(runErrs, err)
 				logger.Warn("config name does not match valid source", "error", err)
 				continue
 			}
 
 			err = processSource(conn, logger, source, sourceConfig, timeout)
 			if err != nil {
+				runErrs = append(runErrs, fmt.Errorf("failed to process %s: %w", sourceConfig.Name, err))
 				logger.Warn("failed to process source", "source", sourceConfig.Name, "error", err)
 				continue
 			}
+			success = true
 		}
+	}
+	if !success {
+		finalErr := errors.Join(runErrs...)
+		if finalErr == nil {
+			return errors.New("no source succeded: no source was activated")
+		}
+		return fmt.Errorf("no source succeded: %w", finalErr)
 	}
 	return nil
 }
@@ -251,6 +263,9 @@ func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceCon
 	if err != nil {
 		return fmt.Errorf("failed to collect and insert data: %w", err)
 	}
+	// if failed == fetched {
+	// 	return fmt.Errorf("souce failed to insert all fetched data", sourceConfig.Name)
+	// }
 	logger.Info("source collected", "source", sourceConfig.Name, "fetched", fetched, "failed", failed)
 	return nil
 }
