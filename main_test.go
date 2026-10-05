@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,8 +24,9 @@ import (
 )
 
 const (
-	rjCount = 117
-	jCount  = 117
+	rjCount     = 137
+	jCount      = 137
+	sourceCount = 3
 )
 
 var (
@@ -56,7 +58,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSources(t *testing.T) {
-	expected := 2
+	expected := sourceCount
 	err := pingDB(db)
 	if err != nil {
 		t.Fatalf("database not ready for testing sources: %v", err)
@@ -132,6 +134,10 @@ func TestFetch(t *testing.T) {
 				Name:    "remotive",
 				Enabled: true,
 			},
+			{
+				Name:    "himalayas",
+				Enabled: true,
+			},
 		},
 	}
 	for i, source := range cfg.SourcesConfig {
@@ -152,7 +158,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -176,7 +182,7 @@ func TestFetch(t *testing.T) {
 		return
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -206,8 +212,8 @@ func TestFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to query runs rows: %v", err)
 	}
-	if runsCount != 4 {
-		t.Errorf("expected 4; got %d", runsCount)
+	if runsCount != (2 * sourceCount) {
+		t.Errorf("expected %d; got %d", (2 * sourceCount), runsCount)
 		return
 	}
 
@@ -288,4 +294,60 @@ func setupPostgres() (*sql.DB, func() error, error) {
 		return nil, teardown, fmt.Errorf("failed to do goose up: %v", err)
 	}
 	return db, teardown, nil
+}
+
+func TestClientTimeout(t *testing.T) {
+	err := pingDB(db)
+	if err != nil {
+		t.Fatalf("database not ready for testing client timeout: %v", err)
+	}
+	// Outlasts the source budget, but returns as soon as the client gives up.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(500 * time.Millisecond):
+		case <-r.Context().Done():
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		SourcesConfig: []sources.SourceConfig{
+			{
+				Name:    "remoteok",
+				Enabled: true,
+				URL:     srv.URL,
+			},
+		},
+	}
+
+	// The container is shared with TestFetch, so start from empty tables.
+	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+
+	// 100ms budget against a 500ms handler: the source budget must fire first.
+	_ = run(slog.New(slog.DiscardHandler), dsn, &cfg, 100*time.Millisecond)
+	var (
+		runsCount int
+		fetched   int
+		runErr    string
+	)
+	err = db.QueryRow("SELECT fetched, error, COUNT(*) OVER() FROM runs;").Scan(&fetched, &runErr, &runsCount)
+	if err != nil {
+		t.Fatalf("failed to query jobs rows: %v", err)
+	}
+
+	if runsCount != 1 {
+		t.Errorf("expected 1 run; got %d", runsCount)
+	}
+
+	if fetched != 0 {
+		t.Errorf("expected 0 fetched; got %d", fetched)
+	}
+
+	if !strings.Contains(runErr, "context deadline exceeded") {
+		t.Errorf("expected error to contain 'context deadline exceeded'; got %s", runErr)
+	}
 }
