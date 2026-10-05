@@ -6,12 +6,12 @@
 
 ## Onde estou
 
-**Tarefa 1.1 fechada em 2026-10-03, débitos de desenho quitados** (D28 interface no consumidor,
-D29 transação removida + isolação de falha por item, D30 erro engolido, D31 `KnownFields`).
-Teste verde (117/117/4), suíte inteira passa. Fica aberto só o **D32** (dono: Fase 2). Próximo:
-abrir a **Tarefa 1.2 — Himalayas**, o teste de fogo da interface.
+**1.3.1 fechada em 2026-10-05 (branch `feature/client`).** Orçamento por fonte injetado no `run`,
+client com 30s fixos, `closeRun` com contexto próprio; `TestClientTimeout` prova que a fonte lenta
+é cortada e que a run grava o erro mesmo assim. 🔴 B5 resolvido, 🟡 D7 pago. Próximo: **1.3.2
+(D21)** — o motivo do salto para a 1.4 (criar o client e testar o timeout) foi cumprido na 1.3.1.
 
-Última sessão: **2026-10-03**.
+Última sessão: **2026-10-05**.
 
 ---
 
@@ -248,6 +248,34 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **Débitos de desenho abertos** (o aluno pulou o passo "na marra", então a conversa de desenho
   ficou para depois do verde): D28, D29, D30, D31. A pagar antes da 1.2.
 
+### 2026-10-05 — diagnóstico (branch `feature/client`)
+
+- 🔴 **B5 — o HEAD não compila.** `go build ./...` falha em `internal/sources/remoteok.go:17` e
+  `himalayas.go:18` (chamam `HttpGetBody`; o client define `HTTPGetBody`). Contornando isso numa
+  cópia descartável, aparece o terceiro erro: `main.go:239` usa `ctx` que não existe — o
+  "contexto por fonte (60s)" descrito na retomada de 05/10 não está no código. Consequência: a
+  suíte não roda e o `docker compose up --build` quebra. A retomada dizia "código pronto": **não está**.
+  Nomes corrigidos pelo mentor a pedido (mecânico), junto com o typo `failed do build request`
+  no client. O aluno trocou o `ctx` por `context.Background()` como andaime: compila, mas é
+  justamente o "espera para sempre" do D7. Falta o contexto por fonte.
+- 🟢 O commit `rascunho` mistura a 1.2 (fechada) com o WIP da 1.3.1. Mencionado uma vez.
+- 🟡 **D35** registrado: `origin/main` tem um commit de docs (`d0296ea`) com marcador `=======`
+  esquecido no `ROADMAP.md` e o `PROGRESS.md` de antes da 1.2.
+- ✅ **1.3.1 fechada.** Dois prazos com papéis distintos: o client (30s, fixo) corta só o HTTP; o
+  **orçamento da fonte** (parâmetro do `run`, 60s no `main`) corta todo o trabalho da fonte, banco
+  incluso — vence quem estourar primeiro. `openRun`/`closeRun` ficam fora do orçamento: a run tem
+  que abrir e fechar mesmo com ele vencido. `TestClientTimeout`: handler de 500ms que respeita
+  `r.Context().Done()`, orçamento de 100ms, asserção sobre `runs` (1 linha, `fetched=0`, `error`
+  com `context deadline exceeded`); 0.11s. Mutação (contexto sem prazo) → falha em 0.52s com
+  `unexpected end of JSON input`. `COUNT(*) OVER()` traz contagem e linha numa query só.
+  🔴 **B5 resolvido**, 🟡 **D7 pago**. (Pendências 2 e 3 do `/check` — variável da mensagem de
+  falha e comentários em PT — feitas pelo mentor a pedido.)
+- 🧠 **Asserção sobre o retorno do `run` testa o D21, não o timeout.** O `run` engole o erro da fonte
+  (`Warn` + `continue` + `return nil`); o único rastro do timeout é `runs`. Mesma lição de 14/09.
+- 🟢 Mencionados uma vez: `CollectionTimeOut` (Timeout é uma palavra; não precisa ser exportada),
+  nome `TestClientTimeout` (testa o orçamento, não o client), `runErr` como `string` quebra no
+  `NULL`, mensagem "jobs rows" numa query de `runs`, `err = run(...)` sobrescrito sem uso.
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -292,7 +320,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D4~~ | `compose.yaml` | Credenciais do Postgres hardcoded no arquivo versionado.                                                                   | ✅ pago 2026-09-15 (0.4.1) — `${}` nos 4 pontos, incluindo o `-U`/`-d` do healthcheck; senha existe 1× no repositório |
 | ~~D5~~ | —          | `testdata/*.json` existe mas nenhum teste usa.                                                                                  | ✅ pago 2026-09-14 (0.3.2) — `TestFetch` serve o fixture por `httptest.Server` |
 | ~~D6~~ | `.env`         | Sem `.env.example` para quem clona. **Piorou em 2026-09-15:** eram 1 variável, agora são 4 — um clone recebe quatro interpolações vazias e um erro confuso. | ✅ pago 2026-09-30 (0.4.3) — `.env.example` com `DATABASE_URL` montada por `${}` |
-| D7  | `main.go:56`   | `http.Get` sem timeout — o padrão espera para sempre. No cron, um servidor que aceita a conexão e não responde pendura o coletor e o ciclo seguinte sobe outro em cima. | aberto — dono: Etapa 1, junto com rate limit por fonte |
+| ~~D7~~  | `main.go:56`   | `http.Get` sem timeout — o padrão espera para sempre. No cron, um servidor que aceita a conexão e não responde pendura o coletor e o ciclo seguinte sobe outro em cima. | ✅ pago 2026-10-05 (1.3.1) — client com 30s + orçamento por fonte via contexto; provado por `TestClientTimeout` |
 | D8  | `main.go:99`   | `content_hash` calculado sobre JSON compactado, mas `json.Compact` não canoniza ordem de chaves. Se a fonte reordenar chaves, todos os hashes mudam de uma vez e nascem "novas versões" falsas. | aberto — sem dono; sintoma seria inexplicável se ocorrer |
 | D9  | `main.go:86`   | Falha de `Unmarshal` é logada sem identificar o item — e não há como identificar, já que o parse é justamente o que falhou. Alarme sem endereço. | aberto — reavaliar em 0.2.3 junto com `runs.failed` |
 | D10 | dados          | Payloads do Remote OK chegam com entidades HTML cruas (`&amp;`) e mojibake (`Donâ\u0080\u0099t`, `å\u008C\u0096`). Um `slug` vazio. `salary_min: 0` significa "não informado", não zero. | aberto — dono: Etapa 2, na normalização de texto |
@@ -318,6 +346,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D30~~ | `main.go` (`collectAndStoreData`) | `err` do `compactJson` sobrescrito antes de ser checado. | ✅ pago 2026-10-03 — erro checado antes de usar o `hash`; `compactJson` → `compactJSON` (inicialismo). |
 | ~~D31~~ | `main.go` (`Load`) | `yaml.Unmarshal` cru, sem `KnownFields`: chave desconhecida ignorada em silêncio (o `enable`×`enabled`). | ✅ pago 2026-10-03 — `yaml.NewDecoder` + `KnownFields(true)`: chave desconhecida no `config.yaml` agora é erro de parse, não comportamento faltando. Fecha a **classe** do bug. (D29-final e D31 digitados pelo mentor a pedido do aluno — ele descreveu a solução, sem tempo de digitar.) |
 | D32 | `main.go` (`collectAndStoreData`) | O refactor da 1.1 trocou o `normalizeRawJobs` (varredura idempotente de `raw_jobs` → `jobs`) por "normalizar só o item recém-inserido + `if existed continue`". Dois efeitos: (1) `jobs` deixou de se auto-curar — `raw_job` que grava mas cujo `insertJob` falha vira **órfão** permanente (na run seguinte cai no `existed`); (2) matou o reprocessamento prometido no SPEC §4.1 ("rodar o normalizador de novo sobre o histórico"). | aberto — dono: Fase 2 (quando o normalizador melhorar); conserto provável = normalização como passo idempotente separado sobre `raw_jobs` |
+| D33 | `main.go` (`insertJob`) | O modelo `sources.Job` carrega `Date`, `Location` e `Tags`, mapeados com cuidado nas três fontes (incl. 3 formatos de data), mas `insertJob` grava só `title/company/url/description`. `Date` é calculado e descartado **mesmo havendo coluna `posted_at`**; `Location`/`Tags` não têm coluna ainda. Owners futuros concretos: Fase 2 (filtro de localização lê `Location`), Fase 3a ("idade da vaga" lê `posted_at`). | aberto — 🟡; migration + colunas quando os donos chegarem |
+| ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
+| D35 | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` (linha 232, com o roadmap antigo da Fase 1 colado embaixo) e `PROGRESS.md` de volta ao estado pré-1.2. O merge de `feature/client` vai conflitar nos dois arquivos. | aberto — resolver no merge: a versão certa dos docs é a do `feature/client` |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -393,14 +424,12 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-Próximo passo: **abrir a Tarefa 1.2 (Himalayas)** — a terceira fonte entra pela mesma interface
-`Source`; se doer, a interface está errada e volta para o desenho. Débitos de desenho da 1.1
-todos pagos (D28–D31); aberto só o D32 (reprocessamento/auto-cura, dono Fase 2).
+**1.3.1 fechada em 2026-10-05.** Próximo: **1.3.2 — D21** (todas as fontes falhando → `exit≠0`).
+Depois, na 1.3: D12 (`finished_at` + limiar `failed/fetched`), D11 (`defer`/panic grava
+`error=NULL`) e o `if err != nil` morto no `processSource` (resolve junto do D21). Quando o D21
+for pago, o `TestClientTimeout` pode voltar a afirmar sobre o retorno do `run`. Fora da 1.3: D32
+(auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos), D35 (docs do `main`).
 
-Nota pequena aberta: `collectAndStoreData` agora nunca devolve erro não-nil (todo caminho de item
-faz `continue`), então o `if err != nil` em `processSource` que a chama virou morto. Resolver
-junto do D21/D12 na 1.3, quando o agregado `failed/fetched` virar o sinal de falha da run.
-
-Estado verificado em 2026-10-03: `go build`/`go vet`/`gofmt` limpos, `TestFetch` verde
-(117/117/4), suíte inteira passa. Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
+Estado verificado em 2026-10-05: `go build`/`go vet`/`gofmt` limpos, suíte verde
+(`TestFetch` 137/137/6, `TestClientTimeout` 0.11s). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
 usa a porta `5433` (ver `.env.example`).

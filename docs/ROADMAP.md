@@ -211,15 +211,29 @@ formatos heterogêneos para um modelo comum, seed de fonte nova como migration p
       Débitos de desenho abertos na mesma data: D28 (interface no implementador, não no consumidor),
       D29 (transação por item decorativa + `defer` no `for`), D30 (erro de `compactJson` descartado).
 
-### Tarefa 1.2 — Terceira fonte (Himalayas) *(resumo — detalhar ao chegar)*
+### Tarefa 1.2 — Terceira fonte (Himalayas) ✅ (fechada 2026-10-03)
 
 Himalayas entra pela mesma interface, provando que a abstração generaliza. Se doer, a
 interface está errada e volta para a 1.1.2.
+
+- [x] **1.2** — `internal/sources/himalayas.go` + migration `005_add_himalayas.sql` + config.
+      A interface `Source` **não** precisou mudar (generalizou); quem dobrou foi o modelo `Job`:
+      `locationRestrictions` veio como array e o aluno achatou com `strings.Join`. Terceiro
+      formato de data (epoch, `time.Unix`). Teste 137/137, `runs`=6, `TestSources`=3. Paginação
+      (`nextCursor`/`totalCount`) deixada de fora de propósito — só a 1ª página (20 vagas).
+      Débito aberto: D33 (`Date`/`Location`/`Tags` mapeados mas não persistidos).
 
 ### Tarefa 1.3 — Rodar sozinho sem mentir *(resumo)*
 
 Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration de
 `finished_at` + limiar `failed/fetched` (D12), `defer`/panic (D11).
+
+- [x] **1.3.1** Timeout e `context` (D7). ✅ 2026-10-05 — client com 30s fixos + orçamento por
+      fonte (parâmetro do `run`) num contexto que cobre source id, fetch e gravação; `closeRun`
+      com contexto próprio. `TestClientTimeout` (0.11s) prova o corte e o `runs.error` gravado;
+      validado por mutação.
+- [ ] **1.3.2** Todas as fontes falhando → `exit≠0` (D21).
+- [ ] Restante da 1.3 (a detalhar): D12, D11.
 
 ### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*
 
