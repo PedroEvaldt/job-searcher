@@ -424,3 +424,85 @@ func TestClientTimeout(t *testing.T) {
 		t.Errorf("expected error to contain 'context deadline exceeded'; got %s", runErr)
 	}
 }
+
+func TestLimiarValidation(t *testing.T) {
+	tests := []struct {
+		name            string
+		body            string
+		wantErr         bool
+		fetchedExpected int
+		failedExpected  int
+	}{
+		{"t1", `{"jobs":[{"id":"x"},{"id":"y"}]}`, true, 2, 2},
+		{"t2", `{"jobs":[{"id":1},{"id":2},{"id":3},{"id":"x"}]}`, false, 4, 1},
+		{"t3", `{"jobs":[]}`, false, 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, err := w.Write([]byte(tt.body))
+				if err != nil {
+					t.Errorf("failed writing body: %v", err)
+				}
+			}))
+			defer srv.Close()
+			cfg := Config{
+				SourcesConfig: []sources.SourceConfig{
+					{
+						Name:    "remotive",
+						Enabled: true,
+						URL:     srv.URL,
+					},
+				},
+			}
+
+			_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+			if err != nil {
+				t.Fatalf("failed to clean tables: %v", err)
+			}
+
+			err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
+
+			var (
+				runsErrCount int
+				fetched      int
+				failed       int
+			)
+			queryErr := db.QueryRow("SELECT fetched, failed FROM runs;").Scan(&fetched, &failed)
+			if queryErr != nil {
+				t.Fatalf("failed to query runs: %v", queryErr)
+			}
+			queryErr = db.QueryRow("SELECT COUNT(*) FROM runs WHERE error IS NOT NULL;").Scan(&runsErrCount)
+			if queryErr != nil {
+				t.Fatalf("failed to query runs: %v", queryErr)
+			}
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected err too many itens failed; got nil")
+				}
+				if !strings.Contains(err.Error(), "too many items failed") {
+					t.Errorf("expected err too many itens failed; got %v", err)
+				}
+				if runsErrCount != 1 {
+					t.Errorf("expected 1 run with error; got %d", runsErrCount)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected err nil; got %v", err)
+				}
+				if runsErrCount > 0 {
+					t.Errorf("expected 0 runs error; got %d", runsErrCount)
+				}
+			}
+
+			if fetched != tt.fetchedExpected {
+				t.Errorf("expected %d; got %d", tt.fetchedExpected, fetched)
+			}
+			if failed != tt.failedExpected {
+				t.Errorf("expected %d; got %d", tt.failedExpected, failed)
+			}
+		})
+	}
+}

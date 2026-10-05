@@ -29,7 +29,10 @@ import (
 //go:embed db/migrations/*.sql
 var migrationsFS embed.FS
 
-const CollectionTimeOut = 60 * time.Second
+const (
+	CollectionTimeOut         = 60 * time.Second
+	limiar            float64 = 0.5
+)
 
 type Source interface {
 	Fetch(context.Context, string) ([]json.RawMessage, error)
@@ -259,13 +262,14 @@ func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceCon
 	}
 
 	fetched = len(items)
-	failed, err = collectAndStoreData(ctx, conn, logger, items, source, sourceID)
-	if err != nil {
-		return fmt.Errorf("failed to collect and insert data: %w", err)
+	failed = collectAndStoreData(ctx, conn, logger, items, source, sourceID)
+
+	if fetched != 0 {
+		failedPct := (float64(failed) / float64(fetched))
+		if failedPct > limiar {
+			return fmt.Errorf("too many items failed: %d of %d (%.2f%%) (threshold %.2f%%)", failed, fetched, (failedPct * 100), (limiar * 100))
+		}
 	}
-	// if failed == fetched {
-	// 	return fmt.Errorf("souce failed to insert all fetched data", sourceConfig.Name)
-	// }
 	logger.Info("source collected", "source", sourceConfig.Name, "fetched", fetched, "failed", failed)
 	return nil
 }
@@ -329,7 +333,7 @@ func compactJSON(item json.RawMessage) (string, error) {
 // and idempotent), then, inside a single transaction, normalize raw_jobs into the
 // jobs table so a reader never sees a half-written batch. Returns the number of items
 // that failed to land in raw_jobs.
-func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, source Source, sourceID int) (int, error) {
+func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, items []json.RawMessage, source Source, sourceID int) int {
 	failed := 0
 	for _, item := range items {
 		externalID, err := source.ExternalID(item)
@@ -368,7 +372,7 @@ func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logge
 			continue
 		}
 	}
-	return failed, nil
+	return failed
 }
 
 // getSourceID looks up the surrogate id of a source by its natural name in the
