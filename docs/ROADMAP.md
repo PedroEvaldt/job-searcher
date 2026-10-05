@@ -232,7 +232,9 @@ Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration d
       fonte (parâmetro do `run`) num contexto que cobre source id, fetch e gravação; `closeRun`
       com contexto próprio. `TestClientTimeout` (0.11s) prova o corte e o `runs.error` gravado;
       validado por mutação.
-- [ ] **1.3.2** Todas as fontes falhando → `exit≠0` (D21).
+- [x] **1.3.2** Todas as fontes falhando → `exit≠0` (D21). ✅ 2026-10-05 — `errors.Join` dos erros
+      por fonte quando nenhuma teve sucesso (zero ligadas incluso); `TestPartialFailure` +
+      `errors.Is` no `TestClientTimeout`; validado por 2 mutações.
 - [ ] Restante da 1.3 (a detalhar): D12, D11.
 
 ### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*

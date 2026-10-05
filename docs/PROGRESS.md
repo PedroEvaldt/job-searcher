@@ -6,10 +6,10 @@
 
 ## Onde estou
 
-**1.3.1 fechada em 2026-10-05 (branch `feature/client`).** Orçamento por fonte injetado no `run`,
-client com 30s fixos, `closeRun` com contexto próprio; `TestClientTimeout` prova que a fonte lenta
-é cortada e que a run grava o erro mesmo assim. 🔴 B5 resolvido, 🟡 D7 pago. Próximo: **1.3.2
-(D21)** — o motivo do salto para a 1.4 (criar o client e testar o timeout) foi cumprido na 1.3.1.
+**1.3.1 e 1.3.2 fechadas em 2026-10-05.** Orçamento por fonte (D7) e falha total → `exit≠0` (D21):
+o `run` devolve os erros juntos (`errors.Join`, cada um com o nome da fonte) quando nenhuma fonte
+ligada teve sucesso, inclusive com zero ligadas. Falha parcial continua `exit=0`, visível em `runs`.
+Próximo na 1.3: **D12** (`finished_at` + limiar `failed/fetched`) e **D11** (panic grava `error=NULL`).
 
 Última sessão: **2026-10-05**.
 
@@ -275,6 +275,19 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - 🟢 Mencionados uma vez: `CollectionTimeOut` (Timeout é uma palavra; não precisa ser exportada),
   nome `TestClientTimeout` (testa o orçamento, não o client), `runErr` como `string` quebra no
   `NULL`, mensagem "jobs rows" numa query de `runs`, `err = run(...)` sobrescrito sem uso.
+- ✅ **1.3.2 fechada (D21).** Regra: o `run` devolve erro quando **nenhuma** fonte ligada termina com
+  sucesso (`For` ok + `processSource` nil). Erros juntos com `errors.Join`, cada um envolvido com o
+  nome da fonte, e o conjunto com `no source succeeded: %w`. Zero ligadas → erro próprio (o `Join`
+  de lista vazia é `nil`; e `fmt.Errorf("%w", nil)` não é `nil`, imprime `%!w(<nil>)` — o exit 1
+  saiu certo por acaso na primeira versão). `TestClientTimeout` voltou a afirmar sobre o retorno,
+  com `errors.Is(err, context.DeadlineExceeded)` atravessando `%w` + `Join`; `TestPartialFailure`
+  (remotive bom + remoteok com 500) → `nil`, 2 runs, 1 com erro. Mutações: "erro em qualquer falha"
+  → `TestPartialFailure` falha; "sem prazo" → `TestClientTimeout` falha **mesmo com o `run`
+  devolvendo erro** — só o `errors.Is` distingue timeout de outra falha. `go run .` com zero
+  ligadas → `exit 1`, `no source succeded: no source was activated`.
+- 🟢 Mantidos por decisão do aluno / mencionados uma vez: bloco `failed == fetched` comentado no
+  `processSource` (volta no D12), typos `succeded`/`activated`, resto de roteiro em PT e mensagem
+  do `pingDB` copiada no `TestPartialFailure`.
 
 ## Decisões tomadas
 
@@ -334,7 +347,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D18~~ | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | ✅ pago 2026-09-30 (0.5.1) — `Debug` por item + `source collected` por fonte |
 | D19 | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | aberto — dono: Etapa 1, quando houver 3 fontes e frequência medida |
 | ~~D20~~ | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | ✅ pago 2026-09-30 (0.5.1) — resultado nomeado; verificado com fonte `fake` (run 45) |
-| D21 | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | aberto — dono: Etapa 1 |
+| ~~D21~~ | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | ✅ pago 2026-10-05 (1.3.2) — `run` devolve `errors.Join` dos erros por fonte quando nenhuma teve sucesso (zero ligadas incluso); `TestClientTimeout` + `TestPartialFailure` |
 | D23 | `compose.yaml:15` | `container_name: postgres_db` fixa o nome fora do namespace do projeto: impede subir uma segunda instância (`docker compose -p outro up`) e, portanto, impede testar a corrida do healthcheck sem destruir o volume de dados real. | aberto — dono: Etapa 6, quando houver mais de um ambiente |
 | D24 | `compose.yaml:26` | Healthcheck usa `$POSTGRES_USER` (expandido pelo **Compose**, em tempo de parse) em vez de `$$POSTGRES_USER` (expandido pelo shell do container, em tempo de execução). Funciona, mas o valor vaza literal no `docker inspect` e o padrão não sobrevive ao k8s, onde não há Compose para interpolar. | aberto — 🟢, dono: Etapa 6 |
 | ~~D27~~ | `analyzer/main.py:1` | Shebang num arquivo sem bit de execução no git (`100644`): `ruff check` falhava com `EXE001` em clone. | ✅ pago — shebang removido; `ruff` limpo em ambiente novo. Confirmado no diagnóstico de 2026-10-02 |
@@ -348,7 +361,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D32 | `main.go` (`collectAndStoreData`) | O refactor da 1.1 trocou o `normalizeRawJobs` (varredura idempotente de `raw_jobs` → `jobs`) por "normalizar só o item recém-inserido + `if existed continue`". Dois efeitos: (1) `jobs` deixou de se auto-curar — `raw_job` que grava mas cujo `insertJob` falha vira **órfão** permanente (na run seguinte cai no `existed`); (2) matou o reprocessamento prometido no SPEC §4.1 ("rodar o normalizador de novo sobre o histórico"). | aberto — dono: Fase 2 (quando o normalizador melhorar); conserto provável = normalização como passo idempotente separado sobre `raw_jobs` |
 | D33 | `main.go` (`insertJob`) | O modelo `sources.Job` carrega `Date`, `Location` e `Tags`, mapeados com cuidado nas três fontes (incl. 3 formatos de data), mas `insertJob` grava só `title/company/url/description`. `Date` é calculado e descartado **mesmo havendo coluna `posted_at`**; `Location`/`Tags` não têm coluna ainda. Owners futuros concretos: Fase 2 (filtro de localização lê `Location`), Fase 3a ("idade da vaga" lê `posted_at`). | aberto — 🟡; migration + colunas quando os donos chegarem |
 | ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
-| D35 | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` (linha 232, com o roadmap antigo da Fase 1 colado embaixo) e `PROGRESS.md` de volta ao estado pré-1.2. O merge de `feature/client` vai conflitar nos dois arquivos. | aberto — resolver no merge: a versão certa dos docs é a do `feature/client` |
+| ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -424,12 +437,11 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-**1.3.1 fechada em 2026-10-05.** Próximo: **1.3.2 — D21** (todas as fontes falhando → `exit≠0`).
-Depois, na 1.3: D12 (`finished_at` + limiar `failed/fetched`), D11 (`defer`/panic grava
-`error=NULL`) e o `if err != nil` morto no `processSource` (resolve junto do D21). Quando o D21
-for pago, o `TestClientTimeout` pode voltar a afirmar sobre o retorno do `run`. Fora da 1.3: D32
-(auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos), D35 (docs do `main`).
+**1.3.2 fechada em 2026-10-05.** Próximo na 1.3: D12 (`finished_at` + limiar `failed/fetched`,
+com o caso de zero itens; leva junto o `if err != nil` morto do `collectAndStoreData` e o bloco
+comentado `failed == fetched`) e D11 (`defer`/panic grava `error=NULL`). Fora da 1.3: D32
+(auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos).
 
 Estado verificado em 2026-10-05: `go build`/`go vet`/`gofmt` limpos, suíte verde
-(`TestFetch` 137/137/6, `TestClientTimeout` 0.11s). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
+(`TestFetch` 137/137/6, `TestPartialFailure`, `TestClientTimeout` 0.11s). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
 usa a porta `5433` (ver `.env.example`).
