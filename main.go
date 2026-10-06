@@ -31,6 +31,8 @@ var migrationsFS embed.FS
 
 const (
 	CollectionTimeOut         = 60 * time.Second
+	InitialTime               = 5 * time.Second
+	Retries           int     = 3
 	limiar            float64 = 0.5
 )
 
@@ -103,7 +105,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(logger, dbURL, cfg, CollectionTimeOut); err != nil {
+	if err := run(logger, dbURL, cfg, CollectionTimeOut, InitialTime, Retries); err != nil {
 		logger.Error("failed to run", "error", err)
 		os.Exit(1)
 	}
@@ -161,7 +163,7 @@ func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 // run performs one full collection pass: open the Postgres connection, apply
 // migrations, then process each enabled source in turn. A failure in one source is
 // logged and skipped, not fatal to the others.
-func run(logger *slog.Logger, dbURL string, cfg *Config, timeout time.Duration) (err error) {
+func run(logger *slog.Logger, dbURL string, cfg *Config, timeout, initialTime time.Duration, retries int) (err error) {
 	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -194,7 +196,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config, timeout time.Duration) 
 	var success bool
 	for _, sourceConfig := range cfg.SourcesConfig {
 		if sourceConfig.Enabled {
-			c := client.NewClient(30 * time.Second)
+			c := client.NewClient(retries, 30*time.Second, initialTime)
 			source, err := For(sourceConfig.Name, c)
 			if err != nil {
 				runErrs = append(runErrs, err)

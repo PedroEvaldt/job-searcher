@@ -29,6 +29,9 @@ const (
 	rjCount     = 137
 	jCount      = 137
 	sourceCount = 3
+
+	// testInitialTime keeps retry waits short so a source answering 5xx does not slow the suite.
+	testInitialTime = 10 * time.Millisecond
 )
 
 var (
@@ -160,7 +163,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -184,7 +187,7 @@ func TestFetch(t *testing.T) {
 		return
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -269,7 +272,7 @@ func TestPartialFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
 	if err != nil {
 		t.Fatalf("expected err nil; got %v", err)
 	}
@@ -327,7 +330,7 @@ func TestClientTimeout(t *testing.T) {
 	}
 
 	// 100ms budget against a 500ms handler: the source budget must fire first.
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, 100*time.Millisecond)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, 100*time.Millisecond, testInitialTime, Retries)
 
 	switch {
 	case err == nil:
@@ -396,7 +399,7 @@ func TestLimiarValidation(t *testing.T) {
 				t.Fatalf("failed to clean tables: %v", err)
 			}
 
-			err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut)
+			err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
 
 			var (
 				runsErrCount int
