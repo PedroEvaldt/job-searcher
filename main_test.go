@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/PedroEvaldt/job-searcher/internal/sources"
+	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
@@ -228,74 +230,6 @@ func TestFetch(t *testing.T) {
 	}
 }
 
-func pingDB(db *sql.DB) error {
-	return db.Ping()
-}
-
-func setupPostgres() (*sql.DB, func() error, error) {
-	ctx := context.Background()
-
-	ctr, err := postgres.Run(ctx, "postgres:16-alpine",
-		postgres.WithDatabase("jobs_test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(30*time.Second),
-		),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to start postgres: %v", err)
-	}
-	teardown := func() error {
-		err := testcontainers.TerminateContainer(ctr)
-		if err != nil {
-			return fmt.Errorf("failed to clean container: %v", err)
-		}
-		return nil
-	}
-
-	dsn, err = ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to get dsn string: %v", err)
-	}
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to open database: %v", err)
-	}
-	teardown = func() error {
-		var errs []error
-		errClose := db.Close()
-		if errClose != nil {
-			errs = append(errs, fmt.Errorf("failed to close db: %v", errClose))
-		}
-		errTerminate := testcontainers.TerminateContainer(ctr)
-		if errTerminate != nil {
-			errs = append(errs, fmt.Errorf("failed to terminate container: %v", errTerminate))
-		}
-		return errors.Join(errs...)
-	}
-
-	err = db.PingContext(ctx)
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to ping db: %v", err)
-	}
-
-	migrationsFS, err := fs.Sub(migrationsFS, "db/migrations")
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to rmeove FS prefix: %v", err)
-	}
-
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationsFS)
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to get goose provider: %v", err)
-	}
-	_, err = provider.Up(ctx)
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to do goose up: %v", err)
-	}
-	return db, teardown, nil
-}
-
 func TestPartialFailure(t *testing.T) {
 	err := pingDB(db)
 	if err != nil {
@@ -505,4 +439,131 @@ func TestLimiarValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+type dummy struct{}
+
+func (d dummy) Fetch(context.Context, string) ([]json.RawMessage, error) {
+	panic("dummy panic")
+}
+
+func (d dummy) ExternalID(json.RawMessage) (string, error) {
+	return "", nil
+}
+
+func (d dummy) ToJob(json.RawMessage) (sources.Job, error) {
+	return sources.Job{}, nil
+}
+
+func TestPanic(t *testing.T) {
+	_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	conn := newConn(t)
+	cfg := sources.SourceConfig{
+		Name:    "remotive",
+		Enabled: true,
+		URL:     "https://test.url",
+	}
+	err = processSource(conn, slog.New(slog.DiscardHandler), dummy{}, cfg, CollectionTimeOut)
+	if err == nil {
+		t.Fatalf("expected err; got nil")
+	}
+	if !strings.Contains(err.Error(), "panic") {
+		t.Errorf("expected error to containg panic; got %v", err)
+	}
+
+	var (
+		runsErr           string
+		finishedAtNotNull bool
+	)
+	err = db.QueryRow("SELECT error, finished_at IS NOT NULL FROM runs;").Scan(&runsErr, &finishedAtNotNull)
+	if err != nil {
+		t.Fatalf("failed to query runs: %v", err)
+	}
+	if !strings.Contains(runsErr, "panic") {
+		t.Errorf("expected error to containg panic; got %v", err)
+	}
+	if !finishedAtNotNull {
+		t.Errorf("expected finished_at NOT NULL true; got %v", finishedAtNotNull)
+	}
+}
+
+func newConn(t *testing.T) *pgx.Conn {
+	t.Helper()
+	conn, err := pgx.Connect(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("failed opening connection: %v", err)
+	}
+	t.Cleanup(func() { conn.Close(context.Background()) })
+	return conn
+}
+
+func pingDB(db *sql.DB) error {
+	return db.Ping()
+}
+
+func setupPostgres() (*sql.DB, func() error, error) {
+	ctx := context.Background()
+
+	ctr, err := postgres.Run(ctx, "postgres:16-alpine",
+		postgres.WithDatabase("jobs_test"),
+		postgres.WithUsername("test"),
+		postgres.WithPassword("test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(30*time.Second),
+		),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to start postgres: %v", err)
+	}
+	teardown := func() error {
+		err := testcontainers.TerminateContainer(ctr)
+		if err != nil {
+			return fmt.Errorf("failed to clean container: %v", err)
+		}
+		return nil
+	}
+
+	dsn, err = ctr.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to get dsn string: %v", err)
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to open database: %v", err)
+	}
+	teardown = func() error {
+		var errs []error
+		errClose := db.Close()
+		if errClose != nil {
+			errs = append(errs, fmt.Errorf("failed to close db: %v", errClose))
+		}
+		errTerminate := testcontainers.TerminateContainer(ctr)
+		if errTerminate != nil {
+			errs = append(errs, fmt.Errorf("failed to terminate container: %v", errTerminate))
+		}
+		return errors.Join(errs...)
+	}
+
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to ping db: %v", err)
+	}
+
+	migrationsFS, err := fs.Sub(migrationsFS, "db/migrations")
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to rmeove FS prefix: %v", err)
+	}
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationsFS)
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to get goose provider: %v", err)
+	}
+	_, err = provider.Up(ctx)
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to do goose up: %v", err)
+	}
+	return db, teardown, nil
 }

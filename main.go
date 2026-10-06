@@ -247,6 +247,12 @@ func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceCon
 		}
 	}()
 
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -305,7 +311,7 @@ func closeRun(conn *pgx.Conn, fetched, failed, id int, sourceID *int, runErr err
 	defer cancel()
 
 	var runErrStr *string
-	sql := "UPDATE runs SET fetched = $1, failed = $2, source_id = $3, error = $4 WHERE id = $5;"
+	sql := "UPDATE runs SET fetched = $1, failed = $2, source_id = $3, error = $4, finished_at = now() WHERE id = $5;"
 	if runErr != nil {
 		errStr := runErr.Error()
 		runErrStr = &errStr
