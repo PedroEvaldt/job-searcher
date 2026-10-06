@@ -242,7 +242,33 @@ Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration d
       ✅ 2026-10-05 — migration `006` + `closeRun` grava `finished_at`; `recover` no `defer` (depois
       do `defer` do `closeRun`). `TestPanic` com `Source` falsa; validado por 3 mutações.
 
-### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*
+### 📍 Tarefa 1.4 — Educado com as fontes
+
+**Objetivo:** falha transitória da fonte (429/5xx) é tentada de novo com espera crescente; o
+Himalayas traz todas as páginas; nenhuma fonte recebe requisições mais rápido que o limite dela.
+
+**Critério de aceite:** um servidor de teste que responde 429/5xx é tentado de novo com espera
+crescente e desistência no máximo configurado; a coleta do Himalayas passa de 20 vagas; um teste
+mede o intervalo entre requisições e ele nunca fica abaixo do configurado no `config.yaml`.
+
+**Conceitos novos:** retry com backoff exponencial, `select` com timer e `ctx.Done()`, contador
+atômico em teste concorrente, paginação por cursor, rate limit por intervalo.
+
+**Onde ler:** [Go tour — Select](https://go.dev/tour/concurrency/5) ·
+[time.NewTimer](https://pkg.go.dev/time#NewTimer) · [sync/atomic](https://pkg.go.dev/sync/atomic)
+
+**Reordenada em 2026-10-05:** cada fonte faz 1 requisição por run, então rate limit agora seria
+abstração antes da dor. Retry primeiro (tem valor já); paginação do Himalayas cria o caso real
+de N requisições à mesma fonte; rate limit vem depois dela.
+
+- [x] **1.4.1** Retry com backoff para 429/5xx no client, respeitando o `ctx`; teste unitário em
+      `internal/client` (sem banco). ✅ 2026-10-06 — laço de tentativas com `switch` por status;
+      espera dobrando via `select` entre `time.NewTimer` e `ctx.Done()`; sem espera depois da
+      última tentativa. `run` recebe espera/tentativas (testes do `main` usam 10ms). 4 testes em
+      `internal/client`; 5 mutações (sem retry, sem dobrar, tentativa a mais, retry em 404, espera
+      ignorando o `ctx`) — todas pegas.
+- [ ] **1.4.2** Paginação do Himalayas (cursor), com teto de páginas.
+- [ ] **1.4.3** Rate limit por fonte + timeout/retry configuráveis no `config.yaml`.
 
 ### Tarefa 1.5 — Deduplicação *(resumo)* — mesma vaga aparecendo em duas fontes.
 

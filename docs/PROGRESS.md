@@ -6,11 +6,11 @@
 
 ## Onde estou
 
-**Tarefa 1.3 fechada em 2026-10-05.** O coletor parou de mentir: orçamento por fonte (D7), falha
-total → `exit≠0` (D21), limiar `failed/fetched` > 50% e `finished_at` (D12), panic vira erro
-registrado (D11). Próximo: **Tarefa 1.4 — rate limit e retry por fonte**.
+**Subtarefa 1.4.1 fechada em 2026-10-06.** O client tenta de novo em 429/5xx com espera dobrando,
+para na hora quando o `ctx` vence e não espera depois da última tentativa. Próximo: **1.4.2 —
+paginação do Himalayas**.
 
-Última sessão: **2026-10-05**.
+Última sessão: **2026-10-06**.
 
 ---
 
@@ -314,6 +314,35 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   → falha limpa; ordem dos `defer` invertida → falha, mas no `Scan` (`converting NULL to string`).
 - 🧠 Typos na `006` (`timestampz`, `Dwon`) foram **barulhentos**: goose e Postgres resolvem nome em
   vez de filtrar — o lado bom da lição de 15/09. A `006` pôde ser editada porque o dev estava na 5.
+- 🔴 **B6 — migration fora do commit.** O `feat` da 1.3.4 (`9ba1668`) foi para o `origin/main` com o
+  `closeRun` gravando `finished_at`, mas sem a `006` (arquivo novo, `??`, não entrou no `git add`).
+  Num clone limpo, o `UPDATE` do `closeRun` falharia em toda run. Resolvido em `cfca783`. Regra:
+  `git status` antes de todo commit — "funciona na minha máquina" de novo (30/09).
+
+### 2026-10-06 — Subtarefa 1.4.1 (retry com backoff)
+
+- ✅ **1.4.1 fechada.** `HTTPGetBody` com laço de tentativas e `switch` por status: 200 → lê; 429/5xx
+  → fecha o body, e se não for a última tentativa espera num `select` entre `time.NewTimer` e
+  `ctx.Done()` (dobrando a espera); outro status → erro na hora. `ctx` vencido devolve `ctx.Err()` com
+  `%w`. `NewClient(retries, timeout, initialTime)`; o `run` recebe espera/tentativas, então os testes
+  do `main` usam 10ms (`TestPartialFailure`, que faz retry contra 500, em 0.11s). Testes em
+  `internal/client`: `TestGoodServer`, `TestClientRetries` (4 casos, com contagem de requisições),
+  `TestIncTime` (intervalos ≥ 10/20/40ms + exatamente 4 requisições), `TestCtxCancel` (`errors.Is`
+  + 1 requisição + duração). Bateria de 5 mutações, todas pegas.
+- Feito pelo mentor a pedido: chamadas do `run` no `main_test.go` + parâmetros em minúsculo
+  (mecânico; o arquivo tinha um localizar/substituir quebrado: `(slog.Newslog...)`, `run(;`), e a
+  medição de duração + `Close` no `TestCtxCancel` (o aluno insistiu).
+- 🧠 Três testes passaram pelo motivo errado, cada um pego só por mutação: (1) panic no handler
+  (índice fora da lista) vira **erro de rede** no client — o `net/http` recupera o panic e fecha a
+  conexão —, e o `wantErr` ficava satisfeito; (2) asserção de intervalos sobre uma lista com 1
+  instante não checa nada ("zero concorda com zero", 14/09); (3) client que ignora o `ctx` na espera
+  ainda devolve `DeadlineExceeded` — na requisição **seguinte** —, só que 1s depois; só o tempo
+  distingue.
+- O handler do `TestClientRetries` travou 4×; resolvido trocando o **dado** do caso (404 seguido de
+  200: client com bug tem sucesso) em vez da lógica do handler. Guarda da linha 55 ficou morta (🟢).
+- 🟢 Mencionados uma vez: `Retries` conta tentativas, não retries; `trieDuration`/"trie"; `t.Stop()`
+  depois do timer disparar é inócuo; prefixo `context canceled:` também em prazo vencido; erro do
+  `default` sem URL; `TestIncTime`/`initialTim`/`t1..t4`; `10` repetido no `TestIncTime`.
 
 ## Decisões tomadas
 
@@ -390,6 +419,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.2 (relatório de saúde: fonte com 0 itens em N runs seguidas) |
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
+| D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. | aberto — 🟡, dono: 1.4.3 (validação/valor padrão do config) |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -469,17 +499,27 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-05** — teste não cobre "todos os casos"; cobre as **bordas**. Com casos em 100%, 25% e
   vazio, trocar `>` por `≥` passa despercebido — só um caso em exatamente 50% distingue os dois.
   (Respondido pelo aluno na pergunta da 1.3.3.)
+- **2026-10-05** — `defer` só protege o que roda **depois** de ele ser registrado. Panic dentro do
+  `openRun` (antes dos dois `defer`) sobe sem `recover` e derruba o processo inteiro (exit 2); as
+  fontes seguintes nem são tentadas. (Respondido pelo aluno na pergunta da 1.3.4.)
+- **2026-10-06** — `select` é um ponto de espera com várias portas: bloqueia até um canal ficar pronto
+  e executa só aquele caso. `time.Sleep` é esperar olhando só o relógio, com o celular desligado.
+- **2026-10-06** — panic dentro de handler do `httptest` **não** derruba o teste: o `net/http`
+  recupera e fecha a conexão, e o client vê erro de rede. Um caso que espera erro passa calado.
+- **2026-10-06** — bom caso de teste faz o bug produzir um resultado **diferente** do correto, não
+  só "outro erro": 404 seguido de 200 faz um client que reintenta 404 ter **sucesso**.
+- **2026-10-06** — mesmo erro, caminho errado: ignorar o `ctx` na espera ainda termina em
+  `DeadlineExceeded` (na requisição seguinte). Quando o erro não distingue, o tempo distingue.
 
 ---
 
 ## Retomada rápida
 
-**Tarefa 1.3 fechada em 2026-10-05.** Próximo: **Tarefa 1.4 — rate limit e retry por fonte**
-(detalhar ao abrir; o timeout do client, hoje 30s fixo, migra para o `config.yaml` junto). Abertos
-relevantes: D37 (`items[1:]` do Remote OK em panic com `[]` — agora vira fonte com erro, não crash),
-D36 (fonte com 0 itens), D32
-(auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos).
+**Subtarefa 1.4.1 fechada em 2026-10-06.** Próximo: **1.4.2 — paginação do Himalayas** (cursor, com
+teto de páginas), depois 1.4.3 (rate limit + timeout/retry no `config.yaml`, junto com o D38).
+Abertos relevantes: D38 (`Retries = 0`), D37 (`items[1:]` do Remote OK com `[]`), D36 (fonte com 0
+itens), D32 (auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos).
 
-Estado verificado em 2026-10-05: `go build`/`go vet`/`gofmt` limpos, suíte verde
-(`TestFetch` 137/137/6, `TestPartialFailure`, `TestClientTimeout` 0.11s, `TestLimiarValidation` 3/3, `TestPanic`). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
-usa a porta `5433` (ver `.env.example`).
+Estado verificado em 2026-10-06: `go build`/`go vet`/`gofmt` limpos, suíte verde com `-race`
+(`main` 12s; `internal/client` 1.3s). Depois de mudar código, usar `docker compose up --build` (D25).
+A DSN do terminal usa a porta `5433` (ver `.env.example`).
