@@ -6,9 +6,9 @@
 
 ## Onde estou
 
-**1.3.1, 1.3.2 e 1.3.3 fechadas em 2026-10-05.** Orçamento por fonte (D7), falha total → `exit≠0`
-(D21) e limiar `failed/fetched` > 50% → a fonte falha, com as contagens em `runs.error` (D12, parte 1).
-Próximo: **1.3.4** — `finished_at` (D12, parte 2) e panic não grava sucesso (D11). Fecha a Tarefa 1.3.
+**Tarefa 1.3 fechada em 2026-10-05.** O coletor parou de mentir: orçamento por fonte (D7), falha
+total → `exit≠0` (D21), limiar `failed/fetched` > 50% e `finished_at` (D12), panic vira erro
+registrado (D11). Próximo: **Tarefa 1.4 — rate limit e retry por fonte**.
 
 Última sessão: **2026-10-05**.
 
@@ -304,6 +304,16 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   da goroutine do teste — no handler, `t.Errorf`.
 - 🟢 Mencionados uma vez: `limiar` e `TestLimiarValidation` em PT; subtestes `t1`/`t2`/`t3`;
   `itens` → `items`; `failedPct` guarda fração, não percentual.
+- ✅ **1.3.4 fechada (D12 parte 2 + D11). Tarefa 1.3 fechada.** Migration `006` (`finished_at
+  timestamptz`, nullable — run sem fim = processo morto no meio); `closeRun` grava `now()`. `defer`
+  com `recover` declarado depois do `defer` do `closeRun`: LIFO faz ele rodar antes e preencher o
+  `err` que o `closeRun` lê. `TestPanic`: tipo `dummy` satisfaz `Source` (interface no consumidor,
+  D28, pagando de volta) e entra em panic no `Fetch`; `processSource` chamado direto com conexão de
+  `newConn` (`t.Context()` para conectar, `context.Background()` no `t.Cleanup`, porque o contexto
+  do teste é cancelado antes da limpeza). Mutações: sem `recover` → binário cai; sem `finished_at`
+  → falha limpa; ordem dos `defer` invertida → falha, mas no `Scan` (`converting NULL to string`).
+- 🧠 Typos na `006` (`timestampz`, `Dwon`) foram **barulhentos**: goose e Postgres resolvem nome em
+  vez de filtrar — o lado bom da lição de 15/09. A `006` pôde ser editada porque o dev estava na 5.
 
 ## Decisões tomadas
 
@@ -353,15 +363,15 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D8  | `main.go:99`   | `content_hash` calculado sobre JSON compactado, mas `json.Compact` não canoniza ordem de chaves. Se a fonte reordenar chaves, todos os hashes mudam de uma vez e nascem "novas versões" falsas. | aberto — sem dono; sintoma seria inexplicável se ocorrer |
 | D9  | `main.go:86`   | Falha de `Unmarshal` é logada sem identificar o item — e não há como identificar, já que o parse é justamente o que falhou. Alarme sem endereço. | aberto — reavaliar em 0.2.3 junto com `runs.failed` |
 | D10 | dados          | Payloads do Remote OK chegam com entidades HTML cruas (`&amp;`) e mojibake (`Donâ\u0080\u0099t`, `å\u008C\u0096`). Um `slug` vazio. `salary_min: 0` significa "não informado", não zero. | aberto — dono: Etapa 2, na normalização de texto |
-| D11 | `main.go:54`   | `defer` roda durante panic e grava `error=NULL`: a run mente dizendo sucesso enquanto o processo morreu de SIGSEGV. Verificado em 2026-09-03. | aberto — dono: Etapa 1 |
-| D12 | `db/migrations/001_init.sql` | `runs` não tem `finished_at` — dá para saber quando começou e o que houve, não quanto durou. E não há limiar de `failed/fetched` que marque a run como fracasso. | 🔶 parcial — limiar pago em 2026-10-05 (1.3.3); `finished_at` fica para a 1.3.4 |
+| ~~D11~~ | `main.go:54`   | `defer` roda durante panic e grava `error=NULL`: a run mente dizendo sucesso enquanto o processo morreu de SIGSEGV. Verificado em 2026-09-03. | ✅ pago 2026-10-05 (1.3.4) — `defer` com `recover` declarado **depois** do `defer` do `closeRun` (LIFO: roda antes) converte o panic em `panic: ...` no resultado nomeado; a fonte vira falha e as outras seguem. `TestPanic` com `Source` falsa |
+| ~~D12~~ | `db/migrations/001_init.sql` | `runs` não tem `finished_at` — dá para saber quando começou e o que houve, não quanto durou. E não há limiar de `failed/fetched` que marque a run como fracasso. | ✅ pago 2026-10-05 — limiar na 1.3.3; `finished_at` (migration `006`, preenchido no `closeRun`) na 1.3.4 |
 | D13 | `main_test.go:143` | `err := db.Close()` é sobrescrito pela linha seguinte: se o `Close` falhar e o `Terminate` funcionar, `teardown()` devolve `nil`. O `return err` final é sempre `nil`. | ✅ pago 2026-09-09 — `errors.Join` acumulando os dois |
 | D14 | `main_test.go:90` | Loop `for rows.Next()` sem checar `rows.Err()` depois. | ✅ pago 2026-09-09 |
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
 | D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
 | D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | 🔶 parcial — caminho relativo desde 2026-09-09; a DSN literal repetida 3× continua aberta (ver D4) |
 | ~~D18~~ | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | ✅ pago 2026-09-30 (0.5.1) — `Debug` por item + `source collected` por fonte |
-| D19 | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | aberto — dono: Etapa 1, quando houver 3 fontes e frequência medida |
+| ~~D19~~ | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | ✅ pago 2026-10-03 junto com o D29 — sem transação no laço, erro de item é `Warn` + `failed++` + `continue`; um item inválido permanente não trava mais as runs seguintes (e, com o limiar da 1.3.3, 1 item em N não derruba a fonte). Constatado no fechamento da 1.3 |
 | ~~D20~~ | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | ✅ pago 2026-09-30 (0.5.1) — resultado nomeado; verificado com fonte `fake` (run 45) |
 | ~~D21~~ | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | ✅ pago 2026-10-05 (1.3.2) — `run` devolve `errors.Join` dos erros por fonte quando nenhuma teve sucesso (zero ligadas incluso); `TestClientTimeout` + `TestPartialFailure` |
 | D23 | `compose.yaml:15` | `container_name: postgres_db` fixa o nome fora do namespace do projeto: impede subir uma segunda instância (`docker compose -p outro up`) e, portanto, impede testar a corrida do healthcheck sem destruir o volume de dados real. | aberto — dono: Etapa 6, quando houver mais de um ambiente |
@@ -379,6 +389,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.2 (relatório de saúde: fonte com 0 itens em N runs seguidas) |
+| D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -455,15 +466,20 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-05** — dois prazos, vence o primeiro: o `Timeout` do client só enxerga o HTTP; o
   contexto da fonte corta tudo, banco incluso. Branch só protege o que foi commitado; `git restore`
   sem `--staged` descarta trabalho.
+- **2026-10-05** — teste não cobre "todos os casos"; cobre as **bordas**. Com casos em 100%, 25% e
+  vazio, trocar `>` por `≥` passa despercebido — só um caso em exatamente 50% distingue os dois.
+  (Respondido pelo aluno na pergunta da 1.3.3.)
 
 ---
 
 ## Retomada rápida
 
-**1.3.3 fechada em 2026-10-05.** Próximo: **1.3.4** — `finished_at` (resto do D12) e D11
-(`defer`/panic grava `error=NULL`); fecha a Tarefa 1.3. Fora da 1.3: D36 (fonte com 0 itens), D32
+**Tarefa 1.3 fechada em 2026-10-05.** Próximo: **Tarefa 1.4 — rate limit e retry por fonte**
+(detalhar ao abrir; o timeout do client, hoje 30s fixo, migra para o `config.yaml` junto). Abertos
+relevantes: D37 (`items[1:]` do Remote OK em panic com `[]` — agora vira fonte com erro, não crash),
+D36 (fonte com 0 itens), D32
 (auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos).
 
 Estado verificado em 2026-10-05: `go build`/`go vet`/`gofmt` limpos, suíte verde
-(`TestFetch` 137/137/6, `TestPartialFailure`, `TestClientTimeout` 0.11s, `TestLimiarValidation` 3/3). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
+(`TestFetch` 137/137/6, `TestPartialFailure`, `TestClientTimeout` 0.11s, `TestLimiarValidation` 3/3, `TestPanic`). Depois de mudar código, usar `docker compose up --build` (D25). A DSN do terminal
 usa a porta `5433` (ver `.env.example`).

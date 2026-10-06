@@ -223,7 +223,7 @@ interface está errada e volta para a 1.1.2.
       (`nextCursor`/`totalCount`) deixada de fora de propósito — só a 1ª página (20 vagas).
       Débito aberto: D33 (`Date`/`Location`/`Tags` mapeados mas não persistidos).
 
-### Tarefa 1.3 — Rodar sozinho sem mentir *(resumo)*
+### Tarefa 1.3 — Rodar sozinho sem mentir ✅ (fechada 2026-10-05)
 
 Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration de
 `finished_at` + limiar `failed/fetched` (D12), `defer`/panic (D11).
@@ -238,7 +238,9 @@ Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration d
 - [x] **1.3.3** Limiar `failed/fetched` (D12, parte 1). ✅ 2026-10-05 — fonte com mais de 50% dos
       itens falhando vira falha (contagens em `runs.error`); zero itens é sucesso.
       `TestLimiarValidation` table-driven (3 casos), validado por mutações com limiar 0 e 1.0.
-- [ ] **1.3.4** A run fecha com a verdade: `finished_at` (D12, parte 2) e panic não grava sucesso (D11).
+- [x] **1.3.4** A run fecha com a verdade: `finished_at` (D12, parte 2) e panic não grava sucesso (D11).
+      ✅ 2026-10-05 — migration `006` + `closeRun` grava `finished_at`; `recover` no `defer` (depois
+      do `defer` do `closeRun`). `TestPanic` com `Source` falsa; validado por 3 mutações.
 
 ### Tarefa 1.4 — Rate limit e retry por fonte *(resumo)*
 
@@ -246,7 +248,7 @@ Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration d
 
 ### Tarefa 1.6 — Agendamento e as 7 dias *(resumo)* — cron/ticker; roda uma semana sozinho.
 
-### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D19), README.
+### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
 
 ---
 
