@@ -1,7 +1,7 @@
 [project]
 name = "analyzer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Scores job-radar jobs against the CV (Python side of the project)."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
