@@ -23,7 +23,7 @@ func NewClient(retries int, timeout, initialTime time.Duration) *Client {
 }
 
 func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
-	trieDuration := c.InitialTime
+	wait := c.InitialTime
 	for i := range c.Retries {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
@@ -34,29 +34,30 @@ func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
 			return nil, fmt.Errorf("fetch: %w", err)
 		}
 
-		switch {
-		case (resp.StatusCode == http.StatusOK):
-			defer resp.Body.Close()
-			return io.ReadAll(resp.Body)
-		case (resp.StatusCode >= 500 && resp.StatusCode <= 599) || (resp.StatusCode == http.StatusTooManyRequests):
-			if (i + 1) == c.Retries {
-				resp.Body.Close()
-				break
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read body: %w", err)
+		}
+		resp.Body.Close()
+
+		switch code := resp.StatusCode; {
+		case (code == http.StatusOK):
+			return body, nil
+		case (code >= 500 && code <= 599) || (code == http.StatusTooManyRequests):
+			if i+1 == c.Retries {
+				continue
 			}
-			t := time.NewTimer(trieDuration)
+			t := time.NewTimer(wait)
 			select {
 			case <-t.C:
-				trieDuration *= 2
-				resp.Body.Close()
+				wait *= 2
 				t.Stop()
 				continue
 			case <-ctx.Done():
-				resp.Body.Close()
 				t.Stop()
 				return nil, fmt.Errorf("context canceled: %w", ctx.Err())
 			}
 		default:
-			resp.Body.Close()
 			return nil, fmt.Errorf("failed to do req: %d", resp.StatusCode)
 		}
 	}
