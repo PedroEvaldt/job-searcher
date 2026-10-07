@@ -18,7 +18,10 @@ type Job struct {
 // SourceConfig is one entry under "sources" in config.yaml: its name (which must match a
 // row in the sources table), whether it is turned on, and the URL to fetch from.
 type SourceConfig struct {
-	Name    string `yaml:"name"`
-	Enabled bool   `yaml:"enabled"`
-	URL     string `yaml:"url"`
+	Name        string        `yaml:"name"`
+	Enabled     bool          `yaml:"enabled"`
+	URL         string        `yaml:"url"`
+	Retries     int           `yaml:"retries"`
+	Timeout     time.Duration `yaml:"timeout"`
+	InitialWait time.Duration `yaml:"initial_wait"`
 }

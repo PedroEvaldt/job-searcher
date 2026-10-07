@@ -2,9 +2,18 @@ sources:
   - name: remoteok
     enabled: true
     url: https://remoteok.com/api
+    timeout: 30s
+    retries: 3
+    initial_wait: 5s
   - name: remotive
     enabled: true
     url: https://remotive.com/api/remote-jobs
+    timeout: 30s
+    retries: 3
+    initial_wait: 5s
   - name: himalayas
     enabled: true
     url: https://himalayas.app/jobs/api
+    timeout: 120s
+    retries: 3
+    initial_wait: 20s

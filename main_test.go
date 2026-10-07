@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +31,11 @@ const (
 	jCount      = 137
 	sourceCount = 3
 
-	// testInitialTime keeps retry waits short so a source answering 5xx does not slow the suite.
-	testInitialTime = 10 * time.Millisecond
+	// testInitialWait keeps retry waits short so a source answering 5xx does not slow the suite.
+	testInitialWait = 10 * time.Millisecond
+	// testTimeout is the per-source budget run gives each source in the tests.
+	testTimeout = 60 * time.Second
+	testRetries = 3
 )
 
 var (
@@ -132,16 +136,25 @@ func TestFetch(t *testing.T) {
 	cfg := Config{
 		SourcesConfig: []sources.SourceConfig{
 			{
-				Name:    "remoteok",
-				Enabled: true,
+				Name:        "remoteok",
+				Enabled:     true,
+				Timeout:     testTimeout,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
 			},
 			{
-				Name:    "remotive",
-				Enabled: true,
+				Name:        "remotive",
+				Enabled:     true,
+				Timeout:     testTimeout,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
 			},
 			{
-				Name:    "himalayas",
-				Enabled: true,
+				Name:        "himalayas",
+				Enabled:     true,
+				Timeout:     testTimeout,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
 			},
 		},
 	}
@@ -163,7 +176,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -187,7 +200,7 @@ func TestFetch(t *testing.T) {
 		return
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -257,14 +270,20 @@ func TestPartialFailure(t *testing.T) {
 	cfg := Config{
 		SourcesConfig: []sources.SourceConfig{
 			{
-				Name:    "remoteok",
-				Enabled: true,
-				URL:     badSrv.URL,
+				Name:        "remoteok",
+				Enabled:     true,
+				URL:         badSrv.URL,
+				Timeout:     testTimeout,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
 			},
 			{
-				Name:    "remotive",
-				Enabled: true,
-				URL:     goodSrv.URL,
+				Name:        "remotive",
+				Enabled:     true,
+				URL:         goodSrv.URL,
+				Timeout:     testTimeout,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
 			},
 		},
 	}
@@ -272,7 +291,7 @@ func TestPartialFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Fatalf("expected err nil; got %v", err)
 	}
@@ -319,6 +338,10 @@ func TestClientTimeout(t *testing.T) {
 				Name:    "remoteok",
 				Enabled: true,
 				URL:     srv.URL,
+				// 100ms budget against a 500ms handler: the source budget must fire first.
+				Timeout:     100 * time.Millisecond,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
 			},
 		},
 	}
@@ -329,8 +352,7 @@ func TestClientTimeout(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	// 100ms budget against a 500ms handler: the source budget must fire first.
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg, 100*time.Millisecond, testInitialTime, Retries)
+	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
 
 	switch {
 	case err == nil:
@@ -387,9 +409,12 @@ func TestLimiarValidation(t *testing.T) {
 			cfg := Config{
 				SourcesConfig: []sources.SourceConfig{
 					{
-						Name:    "remotive",
-						Enabled: true,
-						URL:     srv.URL,
+						Name:        "remotive",
+						Enabled:     true,
+						URL:         srv.URL,
+						Timeout:     testTimeout,
+						Retries:     testRetries,
+						InitialWait: testInitialWait,
 					},
 				},
 			}
@@ -399,7 +424,7 @@ func TestLimiarValidation(t *testing.T) {
 				t.Fatalf("failed to clean tables: %v", err)
 			}
 
-			err = run(slog.New(slog.DiscardHandler), dsn, &cfg, CollectionTimeOut, testInitialTime, Retries)
+			err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
 
 			var (
 				runsErrCount int
@@ -469,7 +494,7 @@ func TestPanic(t *testing.T) {
 		Enabled: true,
 		URL:     "https://test.url",
 	}
-	err = processSource(conn, slog.New(slog.DiscardHandler), dummy{}, cfg, CollectionTimeOut)
+	err = processSource(conn, slog.New(slog.DiscardHandler), dummy{}, cfg, testTimeout)
 	if err == nil {
 		t.Fatalf("expected err; got nil")
 	}
@@ -569,4 +594,93 @@ func setupPostgres() (*sql.DB, func() error, error) {
 		return nil, teardown, fmt.Errorf("failed to do goose up: %v", err)
 	}
 	return db, teardown, nil
+}
+
+func TestLoad(t *testing.T) {
+	// YAML forbids tabs for indentation, so the documents below start at column 0.
+	tests := []struct {
+		name        string
+		yaml        string
+		want        sources.SourceConfig
+		wantErr     bool
+		errContains []string
+	}{
+		{
+			name: "valid",
+			yaml: `
+sources:
+  - name: remotive
+    enabled: true
+    url: https://remotive.com/api/remote-jobs
+    timeout: 30s
+    retries: 3
+    initial_wait: 5s
+`,
+			want: sources.SourceConfig{
+				Name:        "remotive",
+				Enabled:     true,
+				URL:         "https://remotive.com/api/remote-jobs",
+				Timeout:     30 * time.Second,
+				Retries:     3,
+				InitialWait: 5 * time.Second,
+			},
+		},
+		{
+			name: "enabled source without retries",
+			yaml: `
+sources:
+  - name: remotive
+    enabled: true
+    url: https://remotive.com/api/remote-jobs
+    timeout: 30s
+    initial_wait: 5s
+`,
+			wantErr:     true,
+			errContains: []string{"remotive", "retries"},
+		},
+		{
+			name: "disabled source without retry fields",
+			yaml: `
+sources:
+  - name: remotive
+    enabled: false
+    url: https://remotive.com/api/remote-jobs
+`,
+			want: sources.SourceConfig{
+				Name: "remotive",
+				URL:  "https://remotive.com/api/remote-jobs",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tt.yaml), 0o644); err != nil {
+				t.Fatalf("failed to write config: %v", err)
+			}
+
+			cfg, err := Load(path)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected err; got nil")
+				}
+				for _, s := range tt.errContains {
+					if !strings.Contains(err.Error(), s) {
+						t.Errorf("expected err to contain %q; got %v", s, err)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected err nil; got %v", err)
+			}
+			if len(cfg.SourcesConfig) != 1 {
+				t.Fatalf("expected 1 source; got %d", len(cfg.SourcesConfig))
+			}
+			if got := cfg.SourcesConfig[0]; got != tt.want {
+				t.Errorf("expected %+v; got %+v", tt.want, got)
+			}
+		})
+	}
 }

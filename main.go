@@ -30,11 +30,8 @@ import (
 var migrationsFS embed.FS
 
 const (
-	CollectionTimeOut         = 60 * time.Second
-	InitialTime               = 5 * time.Second
-	Retries           int     = 3
-	limiar            float64 = 0.5
-	Ceil              int     = 5
+	limiar float64 = 0.5
+	Ceil   int     = 5
 )
 
 type Source interface {
@@ -85,6 +82,26 @@ func Load(path string) (*Config, error) {
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal: %w", err)
 	}
+	// Verify
+	for _, c := range cfg.SourcesConfig {
+		if c.Enabled {
+			if c.Name == "" {
+				return nil, fmt.Errorf("config name must not be empty")
+			}
+			if c.URL == "" {
+				return nil, fmt.Errorf("config %s URL must not be empty", c.Name)
+			}
+			if c.Timeout <= 0 {
+				return nil, fmt.Errorf("config %s timeout must not be 0", c.Name)
+			}
+			if c.Retries <= 0 {
+				return nil, fmt.Errorf("config %s retries must not be 0", c.Name)
+			}
+			if c.InitialWait <= 0 {
+				return nil, fmt.Errorf("config %s initial_wait must not be 0", c.Name)
+			}
+		}
+	}
 	return &cfg, nil
 }
 
@@ -109,7 +126,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(logger, dbURL, cfg, CollectionTimeOut, InitialTime, Retries); err != nil {
+	if err := run(logger, dbURL, cfg); err != nil {
 		logger.Error("failed to run", "error", err)
 		os.Exit(1)
 	}
@@ -167,7 +184,7 @@ func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 // run performs one full collection pass: open the Postgres connection, apply
 // migrations, then process each enabled source in turn. A failure in one source is
 // logged and skipped, not fatal to the others.
-func run(logger *slog.Logger, dbURL string, cfg *Config, timeout, initialTime time.Duration, retries int) (err error) {
+func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -200,7 +217,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config, timeout, initialTime ti
 	var success bool
 	for _, sourceConfig := range cfg.SourcesConfig {
 		if sourceConfig.Enabled {
-			c := client.NewClient(retries, 30*time.Second, initialTime)
+			c := client.NewClient(sourceConfig.Retries, 30*time.Second, sourceConfig.InitialWait)
 			source, err := For(sourceConfig.Name, c)
 			if err != nil {
 				runErrs = append(runErrs, err)
@@ -208,7 +225,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config, timeout, initialTime ti
 				continue
 			}
 
-			err = processSource(conn, logger, source, sourceConfig, timeout)
+			err = processSource(conn, logger, source, sourceConfig, sourceConfig.Timeout)
 			if err != nil {
 				runErrs = append(runErrs, fmt.Errorf("failed to process %s: %w", sourceConfig.Name, err))
 				logger.Warn("failed to process source", "source", sourceConfig.Name, "error", err)
