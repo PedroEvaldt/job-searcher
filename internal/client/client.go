@@ -12,19 +12,32 @@ type Client struct {
 	HTTP        *http.Client
 	Retries     int
 	InitialWait time.Duration
+	Interval    time.Duration
+	LastRequest time.Time
 }
 
-func NewClient(retries int, timeout, initialWait time.Duration) *Client {
+func NewClient(retries int, timeout, initialWait time.Duration, interval time.Duration) *Client {
 	return &Client{
 		HTTP:        &http.Client{Timeout: timeout},
 		Retries:     retries,
 		InitialWait: initialWait,
+		Interval:    interval,
 	}
 }
 
 func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
 	wait := c.InitialWait
 	for i := range c.Retries {
+		if !c.LastRequest.IsZero() && time.Until(c.LastRequest.Add(c.Interval)) > 0 {
+			t := time.NewTimer(time.Until(c.LastRequest.Add(c.Interval)))
+
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+				t.Stop()
+				return nil, fmt.Errorf("context canceled: %w", ctx.Err())
+			}
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build request: %w", err)
@@ -39,6 +52,7 @@ func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
 			return nil, fmt.Errorf("failed to read body: %w", err)
 		}
 		resp.Body.Close()
+		c.LastRequest = time.Now()
 
 		switch code := resp.StatusCode; {
 		case (code == http.StatusOK):

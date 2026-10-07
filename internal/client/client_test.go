@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// noInterval keeps the rate limit out of tests that measure retries, backoff and cancellation.
+const noInterval time.Duration = 0
+
 func TestGoodServer(t *testing.T) {
 	testBody := []byte("dummy")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +26,7 @@ func TestGoodServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(3, 60*time.Second, 10*time.Second)
+	c := NewClient(3, 60*time.Second, 10*time.Second, 1*time.Second)
 	body, err := c.HTTPGetBody(context.Background(), srv.URL)
 	if err != nil {
 		t.Fatalf("failed to get http body: %v", err)
@@ -61,7 +64,7 @@ func TestClientRetries(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			c := NewClient(tt.retries, 60*time.Second, tt.initialTim)
+			c := NewClient(tt.retries, 60*time.Second, tt.initialTim, noInterval)
 			_, err := c.HTTPGetBody(context.Background(), srv.URL)
 
 			if tt.wantErr {
@@ -93,7 +96,7 @@ func TestIncTime(t *testing.T) {
 		tim.mu.Unlock()
 	}))
 	defer srv.Close()
-	c := NewClient(4, 60*time.Second, 10*time.Millisecond)
+	c := NewClient(4, 60*time.Second, 10*time.Millisecond, noInterval)
 	_, err := c.HTTPGetBody(context.Background(), srv.URL)
 	if err == nil {
 		t.Fatalf("expected err; got nil")
@@ -125,7 +128,7 @@ func TestCtxCancel(t *testing.T) {
 	defer srv.Close()
 
 	wait := 1 * time.Second
-	c := NewClient(3, 120*time.Second, wait)
+	c := NewClient(3, 120*time.Second, wait, noInterval)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
@@ -146,5 +149,80 @@ func TestCtxCancel(t *testing.T) {
 	}
 	if i.Load() != 1 {
 		t.Errorf("expected 1 trie; got %d", i.Load())
+	}
+}
+
+func TestInterval(t *testing.T) {
+	type times struct {
+		mu    sync.Mutex
+		items []time.Time
+	}
+	tim := times{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		tim.mu.Lock()
+		tim.items = append(tim.items, time.Now())
+		tim.mu.Unlock()
+	}))
+	defer srv.Close()
+	c := NewClient(1, 60*time.Second, 100*time.Millisecond, 50*time.Millisecond)
+	_, err := c.HTTPGetBody(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("failed to get body: %v", err)
+	}
+	_, err = c.HTTPGetBody(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("failed to get body: %v", err)
+	}
+	_, err = c.HTTPGetBody(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("failed to get body: %v", err)
+	}
+	tim.mu.Lock()
+	defer tim.mu.Unlock()
+	if len(tim.items) != 3 {
+		t.Fatalf("expected 3 times; got %d", len(tim.items))
+	}
+	for i := range tim.items {
+		if i == 0 {
+			continue
+		}
+
+		expectedInterval := 50 * time.Millisecond
+		gotInterval := tim.items[i].Sub(tim.items[i-1])
+		if gotInterval < expectedInterval {
+			t.Errorf("interval %d: expected >= %v; got %v", i, expectedInterval, gotInterval)
+		}
+	}
+}
+
+func TestIntervalCtx(t *testing.T) {
+	var counter atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		counter.Add(1)
+	}))
+	defer srv.Close()
+	c := NewClient(1, 60*time.Second, 100*time.Millisecond, 1*time.Second)
+	_, err := c.HTTPGetBody(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("failed to get body: %v", err)
+	}
+
+	begining := time.Now()
+	testCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err = c.HTTPGetBody(testCtx, srv.URL)
+	if err == nil {
+		t.Fatalf("expected err; got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected deadline exceeded; got %v", err)
+	}
+	if time.Since(begining) > 500*time.Millisecond {
+		t.Errorf("expeceted duration less than 1 second; got %v", time.Since(begining))
+	}
+	if counter.Load() != 1 {
+		t.Errorf("expected 1 request; got %d", counter.Load())
 	}
 }

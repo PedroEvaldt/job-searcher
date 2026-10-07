@@ -24,4 +24,5 @@ type SourceConfig struct {
 	Retries     int           `yaml:"retries"`
 	Timeout     time.Duration `yaml:"timeout"`
 	InitialWait time.Duration `yaml:"initial_wait"`
+	Interval    time.Duration `yaml:"interval"`
 }

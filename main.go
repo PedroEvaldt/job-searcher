@@ -92,13 +92,16 @@ func Load(path string) (*Config, error) {
 				return nil, fmt.Errorf("config %s URL must not be empty", c.Name)
 			}
 			if c.Timeout <= 0 {
-				return nil, fmt.Errorf("config %s timeout must not be 0", c.Name)
+				return nil, fmt.Errorf("config %s timeout must be greater than 0", c.Name)
 			}
 			if c.Retries <= 0 {
-				return nil, fmt.Errorf("config %s retries must not be 0", c.Name)
+				return nil, fmt.Errorf("config %s retries must be greater than 0", c.Name)
 			}
 			if c.InitialWait <= 0 {
-				return nil, fmt.Errorf("config %s initial_wait must not be 0", c.Name)
+				return nil, fmt.Errorf("config %s initial_wait must be greater than 0", c.Name)
+			}
+			if c.Interval <= 0 {
+				return nil, fmt.Errorf("config %s interval must be greater than 0", c.Name)
 			}
 		}
 	}
@@ -217,7 +220,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	var success bool
 	for _, sourceConfig := range cfg.SourcesConfig {
 		if sourceConfig.Enabled {
-			c := client.NewClient(sourceConfig.Retries, 30*time.Second, sourceConfig.InitialWait)
+			c := client.NewClient(sourceConfig.Retries, 30*time.Second, sourceConfig.InitialWait, sourceConfig.Interval)
 			source, err := For(sourceConfig.Name, c)
 			if err != nil {
 				runErrs = append(runErrs, err)

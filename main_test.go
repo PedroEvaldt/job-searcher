@@ -615,6 +615,7 @@ sources:
     timeout: 30s
     retries: 3
     initial_wait: 5s
+    interval: 1s
 `,
 			want: sources.SourceConfig{
 				Name:        "remotive",
@@ -623,6 +624,7 @@ sources:
 				Timeout:     30 * time.Second,
 				Retries:     3,
 				InitialWait: 5 * time.Second,
+				Interval:    time.Second,
 			},
 		},
 		{
@@ -634,9 +636,24 @@ sources:
     url: https://remotive.com/api/remote-jobs
     timeout: 30s
     initial_wait: 5s
+    interval: 1s
 `,
 			wantErr:     true,
 			errContains: []string{"remotive", "retries"},
+		},
+		{
+			name: "enabled source without interval",
+			yaml: `
+sources:
+  - name: remotive
+    enabled: true
+    url: https://remotive.com/api/remote-jobs
+    timeout: 30s
+    retries: 3
+    initial_wait: 5s
+`,
+			wantErr:     true,
+			errContains: []string{"remotive", "interval"},
 		},
 		{
 			name: "disabled source without retry fields",
