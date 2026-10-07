@@ -11,19 +11,19 @@ import (
 type Client struct {
 	HTTP        *http.Client
 	Retries     int
-	InitialTime time.Duration
+	InitialWait time.Duration
 }
 
-func NewClient(retries int, timeout, initialTime time.Duration) *Client {
+func NewClient(retries int, timeout, initialWait time.Duration) *Client {
 	return &Client{
 		HTTP:        &http.Client{Timeout: timeout},
 		Retries:     retries,
-		InitialTime: initialTime,
+		InitialWait: initialWait,
 	}
 }
 
 func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
-	wait := c.InitialTime
+	wait := c.InitialWait
 	for i := range c.Retries {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {

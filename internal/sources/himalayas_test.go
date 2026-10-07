@@ -42,7 +42,7 @@ func TestCursor(t *testing.T) {
 	c := &client.Client{
 		HTTP:        &http.Client{Timeout: 1 * time.Second},
 		Retries:     3,
-		InitialTime: 100 * time.Millisecond,
+		InitialWait: 100 * time.Millisecond,
 	}
 	h := Himalayas{
 		C:    c,
@@ -100,7 +100,7 @@ func TestHighCeil(t *testing.T) {
 	c := &client.Client{
 		HTTP:        &http.Client{Timeout: 1 * time.Second},
 		Retries:     3,
-		InitialTime: 100 * time.Millisecond,
+		InitialWait: 100 * time.Millisecond,
 	}
 	h := Himalayas{
 		C:    c,
@@ -140,7 +140,7 @@ func TestMiddleErr(t *testing.T) {
 	c := &client.Client{
 		HTTP:        &http.Client{Timeout: 1 * time.Second},
 		Retries:     3,
-		InitialTime: 100 * time.Millisecond,
+		InitialWait: 100 * time.Millisecond,
 	}
 	h := Himalayas{
 		C:    c,
