@@ -34,6 +34,7 @@ const (
 	InitialTime               = 5 * time.Second
 	Retries           int     = 3
 	limiar            float64 = 0.5
+	Ceil              int     = 5
 )
 
 type Source interface {
@@ -62,7 +63,10 @@ func For(name string, c *client.Client) (Source, error) {
 	case "remotive":
 		return sources.Remotive{C: c}, nil
 	case "himalayas":
-		return sources.Himalayas{C: c}, nil
+		return sources.Himalayas{
+			C:    c,
+			Ceil: Ceil,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown source: %s", name)
 	}

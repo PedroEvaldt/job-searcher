@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -11,22 +12,42 @@ import (
 )
 
 type Himalayas struct {
-	C *client.Client
+	C    *client.Client
+	Ceil int
 }
 
-func (r Himalayas) Fetch(ctx context.Context, url string) ([]json.RawMessage, error) {
-	body, err := r.C.HTTPGetBody(ctx, url)
+func (r Himalayas) Fetch(ctx context.Context, rawURL string) ([]json.RawMessage, error) {
+	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse url: %w", err)
 	}
+	cursor := ""
+	items := make([]json.RawMessage, 0, (20 * r.Ceil))
+	for i := range r.Ceil {
+		if cursor != "" {
+			q := u.Query()
+			q.Set("cursor", cursor)
+			u.RawQuery = q.Encode()
 
-	var envelop struct {
-		Jobs []json.RawMessage `json:"jobs"`
+		}
+		body, err := r.C.HTTPGetBody(ctx, u.String())
+		if err != nil {
+			return nil, fmt.Errorf("fetch page %d: %w", (i + 1), err)
+		}
+		var envelop struct {
+			Jobs       []json.RawMessage `json:"jobs"`
+			NextCursor string            `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(body, &envelop); err != nil {
+			return nil, fmt.Errorf("failed to decode body to envelop in page %d: %w", (i + 1), err)
+		}
+		items = append(items, envelop.Jobs...)
+		if envelop.NextCursor == "" {
+			break
+		}
+		cursor = envelop.NextCursor
 	}
-	if err := json.Unmarshal(body, &envelop); err != nil {
-		return nil, fmt.Errorf("failed to decode body to envelop: %w", err)
-	}
-	return envelop.Jobs, nil
+	return items, nil
 }
 
 func (r Himalayas) ExternalID(item json.RawMessage) (string, error) {
