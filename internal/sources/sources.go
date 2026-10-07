@@ -4,6 +4,7 @@ import (
 	"time"
 )
 
+// Job is the common model every source maps its items to.
 type Job struct {
 	ExternalID  string
 	Title       string
@@ -15,14 +16,14 @@ type Job struct {
 	Date        time.Time
 }
 
-// SourceConfig is one entry under "sources" in config.yaml: its name (which must match a
-// row in the sources table), whether it is turned on, and the URL to fetch from.
+// SourceConfig is one entry under "sources" in config.yaml. Name must match a row in
+// the sources table.
 type SourceConfig struct {
 	Name        string        `yaml:"name"`
 	Enabled     bool          `yaml:"enabled"`
 	URL         string        `yaml:"url"`
-	Retries     int           `yaml:"retries"`
-	Timeout     time.Duration `yaml:"timeout"`
-	InitialWait time.Duration `yaml:"initial_wait"`
-	Interval    time.Duration `yaml:"interval"`
+	Retries     int           `yaml:"retries"`      // total attempts per request, the first one included
+	Timeout     time.Duration `yaml:"timeout"`      // budget for all of the source's work in one run
+	InitialWait time.Duration `yaml:"initial_wait"` // backoff before the first retry; doubles after each one
+	Interval    time.Duration `yaml:"interval"`     // minimum gap between requests (rate limit)
 }

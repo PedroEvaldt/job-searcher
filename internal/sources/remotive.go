@@ -10,6 +10,7 @@ import (
 	"github.com/PedroEvaldt/job-searcher/internal/client"
 )
 
+// Remotive reads the Remotive feed: one request, jobs inside a JSON envelope.
 type Remotive struct {
 	C *client.Client
 }
@@ -20,13 +21,13 @@ func (r Remotive) Fetch(ctx context.Context, url string) ([]json.RawMessage, err
 		return nil, err
 	}
 
-	var envelop struct {
+	var envelope struct {
 		Jobs []json.RawMessage `json:"jobs"`
 	}
-	if err := json.Unmarshal(body, &envelop); err != nil {
-		return nil, fmt.Errorf("failed to decode body to envelop: %w", err)
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, fmt.Errorf("remotive: decode body: %w", err)
 	}
-	return envelop.Jobs, nil
+	return envelope.Jobs, nil
 }
 
 func (r Remotive) ExternalID(item json.RawMessage) (string, error) {
@@ -34,9 +35,8 @@ func (r Remotive) ExternalID(item json.RawMessage) (string, error) {
 		ID int64 `json:"id"`
 	}
 	if err := json.Unmarshal(item, &v); err != nil {
-		return "", fmt.Errorf("remotive read id: %w", err)
+		return "", fmt.Errorf("remotive: read id: %w", err)
 	}
-
 	return strconv.FormatInt(v.ID, 10), nil
 }
 

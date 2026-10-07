@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +92,7 @@ func TestMigrations(t *testing.T) {
 	}
 	err := pingDB(db)
 	if err != nil {
-		t.Fatalf("database not ready for testing Migrations: %v", err)
+		t.Fatalf("database not ready for testing migrations: %v", err)
 	}
 	rows, err := db.Query(`
 	SELECT table_name 
@@ -104,7 +103,7 @@ func TestMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to query tables names: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	actual := map[string]bool{}
 	for rows.Next() {
@@ -165,7 +164,9 @@ func TestFetch(t *testing.T) {
 		}
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(body)
+			if _, err := w.Write(body); err != nil {
+				t.Errorf("failed to write body: %v", err)
+			}
 		}))
 		t.Cleanup(func() { srv.Close() })
 		cfg.SourcesConfig[i].URL = srv.URL
@@ -249,7 +250,7 @@ func TestFetch(t *testing.T) {
 func TestPartialFailure(t *testing.T) {
 	err := pingDB(db)
 	if err != nil {
-		t.Fatalf("database not ready for testing client timeout: %v", err)
+		t.Fatalf("database not ready for testing partial failure: %v", err)
 	}
 
 	body, err := os.ReadFile("testdata/remotive.json")
@@ -258,7 +259,9 @@ func TestPartialFailure(t *testing.T) {
 	}
 	goodSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		if _, err := w.Write(body); err != nil {
+			t.Errorf("failed to write body: %v", err)
+		}
 	}))
 	defer goodSrv.Close()
 
@@ -296,7 +299,7 @@ func TestPartialFailure(t *testing.T) {
 		t.Fatalf("expected err nil; got %v", err)
 	}
 
-	// 7. Leia de runs o total de linhas e quantas têm error preenchido. Afirme 2 e 1.
+	// One run per source, and only the failing source records an error.
 	var runsCount int
 	err = db.QueryRow("SELECT COUNT(*) FROM runs;").Scan(&runsCount)
 	if err != nil {
@@ -368,7 +371,7 @@ func TestClientTimeout(t *testing.T) {
 	)
 	err = db.QueryRow("SELECT fetched, error, COUNT(*) OVER() FROM runs;").Scan(&fetched, &runErr, &runsCount)
 	if err != nil {
-		t.Fatalf("failed to query jobs rows: %v", err)
+		t.Fatalf("failed to query runs: %v", err)
 	}
 
 	if runsCount != 1 {
@@ -384,7 +387,7 @@ func TestClientTimeout(t *testing.T) {
 	}
 }
 
-func TestLimiarValidation(t *testing.T) {
+func TestFailureThreshold(t *testing.T) {
 	tests := []struct {
 		name            string
 		body            string
@@ -392,9 +395,9 @@ func TestLimiarValidation(t *testing.T) {
 		fetchedExpected int
 		failedExpected  int
 	}{
-		{"t1", `{"jobs":[{"id":"x"},{"id":"y"}]}`, true, 2, 2},
-		{"t2", `{"jobs":[{"id":1},{"id":2},{"id":3},{"id":"x"}]}`, false, 4, 1},
-		{"t3", `{"jobs":[]}`, false, 0, 0},
+		{"all items invalid", `{"jobs":[{"id":"x"},{"id":"y"}]}`, true, 2, 2},
+		{"one in four invalid", `{"jobs":[{"id":1},{"id":2},{"id":3},{"id":"x"}]}`, false, 4, 1},
+		{"empty feed", `{"jobs":[]}`, false, 0, 0},
 	}
 
 	for _, tt := range tests {
@@ -442,10 +445,10 @@ func TestLimiarValidation(t *testing.T) {
 
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("expected err too many itens failed; got nil")
+					t.Fatalf("expected err too many items failed; got nil")
 				}
 				if !strings.Contains(err.Error(), "too many items failed") {
-					t.Errorf("expected err too many itens failed; got %v", err)
+					t.Errorf("expected err too many items failed; got %v", err)
 				}
 				if runsErrCount != 1 {
 					t.Errorf("expected 1 run with error; got %d", runsErrCount)
@@ -469,6 +472,7 @@ func TestLimiarValidation(t *testing.T) {
 	}
 }
 
+// dummy is a Source whose Fetch panics, to prove a panic is recorded as a failed run.
 type dummy struct{}
 
 func (d dummy) Fetch(context.Context, string) ([]json.RawMessage, error) {
@@ -499,7 +503,7 @@ func TestPanic(t *testing.T) {
 		t.Fatalf("expected err; got nil")
 	}
 	if !strings.Contains(err.Error(), "panic") {
-		t.Errorf("expected error to containg panic; got %v", err)
+		t.Errorf("expected error to contain panic; got %v", err)
 	}
 
 	var (
@@ -511,7 +515,7 @@ func TestPanic(t *testing.T) {
 		t.Fatalf("failed to query runs: %v", err)
 	}
 	if !strings.Contains(runsErr, "panic") {
-		t.Errorf("expected error to containg panic; got %v", err)
+		t.Errorf("expected runs.error to contain panic; got %v", runsErr)
 	}
 	if !finishedAtNotNull {
 		t.Errorf("expected finished_at NOT NULL true; got %v", finishedAtNotNull)
@@ -524,7 +528,7 @@ func newConn(t *testing.T) *pgx.Conn {
 	if err != nil {
 		t.Fatalf("failed opening connection: %v", err)
 	}
-	t.Cleanup(func() { conn.Close(context.Background()) })
+	t.Cleanup(func() { _ = conn.Close(context.Background()) })
 	return conn
 }
 
@@ -544,160 +548,54 @@ func setupPostgres() (*sql.DB, func() error, error) {
 		),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to start postgres: %v", err)
+		return nil, nil, fmt.Errorf("failed to start postgres: %w", err)
 	}
 	teardown := func() error {
 		err := testcontainers.TerminateContainer(ctr)
 		if err != nil {
-			return fmt.Errorf("failed to clean container: %v", err)
+			return fmt.Errorf("failed to clean container: %w", err)
 		}
 		return nil
 	}
 
 	dsn, err = ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to get dsn string: %v", err)
+		return nil, teardown, fmt.Errorf("failed to get dsn string: %w", err)
 	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to open database: %v", err)
+		return nil, teardown, fmt.Errorf("failed to open database: %w", err)
 	}
 	teardown = func() error {
 		var errs []error
 		errClose := db.Close()
 		if errClose != nil {
-			errs = append(errs, fmt.Errorf("failed to close db: %v", errClose))
+			errs = append(errs, fmt.Errorf("failed to close db: %w", errClose))
 		}
 		errTerminate := testcontainers.TerminateContainer(ctr)
 		if errTerminate != nil {
-			errs = append(errs, fmt.Errorf("failed to terminate container: %v", errTerminate))
+			errs = append(errs, fmt.Errorf("failed to terminate container: %w", errTerminate))
 		}
 		return errors.Join(errs...)
 	}
 
 	err = db.PingContext(ctx)
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to ping db: %v", err)
+		return nil, teardown, fmt.Errorf("failed to ping db: %w", err)
 	}
 
-	migrationsFS, err := fs.Sub(migrationsFS, "db/migrations")
+	sub, err := fs.Sub(migrationsFS, "db/migrations")
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to rmeove FS prefix: %v", err)
+		return nil, teardown, fmt.Errorf("failed to remove FS prefix: %w", err)
 	}
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationsFS)
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to get goose provider: %v", err)
+		return nil, teardown, fmt.Errorf("failed to get goose provider: %w", err)
 	}
 	_, err = provider.Up(ctx)
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to do goose up: %v", err)
+		return nil, teardown, fmt.Errorf("failed to do goose up: %w", err)
 	}
 	return db, teardown, nil
-}
-
-func TestLoad(t *testing.T) {
-	// YAML forbids tabs for indentation, so the documents below start at column 0.
-	tests := []struct {
-		name        string
-		yaml        string
-		want        sources.SourceConfig
-		wantErr     bool
-		errContains []string
-	}{
-		{
-			name: "valid",
-			yaml: `
-sources:
-  - name: remotive
-    enabled: true
-    url: https://remotive.com/api/remote-jobs
-    timeout: 30s
-    retries: 3
-    initial_wait: 5s
-    interval: 1s
-`,
-			want: sources.SourceConfig{
-				Name:        "remotive",
-				Enabled:     true,
-				URL:         "https://remotive.com/api/remote-jobs",
-				Timeout:     30 * time.Second,
-				Retries:     3,
-				InitialWait: 5 * time.Second,
-				Interval:    time.Second,
-			},
-		},
-		{
-			name: "enabled source without retries",
-			yaml: `
-sources:
-  - name: remotive
-    enabled: true
-    url: https://remotive.com/api/remote-jobs
-    timeout: 30s
-    initial_wait: 5s
-    interval: 1s
-`,
-			wantErr:     true,
-			errContains: []string{"remotive", "retries"},
-		},
-		{
-			name: "enabled source without interval",
-			yaml: `
-sources:
-  - name: remotive
-    enabled: true
-    url: https://remotive.com/api/remote-jobs
-    timeout: 30s
-    retries: 3
-    initial_wait: 5s
-`,
-			wantErr:     true,
-			errContains: []string{"remotive", "interval"},
-		},
-		{
-			name: "disabled source without retry fields",
-			yaml: `
-sources:
-  - name: remotive
-    enabled: false
-    url: https://remotive.com/api/remote-jobs
-`,
-			want: sources.SourceConfig{
-				Name: "remotive",
-				URL:  "https://remotive.com/api/remote-jobs",
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "config.yaml")
-			if err := os.WriteFile(path, []byte(tt.yaml), 0o644); err != nil {
-				t.Fatalf("failed to write config: %v", err)
-			}
-
-			cfg, err := Load(path)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected err; got nil")
-				}
-				for _, s := range tt.errContains {
-					if !strings.Contains(err.Error(), s) {
-						t.Errorf("expected err to contain %q; got %v", s, err)
-					}
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("expected err nil; got %v", err)
-			}
-			if len(cfg.SourcesConfig) != 1 {
-				t.Fatalf("expected 1 source; got %d", len(cfg.SourcesConfig))
-			}
-			if got := cfg.SourcesConfig[0]; got != tt.want {
-				t.Errorf("expected %+v; got %+v", tt.want, got)
-			}
-		})
-	}
 }

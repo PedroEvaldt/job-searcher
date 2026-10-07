@@ -9,6 +9,8 @@ import (
 	"github.com/PedroEvaldt/job-searcher/internal/client"
 )
 
+// RemoteOK reads the Remote OK feed: one request, a JSON array whose first element
+// is a legal notice, not a job.
 type RemoteOK struct {
 	C *client.Client
 }
@@ -20,7 +22,7 @@ func (r RemoteOK) Fetch(ctx context.Context, url string) ([]json.RawMessage, err
 	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(body, &items); err != nil {
-		return nil, fmt.Errorf("failed to decode request body: %w", err)
+		return nil, fmt.Errorf("remoteok: decode body: %w", err)
 	}
 	return items[1:], nil
 }
@@ -30,7 +32,7 @@ func (r RemoteOK) ExternalID(item json.RawMessage) (string, error) {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(item, &v); err != nil {
-		return "", fmt.Errorf("remoteok read id: %w", err)
+		return "", fmt.Errorf("remoteok: read id: %w", err)
 	}
 	return v.ID, nil
 }

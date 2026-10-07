@@ -11,9 +11,10 @@ import (
 	"github.com/PedroEvaldt/job-searcher/internal/client"
 )
 
+// Himalayas pages through the Himalayas feed by cursor, up to MaxPages pages.
 type Himalayas struct {
-	C    *client.Client
-	Ceil int
+	C        *client.Client
+	MaxPages int
 }
 
 func (r Himalayas) Fetch(ctx context.Context, rawURL string) ([]json.RawMessage, error) {
@@ -22,30 +23,30 @@ func (r Himalayas) Fetch(ctx context.Context, rawURL string) ([]json.RawMessage,
 		return nil, fmt.Errorf("failed to parse url: %w", err)
 	}
 	cursor := ""
-	items := make([]json.RawMessage, 0, (20 * r.Ceil))
-	for i := range r.Ceil {
+	var items []json.RawMessage
+	for i := range r.MaxPages {
 		if cursor != "" {
 			q := u.Query()
 			q.Set("cursor", cursor)
 			u.RawQuery = q.Encode()
-
 		}
 		body, err := r.C.HTTPGetBody(ctx, u.String())
 		if err != nil {
-			return nil, fmt.Errorf("fetch page %d: %w", (i + 1), err)
+			return nil, fmt.Errorf("fetch page %d: %w", i+1, err)
 		}
-		var envelop struct {
+		var envelope struct {
 			Jobs       []json.RawMessage `json:"jobs"`
 			NextCursor string            `json:"nextCursor"`
 		}
-		if err := json.Unmarshal(body, &envelop); err != nil {
-			return nil, fmt.Errorf("failed to decode body to envelop in page %d: %w", (i + 1), err)
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return nil, fmt.Errorf("decode page %d: %w", i+1, err)
 		}
-		items = append(items, envelop.Jobs...)
-		if envelop.NextCursor == "" {
+		// Append before checking the cursor: the last page carries jobs too.
+		items = append(items, envelope.Jobs...)
+		if envelope.NextCursor == "" {
 			break
 		}
-		cursor = envelop.NextCursor
+		cursor = envelope.NextCursor
 	}
 	return items, nil
 }
@@ -54,9 +55,8 @@ func (r Himalayas) ExternalID(item json.RawMessage) (string, error) {
 	var v struct {
 		GUID string `json:"guid"`
 	}
-
 	if err := json.Unmarshal(item, &v); err != nil {
-		return "", fmt.Errorf("failed to read id: %w", err)
+		return "", fmt.Errorf("himalayas: read id: %w", err)
 	}
 	return v.GUID, nil
 }
