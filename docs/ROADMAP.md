@@ -286,9 +286,14 @@ de N requisições à mesma fonte; rate limit vem depois dela.
 **Dividida em 2026-10-07:** a antiga 1.4.3 (rate limit + config) passava de 90 min. Config primeiro,
 para o intervalo do rate limit já nascer no `config.yaml`.
 
-### Tarefa 1.5 — Deduplicação *(resumo)* — mesma vaga aparecendo em duas fontes.
+**Reordenada em 2026-10-07: 1.6 → 1.5 → 1.7.** Medido em 2026-10-07: **0** vagas repetidas entre
+fontes em 607 (empresa + título, sem caixa nem pontuação); as 6 empresas presentes em 2+ fontes têm
+vagas diferentes. Dedupe agora seria abstração antes da dor. A 1.6 vai primeiro porque os 7 dias são
+de calendário — o relógio corre enquanto o resto é feito — e a semana de dados alimenta a 1.5.
 
-### Tarefa 1.6 — Agendamento e as 7 dias *(resumo)* — cron/ticker; roda uma semana sozinho.
+### 📍 Tarefa 1.6 — Agendamento e os 7 dias *(detalhar ao abrir)* — coletor roda sozinho de tempos em tempos (no Raspberry Pi do aluno, arm64) + relatório de saúde por fonte (D36); uma semana sem intervenção.
+
+### Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
 
 ### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
 

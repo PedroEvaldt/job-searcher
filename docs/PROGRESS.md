@@ -6,9 +6,9 @@
 
 ## Onde estou
 
-**Tarefa 1.4 fechada em 2026-10-07.** O coletor é educado com as fontes: retry com backoff em
-429/5xx, paginação do Himalayas com teto, orçamento/tentativas/espera/intervalo por fonte no
-`config.yaml`, rate limit por intervalo. Próximo: **Tarefa 1.5 — deduplicação** (detalhar ao abrir).
+**Tarefa 1.4 fechada em 2026-10-07**, seguida de uma limpeza geral do código (mentor, a pedido).
+Fase 1 reordenada para **1.6 → 1.5 → 1.7** (0 duplicatas medidas). Próximo: **Tarefa 1.6 —
+agendamento e os 7 dias**, rodando no Raspberry Pi do aluno (detalhar ao abrir).
 
 Última sessão: **2026-10-07**.
 
@@ -417,6 +417,44 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - 🟡 **D18 reaberto (resto):** `insertRawJobs` (`main.go:439`) ainda loga `Info` por vaga nova —
   ~200 linhas por run; vem do primeiro commit e escapou do 0.5.1.
 
+### 2026-10-07 — Limpeza geral (mentor, a pedido do aluno) e reordenação da Fase 1
+
+- **Medição para a 1.5:** 0 duplicatas entre fontes em 607 vagas; 6 empresas em 2+ fontes, todas com
+  vagas diferentes. `posted_at` vazio em todas (D33). Fase 1 reordenada: 1.6 → 1.5 → 1.7.
+- **Organização:** `main.go` (467 linhas) dividido **dentro do pacote `main`**, sem mudar lógica:
+  `main.go` (orquestração: `run`, `processSource`, `collectAndStoreData`, `newSource`),
+  `config.go` (`Config`, `loadConfig`), `migrate.go` (`embed` + goose), `store.go` (SQL e
+  `contentHash`); `TestLoad` foi para `config_test.go`. Pacotes próprios (`internal/store`,
+  `internal/config`, SPEC §7) ficam para quando um segundo binário (`radar`, 3b) precisar deles.
+- **Nomes:** `limiar` → `failureThreshold`; `Ceil` → `himalayasMaxPages` / campo `MaxPages`;
+  `For` → `newSource`; `Load` → `loadConfig` (exportar em `package main` não serve a ninguém);
+  `compactJSON` → `contentHash` (devolve um hash); `insertRawJobs` → `insertRawJob`; `rawjobID`;
+  `LastRequest` → `lastRequest` (estado interno); variável `sql` → `query` (sombreava o pacote
+  `database/sql`, mesma classe do `url` da 1.4.2); `migrationsFS` local → `sub`; `envelop` →
+  `envelope`; 30s mágico → `httpTimeout`.
+- **Client:** helper `sleep(ctx, d)` usado pelo backoff e pelo rate limit (fim do `select`
+  duplicado e do `time.Until` calculado 2×); body fechado também quando a leitura falha (antes
+  vazava); erros `waiting to retry` / `waiting for rate limit` (antes `context canceled:` mesmo em
+  prazo vencido), `unexpected status N from URL`, `giving up after N attempts: last status S`
+  (fecha a parte "último status" do D38).
+- **Comentários desatualizados corrigidos:** `collectAndStoreData` ainda falava em transação
+  (removida no D29); `insertRawJobs` falava em "cada item" e "failed count".
+- **Testes:** nomes descritivos (`TestFailureThreshold`, `TestBackoffGrows`, `TestBackoffHonorsCtx`,
+  `TestIntervalHonorsCtx`, `TestPageCap`, `TestPageFailure`, subtestes legíveis); helpers
+  `arrivals`/`assertGaps` (client) e `pagedServer` (Himalayas, antes copiado 3×); handler do
+  `TestClientRetries` conta antes de indexar (a guarda morta saiu); bug no `TestPanic` (segunda
+  mensagem imprimia `err` em vez de `runsErr`); `%v` → `%w` no `setupPostgres`; erros de `Write`/
+  `Close` tratados; typos (`succeded`, `containg`, `itens`, `rmeove`, `trie`, `fetchs`…); comentário
+  em PT com espaço não separável no `TestPartialFailure`.
+- **Analyzer:** mensagens e nomes em inglês; `description` real no `pyproject.toml`. `ruff`, `ruff
+  format`, `mypy --strict` limpos. O `EXE002` local é artefato do disco `fuseblk` (todo arquivo
+  aparece executável; no git é `100644`, `core.fileMode=false`).
+- **Verificação:** `gofmt`/`go vet` limpos; `golangci-lint` de 8 avisos → **0**; suíte verde com
+  `-race`; 15 mutações (as das subtarefas 1.4.x + config) todas pegas. A mutação "uma tentativa a
+  mais" agora é pega por **dois** testes (antes só pelo de backoff). Não coberto (nem antes): esperar
+  o backoff depois da **última** tentativa.
+- 🟡 D18 pago de vez (`new raw_job inserted` → `Debug`).
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -472,7 +510,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
 | D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
 | D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | 🔶 parcial — caminho relativo desde 2026-09-09; a DSN literal repetida 3× continua aberta (ver D4) |
-| D18 | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | 🔶 parcial — `Debug` por item + `source collected` por fonte em 2026-09-30 (0.5.1); **reaberto 2026-10-07:** `insertRawJobs` (`main.go:439`, `new raw_job inserted`) ainda é `Info` por vaga — dono: 1.7 (fechamento da fase) |
+| ~~D18~~ | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | ✅ pago 2026-10-07 — `Debug` por item + `source collected` por fonte em 2026-09-30 (0.5.1); o resto (`new raw_job inserted` em `insertRawJob`, reaberto no mesmo dia) virou `Debug` na limpeza geral |
 | ~~D19~~ | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | ✅ pago 2026-10-03 junto com o D29 — sem transação no laço, erro de item é `Warn` + `failed++` + `continue`; um item inválido permanente não trava mais as runs seguintes (e, com o limiar da 1.3.3, 1 item em N não derruba a fonte). Constatado no fechamento da 1.3 |
 | ~~D20~~ | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | ✅ pago 2026-09-30 (0.5.1) — resultado nomeado; verificado com fonte `fake` (run 45) |
 | ~~D21~~ | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | ✅ pago 2026-10-05 (1.3.2) — `run` devolve `errors.Join` dos erros por fonte quando nenhuma teve sucesso (zero ligadas incluso); `TestClientTimeout` + `TestPartialFailure` |
@@ -492,7 +530,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.2 (relatório de saúde: fonte com 0 itens em N runs seguidas) |
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
-| D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`. Abertos: o erro final sem o último status; o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
+| D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -600,12 +638,14 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-**Tarefa 1.4 fechada em 2026-10-07.** Próximo: **Tarefa 1.5 — deduplicação** (mesma vaga em duas
-fontes; detalhar cartão ao abrir). No `config.yaml`, `timeout` é o **orçamento da fonte**; timeout HTTP
-é 30s fixo no `run`; `interval` é o rate limit. Abertos relevantes: D38 (parcial), D37 (`items[1:]` do
-Remote OK com `[]`), D36 (fonte com 0 itens), D32 (auto-cura/reprocessamento), D33
-(`Date`/`Location`/`Tags` não persistidos), D18 (resto: `Info` por vaga em `insertRawJobs`).
+**Tarefa 1.4 fechada e limpeza geral feitas em 2026-10-07.** Ordem da Fase 1: **1.6 → 1.5 → 1.7**.
+Próximo: **Tarefa 1.6 — agendamento e os 7 dias**, no Raspberry Pi do aluno (arm64: build da imagem
+no próprio Pi ou multi-arch; detalhar ao abrir). Código do `main` agora em `main.go` / `config.go` /
+`migrate.go` / `store.go`. No `config.yaml`, `timeout` é o **orçamento da fonte**; timeout HTTP é
+`httpTimeout` (30s); `interval` é o rate limit. Abertos relevantes: D38 (parcial: teto no código,
+`Config` sem `Load` nos testes), D37 (`items[1:]` do Remote OK com `[]`), D36 (fonte com 0 itens —
+dono 1.6), D32 (auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos), D17.
 
-Estado verificado em 2026-10-07: `go build`/`go vet`/`gofmt` limpos, suíte verde com `-race`
-(`main` ~12s; `internal/client` 1.5s; `internal/sources` 1.0s). Run #55 ao vivo: Himalayas 6.3s. Depois de mudar código, usar `docker compose up --build` (D25).
+Estado verificado em 2026-10-07: `go build`/`go vet`/`gofmt`/`golangci-lint` limpos, suíte verde com
+`-race` (`main` ~13s; `internal/client` 1.5s; `internal/sources` 1.0s). Run #55 ao vivo: Himalayas 6.3s. Depois de mudar código, usar `docker compose up --build` (D25).
 A DSN do terminal usa a porta `5433` (ver `.env.example`).
