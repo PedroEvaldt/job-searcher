@@ -242,7 +242,7 @@ Timeout de HTTP + `context` (D7), falha total vira `exit≠0` (D21), migration d
       ✅ 2026-10-05 — migration `006` + `closeRun` grava `finished_at`; `recover` no `defer` (depois
       do `defer` do `closeRun`). `TestPanic` com `Source` falsa; validado por 3 mutações.
 
-### 📍 Tarefa 1.4 — Educado com as fontes
+### Tarefa 1.4 — Educado com as fontes ✅ (fechada 2026-10-07)
 
 **Objetivo:** falha transitória da fonte (429/5xx) é tentada de novo com espera crescente; o
 Himalayas traz todas as páginas; nenhuma fonte recebe requisições mais rápido que o limite dela.
@@ -276,8 +276,12 @@ de N requisições à mesma fonte; rate limit vem depois dela.
       **orçamento da fonte** (antigo `CollectionTimeOut`); timeout HTTP segue 30s fixo; teto do
       Himalayas segue no código. `Load` valida fontes ligadas (`<= 0` → erro com fonte e campo);
       `TestLoad` com 3 casos e 3 mutações pegas.
-- [ ] **1.4.4** Rate limit por fonte (intervalo mínimo entre requisições, no `config.yaml`); teste
-      mede o intervalo.
+- [x] **1.4.4** Rate limit por fonte (intervalo mínimo entre requisições, no `config.yaml`); teste
+      mede o intervalo. ✅ 2026-10-07 — no client (um por fonte): guarda o fim da última requisição
+      e, **dentro** do laço de tentativas, espera só o que falta (`time.Until`), com `select` e
+      `ctx.Done()`. `interval` no `config.yaml` (1s), validado no `Load`. `TestInterval` (3 chamadas,
+      intervalos ≥ 50ms) e `TestIntervalCtx` (corte pelo `ctx` em < 500ms); 4 mutações pegas.
+      Run #55: Himalayas 6.3s (antes 2.5s).
 
 **Dividida em 2026-10-07:** a antiga 1.4.3 (rate limit + config) passava de 90 min. Config primeiro,
 para o intervalo do rate limit já nascer no `config.yaml`.

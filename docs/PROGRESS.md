@@ -6,9 +6,9 @@
 
 ## Onde estou
 
-**Subtarefa 1.4.3 fechada em 2026-10-07.** Orçamento, tentativas e espera inicial vêm do
-`config.yaml` por fonte, e o `Load` recusa zero/negativo em fonte ligada. Próximo: **1.4.4 — rate
-limit por fonte**.
+**Tarefa 1.4 fechada em 2026-10-07.** O coletor é educado com as fontes: retry com backoff em
+429/5xx, paginação do Himalayas com teto, orçamento/tentativas/espera/intervalo por fonte no
+`config.yaml`, rate limit por intervalo. Próximo: **Tarefa 1.5 — deduplicação** (detalhar ao abrir).
 
 Última sessão: **2026-10-07**.
 
@@ -390,6 +390,33 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - 🟢 Mencionados uma vez: mensagem "must not be 0" para uma checagem `<= 0`; `timeout` como nome de
   orçamento (sugerido `budget`).
 
+### 2026-10-07 — Subtarefa 1.4.4 (rate limit) · Tarefa 1.4 fechada
+
+- ✅ **1.4.4 fechada.** `Client` guarda `LastRequest` (fim da última requisição, depois de fechar o
+  body); no topo de **cada volta** do laço de tentativas espera só o que falta (`time.Until(last +
+  interval) > 0`), com `select` timer × `ctx.Done()`. Um client por fonte → limite por fonte. Depois
+  de um backoff maior que o intervalo, a conta dá negativa e o rate limit não soma espera.
+  `interval` (1s) no `config.yaml` + validação no `Load`. `TestInterval` (servidor 200, 3 chamadas,
+  `len == 3`, intervalos ≥ 50ms) e `TestIntervalCtx` (intervalo 1s, 2ª chamada com `ctx` 50ms →
+  `DeadlineExceeded`, < 500ms, 1 requisição). Mutações: sem espera / sinal invertido / sem registrar
+  o fim → `TestInterval`; espera ignorando o `ctx` → `TestIntervalCtx`. Run #55: Himalayas 6.3s.
+- O aluno questionou a espera dentro do `for` ("isso é o retry, não uma nova requisição"): a primeira
+  volta **é** a requisição nova; o estado vive no `Client` e atravessa chamadas. Fora do `for`, retry
+  com `initial_wait` < intervalo furaria o limite. Ele moveu para dentro.
+- Pelo caminho: `LastRequest` nunca preenchido + sinal invertido (`Now().Sub(last+interval)`,
+  negativo → timer dispara na hora) — dois bugs, um escondendo o outro; depois o `if` corrigido com
+  `time.Until` mas o timer ainda com o sinal antigo; `defer t.Stop()` dentro do `for`. Limite do
+  `TestIntervalCtx` no intervalo inteiro pegava a mutação por **0.9ms** (1.0009s × 1s) — subiu para
+  metade do intervalo.
+- 🧠 Duração entre dois instantes: "o que falta" é `alvo − agora` (`time.Until`), não `agora − alvo`.
+- Feito pelo mentor a pedido: 4º argumento nas chamadas de `NewClient` dos testes (`noInterval`),
+  `interval` no `TestLoad` (+ caso "sem interval") e a execução ao vivo (run #53–#55).
+- 🟢 Mencionados uma vez: `time.Until` calculado 2× (variável); `select` com timer duplicado (helper
+  "espera respeitando ctx"); `50ms` repetido no `TestInterval`; chamadas repetidas (`for range 3`);
+  `LastRequest` exportado; mensagem "less than 1 second" com limite de 500ms; `begining`/`expeceted`.
+- 🟡 **D18 reaberto (resto):** `insertRawJobs` (`main.go:439`) ainda loga `Info` por vaga nova —
+  ~200 linhas por run; vem do primeiro commit e escapou do 0.5.1.
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -445,7 +472,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
 | D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
 | D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | 🔶 parcial — caminho relativo desde 2026-09-09; a DSN literal repetida 3× continua aberta (ver D4) |
-| ~~D18~~ | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | ✅ pago 2026-09-30 (0.5.1) — `Debug` por item + `source collected` por fonte |
+| D18 | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | 🔶 parcial — `Debug` por item + `source collected` por fonte em 2026-09-30 (0.5.1); **reaberto 2026-10-07:** `insertRawJobs` (`main.go:439`, `new raw_job inserted`) ainda é `Info` por vaga — dono: 1.7 (fechamento da fase) |
 | ~~D19~~ | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | ✅ pago 2026-10-03 junto com o D29 — sem transação no laço, erro de item é `Warn` + `failed++` + `continue`; um item inválido permanente não trava mais as runs seguintes (e, com o limiar da 1.3.3, 1 item em N não derruba a fonte). Constatado no fechamento da 1.3 |
 | ~~D20~~ | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | ✅ pago 2026-09-30 (0.5.1) — resultado nomeado; verificado com fonte `fake` (run 45) |
 | ~~D21~~ | `main.go:99` | Se **todas** as fontes falharem, `run()` devolve `nil` e o processo sai com 0. Segundo caminho de falha silenciosa, irmão do D12 (limiar de `failed/fetched`). **Visto em 2026-09-30:** clone sem schema → `app` sai 0 → `analyzer` sobe e quebra. | ✅ pago 2026-10-05 (1.3.2) — `run` devolve `errors.Join` dos erros por fonte quando nenhuma teve sucesso (zero ligadas incluso); `TestClientTimeout` + `TestPartialFailure` |
@@ -565,17 +592,20 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   Regra: teto × tempo por página cabe no orçamento, **com folga** (retry também gasta orçamento).
   (Pergunta da 1.4.2 respondida pelo mentor; o aluno acertou a conta de conferência: 1 req/2s em 60s
   → 30 páginas.)
+- **2026-10-07** — retry também gasta orçamento: Himalayas com 120s, espera inicial 20s e 3
+  tentativas → pior caso ≈ 61s por página (20s + 40s + 3 requisições); cabe 1 página, o teto 5 não.
+  (Pergunta da 1.4.3 pulada pelo aluno; respondida pelo mentor.)
 
 ---
 
 ## Retomada rápida
 
-**Subtarefa 1.4.3 fechada em 2026-10-07.** Próximo: **1.4.4 — rate limit por fonte** (intervalo
-mínimo entre requisições no `config.yaml`; teste mede o intervalo). No `config.yaml`, `timeout` é o
-**orçamento da fonte**; timeout HTTP é 30s fixo no `run`. Abertos relevantes: D38 (parcial), D37
-(`items[1:]` do Remote OK com `[]`), D36 (fonte com 0 itens), D32 (auto-cura/reprocessamento), D33
-(`Date`/`Location`/`Tags` não persistidos).
+**Tarefa 1.4 fechada em 2026-10-07.** Próximo: **Tarefa 1.5 — deduplicação** (mesma vaga em duas
+fontes; detalhar cartão ao abrir). No `config.yaml`, `timeout` é o **orçamento da fonte**; timeout HTTP
+é 30s fixo no `run`; `interval` é o rate limit. Abertos relevantes: D38 (parcial), D37 (`items[1:]` do
+Remote OK com `[]`), D36 (fonte com 0 itens), D32 (auto-cura/reprocessamento), D33
+(`Date`/`Location`/`Tags` não persistidos), D18 (resto: `Info` por vaga em `insertRawJobs`).
 
 Estado verificado em 2026-10-07: `go build`/`go vet`/`gofmt` limpos, suíte verde com `-race`
-(`main` ~14s com `TestLoad`; `internal/client` 1.3s; `internal/sources` 1.0s). Depois de mudar código, usar `docker compose up --build` (D25).
+(`main` ~12s; `internal/client` 1.5s; `internal/sources` 1.0s). Run #55 ao vivo: Himalayas 6.3s. Depois de mudar código, usar `docker compose up --build` (D25).
 A DSN do terminal usa a porta `5433` (ver `.env.example`).
