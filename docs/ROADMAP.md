@@ -267,8 +267,20 @@ de N requisições à mesma fonte; rate limit vem depois dela.
       última tentativa. `run` recebe espera/tentativas (testes do `main` usam 10ms). 4 testes em
       `internal/client`; 5 mutações (sem retry, sem dobrar, tentativa a mais, retry em 404, espera
       ignorando o `ctx`) — todas pegas.
-- [ ] **1.4.2** Paginação do Himalayas (cursor), com teto de páginas.
-- [ ] **1.4.3** Rate limit por fonte + timeout/retry configuráveis no `config.yaml`.
+- [x] **1.4.2** Paginação do Himalayas (cursor), com teto de páginas. ✅ 2026-10-07 — `Fetch` em laço
+      sobre `range` do teto, cursor via `net/url`, para no cursor vazio; falha em qualquer página →
+      erro com o número da página e nenhum item. Teto 5 no `main`. `TestCursor`/`TestHighCeil`/
+      `TestMiddleErr` com servidor-roteiro por cursor; 3 mutações pegas. Run #52: `fetched=100`, 2.5s.
+- [x] **1.4.3** Timeout, tentativas e espera inicial por fonte no `config.yaml`, com o `Load`
+      recusando valor ausente/zero em fonte ligada (D38). ✅ 2026-10-07 — `timeout` virou o
+      **orçamento da fonte** (antigo `CollectionTimeOut`); timeout HTTP segue 30s fixo; teto do
+      Himalayas segue no código. `Load` valida fontes ligadas (`<= 0` → erro com fonte e campo);
+      `TestLoad` com 3 casos e 3 mutações pegas.
+- [ ] **1.4.4** Rate limit por fonte (intervalo mínimo entre requisições, no `config.yaml`); teste
+      mede o intervalo.
+
+**Dividida em 2026-10-07:** a antiga 1.4.3 (rate limit + config) passava de 90 min. Config primeiro,
+para o intervalo do rate limit já nascer no `config.yaml`.
 
 ### Tarefa 1.5 — Deduplicação *(resumo)* — mesma vaga aparecendo em duas fontes.
 

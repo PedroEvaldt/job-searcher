@@ -6,11 +6,11 @@
 
 ## Onde estou
 
-**Subtarefa 1.4.1 fechada em 2026-10-06.** O client tenta de novo em 429/5xx com espera dobrando,
-para na hora quando o `ctx` vence e não espera depois da última tentativa. Próximo: **1.4.2 —
-paginação do Himalayas**.
+**Subtarefa 1.4.3 fechada em 2026-10-07.** Orçamento, tentativas e espera inicial vêm do
+`config.yaml` por fonte, e o `Load` recusa zero/negativo em fonte ligada. Próximo: **1.4.4 — rate
+limit por fonte**.
 
-Última sessão: **2026-10-06**.
+Última sessão: **2026-10-07**.
 
 ---
 
@@ -344,6 +344,52 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   depois do timer disparar é inócuo; prefixo `context canceled:` também em prazo vencido; erro do
   `default` sem URL; `TestIncTime`/`initialTim`/`t1..t4`; `10` repetido no `TestIncTime`.
 
+### 2026-10-07 — Subtarefa 1.4.2 (paginação do Himalayas)
+
+- ✅ **1.4.2 fechada.** `Fetch` em laço sobre `range` do teto (`Ceil`, campo do `Himalayas`, 5 no
+  `For`); próxima URL com `url.Parse` + `Query().Set("cursor")` + `Encode`; para quando o
+  `nextCursor` vem vazio — `break` **depois** do `append`, para não perder a última página. Falha em
+  qualquer página → `fetch page N: %w` (e `... in page N` na decodificação), nenhum item devolvido.
+  Testes em `internal/sources` com servidor-roteiro (cursor recebido → resposta em raw string):
+  `TestCursor` (3 páginas, 6 itens, 3 requisições), `TestHighCeil` (sempre há cursor, teto 4),
+  `TestMiddleErr` (página 2 com 404 → erro com "page 2", 0 itens, 2 requisições — prova também que
+  404 não reintenta). Mutações sem teto / sem página no erro / sem parar no cursor vazio: todas pegas.
+  `go run .` → run #52: Himalayas `fetched=100`, `failed=0`, 2.5s. `TestFetch` de 17s (teto 500) para 0.5s.
+- Refactor do aluno no client (`709f5b7`): body lido e fechado uma vez antes do `switch`; `continue`
+  na última tentativa no lugar do `break` — aplicou a resposta da pergunta da 1.4.1.
+- 🧠 O cursor é **opaco**: o client devolve sem interpretar, então o servidor falso usa `"p2"`/`"p3"`.
+  O aluno começou simulando um cursor de verdade (base64 de offset) — desnecessário.
+- 🧠 O primeiro `TestCursor` pegou um bug real: 200 itens em vez de 6 (sem parada no cursor vazio,
+  a URL mantinha o último cursor e repetia a página 3 até o teto de 100).
+- Feito pelo mentor a pedido: renomear `url`/`URL` → `u`/`rawURL` (o pacote `net/url` ficava
+  sombreado) e a higiene dos handlers (`t.Errorf`, `default` com status 400, `defer srv.Close()`).
+- 🟢 Mencionados uma vez: `Ceil` (nome de função matemática; `MaxPages` dizia melhor), `make` com
+  capacidade `20 * Ceil`, "fetchs", servidores de teste quase idênticos copiados 3×.
+
+### 2026-10-07 — Subtarefa 1.4.3 (config por fonte)
+
+- ✅ **1.4.3 fechada.** `SourceConfig` ganhou `timeout`, `retries`, `initial_wait` (durações com
+  unidade, `time.Duration` direto do `yaml.v3`). **Desvio aceito do cartão:** o aluno fez do `timeout`
+  o **orçamento da fonte** (antigo `CollectionTimeOut`, removido), não o timeout HTTP (segue 30s fixo
+  no `run`); Himalayas com 120s porque pagina. `run(logger, dbURL, cfg)` sem parâmetros de retry.
+  `Load` valida só fontes ligadas, `<= 0` → `config <fonte> <campo> must not be 0`.
+- Verificação ao vivo feita pelo mentor numa cópia com `DATABASE_URL` falso (o aluno disse ter
+  rodado; nenhuma run nova apareceu após a #52): sem `retries` na remotive → `exit=1` com `config
+  remotive retries must not be 0`; config correto → passa do `Load` e só falha na conexão.
+- Pelo caminho: tags `yaml:"url"` repetidas → `Load` em **panic** na partida (`duplicated key`);
+  campos `int` com conversão `* int(time.Second)`; depois `Duration * time.Second` → **"segundos ao
+  quadrado"** (5s → ~158 anos; 100ms → ~3 anos); tag `initial_time` × YAML `initial_wait` pega pelo
+  `KnownFields` (o D31 trabalhando); `)` sobrando; `TestPanic` com `cfg.Timeout` = 0 → contexto
+  nasce vencido e falha no `getSourceID` antes do `Fetch` — o D38 em pessoa, num `Config` que não
+  passou pelo `Load` (a pegadinha do cartão).
+- Feito pelo mentor a pedido: `Config` dos testes do `main` (`testTimeout`/`testRetries`), renomear
+  `InitialTime` → `InitialWait` / `initial_time` → `initial_wait` em todo o código, e o `TestLoad`
+  (o aluno insistiu): `want` é o `SourceConfig` inteiro comparado com `!=`, YAML na coluna 0,
+  `errContains` com fonte e campo. Mutações: validar desligadas / sem checar `retries` / erro sem
+  nome da fonte — todas pegas.
+- 🟢 Mencionados uma vez: mensagem "must not be 0" para uma checagem `<= 0`; `timeout` como nome de
+  orçamento (sugerido `budget`).
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -419,7 +465,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.2 (relatório de saúde: fonte com 0 itens em N runs seguidas) |
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
-| D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | aberto — 🟡, dono: 1.4.3 (validação/valor padrão do config) |
+| D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`. Abertos: o erro final sem o último status; o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -513,16 +559,23 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-06** — `break` dentro de `switch`/`select` sai só dele, não do `for` que o envolve. O
   `break` da última tentativa no `client.go` funciona porque não há próxima volta — correto pela
   posição, não pela intenção. (Respondido pelo aluno na pergunta da 1.4.1.)
+- **2026-10-07** — com "tudo ou nada" no `Fetch`, teto alto demais para o orçamento não coleta
+  "parte": o prazo vence na página N, as N−1 páginas (variável local) são descartadas, `runs` grava
+  `fetched=0` + `deadline exceeded`, e **toda** run seguinte repete — a fonte nunca mais coleta.
+  Regra: teto × tempo por página cabe no orçamento, **com folga** (retry também gasta orçamento).
+  (Pergunta da 1.4.2 respondida pelo mentor; o aluno acertou a conta de conferência: 1 req/2s em 60s
+  → 30 páginas.)
 
 ---
 
 ## Retomada rápida
 
-**Subtarefa 1.4.1 fechada em 2026-10-06.** Próximo: **1.4.2 — paginação do Himalayas** (cursor, com
-teto de páginas), depois 1.4.3 (rate limit + timeout/retry no `config.yaml`, junto com o D38).
-Abertos relevantes: D38 (`Retries = 0`), D37 (`items[1:]` do Remote OK com `[]`), D36 (fonte com 0
-itens), D32 (auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos).
+**Subtarefa 1.4.3 fechada em 2026-10-07.** Próximo: **1.4.4 — rate limit por fonte** (intervalo
+mínimo entre requisições no `config.yaml`; teste mede o intervalo). No `config.yaml`, `timeout` é o
+**orçamento da fonte**; timeout HTTP é 30s fixo no `run`. Abertos relevantes: D38 (parcial), D37
+(`items[1:]` do Remote OK com `[]`), D36 (fonte com 0 itens), D32 (auto-cura/reprocessamento), D33
+(`Date`/`Location`/`Tags` não persistidos).
 
-Estado verificado em 2026-10-06: `go build`/`go vet`/`gofmt` limpos, suíte verde com `-race`
-(`main` 12s; `internal/client` 1.3s). Depois de mudar código, usar `docker compose up --build` (D25).
+Estado verificado em 2026-10-07: `go build`/`go vet`/`gofmt` limpos, suíte verde com `-race`
+(`main` ~14s com `TestLoad`; `internal/client` 1.3s; `internal/sources` 1.0s). Depois de mudar código, usar `docker compose up --build` (D25).
 A DSN do terminal usa a porta `5433` (ver `.env.example`).
