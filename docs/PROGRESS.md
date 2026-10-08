@@ -10,8 +10,8 @@
 de coleta, 2026-10-07) e **1.6.2** (parada limpa + compose de daemon, 2026-10-08) fechadas: o
 coletor roda como daemon no compose, para em menos de 1s mesmo no meio de uma coleta e lê o
 `config.yaml` do disco. **1.6.3** (deploy no Pi, 2026-10-08) feita; o aquecimento revelou que o 1º
-ciclo depois de um restart do Docker falha (banco ainda subindo). Próximo: **1.6.4 — esperar o banco
-na partida**.
+ciclo depois de um restart do Docker falha (banco ainda subindo). **1.6.4** (esperar o banco na
+partida, 2026-10-08) fechada. Próximo: **1.6.5 — saúde por fonte (D36)**.
 
 Última sessão: **2026-10-08**.
 
@@ -541,6 +541,33 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - 🟢 Commit `88cdde0` com prefixo `refactor:` numa mudança de comportamento (devia ser `feat:` ou
   `chore:`); já estava no GitHub, ficou.
 
+### 2026-10-08 — Subtarefa 1.6.4 (esperar o banco na partida)
+
+- **1ª versão (🔁):** `Ticker` com período fixo (dobrar a variável não mudava o intervalo); prazo de
+  2s num `dbCtx` que o `select` não escutava — depois de 2s toda tentativa falhava na hora e o laço
+  só pararia com SIGTERM (sonda numa cópia: **50 WARNs em 5s**, todos a 100ms); sucesso na 1ª
+  tentativa não voltava e abria uma 2ª conexão; nenhuma conexão fechada.
+- **2ª versão (🔁):** prazo no `main`, tentativa única dentro do laço — mas sem dobrar a espera,
+  prazo em 2s em vez de 2 min, `Close` faltando, `flag.Parse()` depois da espera (`-h` esperaria o
+  banco).
+- **3ª versão (🔁):** `conn.Close(ctx)` **antes** de checar o erro → `nil pointer dereference` na 1ª
+  tentativa falha (sonda: panic em `main.go:111`). Justo no caso para o qual a função existe.
+- **4ª versão:** porta sem ninguém com prazo de 5s → **6 WARNs**, `DeadlineExceeded` em 5.0s; banco
+  local de pé → `nil` em **3ms**, `pg_stat_activity` com **0** conexões sobrando. O aluno exportou o
+  `sleep` do client (`client.Sleep`) em vez de copiar — aceito: uma espera com `ctx`, um lugar só.
+- **Teste:** `TestWaitForDB` em tabela (banco do teste / `localhost:1` com 300ms). O aluno pulou os
+  limites de tempo (3c) — o mentor concordou: o `errors.Is(err, context.DeadlineExceeded)` já
+  separa "tentou até o prazo" de "desistiu cedo" (mutação `return err` depois do WARN: o caso da
+  porta sem ninguém falha em 0.00s). Uma linha solta `main_tes` no `TestCtxCancel` quebrava a
+  compilação; o aluno tirou. Nomes dos casos (`t1`/`t2` → `database up`/`nobody listening`) e o
+  `$` sobrando no DSN trocados pelo mentor, a pedido.
+- **Pi:** o aluno disse que tinha feito antes de commitar — `origin/main` ainda em `88cdde0`, então
+  o Pi rodou o código antigo (se as runs vieram, foi sorte na corrida). Depois: `f3de19f` +
+  `1b15b5c` no GitHub; o aluno relata o Pi certo, sem colar a saída. A prova com saída fica para
+  o redeploy da 1.6.6.
+- ✅ **1.6.4 fechada.** Sobrou um `errcheck` no `golangci-lint` (`conn.Close(ctx)` sem tratar o
+  erro em `main.go:120`) — corrigir junto da 1.6.5.
+
 ---
 
 ## Decisões tomadas
@@ -565,6 +592,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-09-15 | `image:` mantido junto de `build:` no serviço `app` | Com as duas chaves, o compose constrói **e** aplica a tag dada, em vez de derivar `job-searcher-app` do nome do diretório. A Etapa 6 vai referenciar essa imagem num manifest que não sabe em que pasta o build ocorreu. |
 | 2026-09-15 | `config.yaml` assado na imagem, não montado como volume | Mantém a imagem autocontida: `docker run` funciona sem `-v`. **Custo aceito e não discutido pelo aluno:** mudar uma linha do `config.yaml` exige rebuild da imagem, o que atrita com a promessa do §6 do SPEC ("ajusta o `config.yaml` e roda `docker compose up`"). Revisitar na 0.4.3 ou na Etapa 1, quando a lista de fontes começar a mudar de verdade. |
 | 2026-10-08 | `config.yaml` assado na imagem **e** montado só-leitura por cima no compose (revisa a de 2026-09-15) | A imagem continua autocontida (`docker run` sem `-v` funciona) e no compose mudar o arquivo vale com `restart`, sem rebuild — paga o custo que a decisão de 2026-09-15 aceitou. Pegadinha registrada: bind mount de arquivo inexistente vira **diretório** no host. |
+| 2026-10-08 | Espera inicial pelo banco no `main` (`waitForDB`), não `depends_on` | O `depends_on` só vale no `compose up`; no boot e no restart do Docker os containers voltam sem ordem. Esperar no próprio processo também cobre o k8s da Etapa 6, que não tem ordem de partida. Prazo de 2 min; esgotou → exit 1 e o `restart` tenta de novo. |
+| 2026-10-08 | `sleep` do client exportado (`client.Sleep`) em vez de copiado no `main` | Uma espera que respeita o `ctx`, num lugar só. **Custo aceito:** o pacote `client` (HTTP) passa a exportar um utilitário que não é de HTTP. Se aparecer um terceiro uso, mudar para um pacote próprio. |
 
 ---
 
@@ -741,24 +770,37 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   depois do **fim** dele; os seguintes vêm a cada `interval` a partir da criação, não importa quanto
   o ciclo dure. No 5b: 1ª coleta 14:53:35→40, tick às 14:54:40 (66s entre os logs), depois 59s.
   (Pergunta da 1.6.2 pulada pelo aluno; respondida pelo mentor.)
+- **2026-10-08** — o `Ticker` tem período fixo, decidido na criação: dobrar a variável depois não
+  muda nada. Backoff precisa de uma espera nova a cada volta (`Timer`/`client.Sleep` com a duração
+  do momento).
+- **2026-10-08** — função que devolve `(valor, err)`: não toque no valor antes de checar o `err`.
+  O `openConn` devolve `nil` quando falha, e `Close` num `*pgx.Conn` nil é panic — `go vet` não pega.
+- **2026-10-08** — Pi sem internet na partida (banco local de pé): a `waitForDB` passa, cada fonte
+  falha depois dos retries (3 runs com `error`), o ciclo loga `no source succeeded` e o próximo só
+  vem em 6h. A 1.6.4 não cobre isso, e não precisa: queda de internet não é corrida de partida. O
+  que falta é **ver** que aconteceu — se durar K ciclos, o aviso da 1.6.5 mostra. (Pergunta da
+  1.6.3 pulada pelo aluno; respondida pelo mentor.)
 
 ---
 
 ## Retomada rápida
 
-**1.6.3 feita em 2026-10-08** (Pi em `~/pi/job-searcher`, banco próprio, coletando a cada 6h com
+**1.6.4 feita em 2026-10-08** (Pi em `~/pi/job-searcher`, banco próprio, coletando a cada 6h com
 20 páginas do Himalayas — aquecimento, o relógio dos 7 dias ainda não conta). Ordem da Fase 1:
-**1.6 → 1.5 → 1.7**. Próximo: **1.6.4 — esperar o banco na partida**: no restart do Docker o `app`
-sobe antes do Postgres, o 1º ciclo falha com `connection refused` e o próximo só vem em 6h. Depois:
-1.6.5 saúde por fonte, 1.6.6 os 7 dias. O compose local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez,
-`config.yaml` montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
+**1.6 → 1.5 → 1.7**. Próximo: **1.6.5 — saúde por fonte (D36)**: ao fim de cada ciclo, fonte cujas
+últimas 2 runs vieram com erro ou 0 itens → `WARN`. Depois: 1.6.6 os 7 dias (redeploy no Pi, com a
+prova do restart do Docker que a 1.6.4 não colou). Antes do `collector`, a `waitForDB` espera o
+banco com backoff por até 2 min. O compose local já está provado: `app` daemon com `unless-stopped`,
+`analyzer` roda uma vez, `config.yaml` montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no
+meio de uma coleta.
 Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é o `collector`,
 `-once` mantém a passada única; prazos derivam do `ctx` do sinal, o `closeRun` não. No
 `config.yaml`, `collect_every` é o intervalo entre coletas, `timeout` é o **orçamento da fonte**,
 timeout HTTP é `httpTimeout` (30s), `interval` é o rate limit. Abertos relevantes: D36 (fonte com 0
 itens — dono 1.6.5), D38 (parcial), D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17, D25.
 
-Estado verificado em 2026-10-08: `gofmt`/`go vet`/`golangci-lint` limpos, suíte verde com `-race`
+Estado verificado em 2026-10-08: `gofmt`/`go vet` limpos; `golangci-lint` com 1 `errcheck` aberto
+(`conn.Close` da `waitForDB`, a corrigir junto da 1.6.5); suíte verde com `-race`
 (`main` ~12s); runs #62–#70 e a sequência de 1m ao vivo no compose local. O `app` local ficou
 rodando com `collect_every: 6h`. Depois de mudar código, usar `docker compose up --build` (D25). A
 DSN do terminal usa a porta `5433` (ver `.env.example`).

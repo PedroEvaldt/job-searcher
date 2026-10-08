@@ -325,11 +325,16 @@ do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, c
       (no lugar do reboot) religou os containers sozinho, mas revelou a largada sem `depends_on`:
       o 1º ciclo falhou com `connection refused` → próximo só em 6h. O critério "volta sozinho e
       coleta" passou para a 1.6.4.
-- [ ] **1.6.4** Esperar o banco na partida: antes do primeiro ciclo, tentar conectar com backoff
+- [x] **1.6.4** Esperar o banco na partida: antes do primeiro ciclo, tentar conectar com backoff
       respeitando o `ctx`, com prazo total; esgotou → sai com 1 e o `restart` sobe de novo. Prova
-      no Pi: restart do Docker → 3 runs novas.
+      no Pi: restart do Docker → 3 runs novas. ✅ 2026-10-08 — `waitForDB` com backoff dobrando a
+      partir de 100ms (`client.Sleep` exportado em vez de copiado); prazo de 2 min derivado do `ctx`
+      do sinal no `main` (`DeadlineExceeded` → exit 1, cancelamento → saída limpa);
+      `TestWaitForDB` (banco de pé / porta sem ninguém), mutação sem retry pega pelo
+      `errors.Is(DeadlineExceeded)`. Commits `f3de19f`, `1b15b5c`. Pi: relatado pelo aluno, sem
+      saída colada — a prova com saída vem no redeploy da 1.6.6.
 - [ ] **1.6.5** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
-      K runs → `WARN`. Teste de integração.
+      K runs → `WARN` (K = 2: 12h sem dado no ciclo de 6h). Teste de integração.
 - [ ] **1.6.6** Os 7 dias: redeploy com a 1.6.5 e o relógio começa; consulta de runs por dia e por
       fonte; conferência no 7º dia.
 
