@@ -25,7 +25,7 @@ const (
 	// whole source is reported as failed.
 	failureThreshold = 0.5
 	// himalayasMaxPages caps how many cursor pages a single Himalayas run fetches.
-	himalayasMaxPages = 5
+	himalayasMaxPages = 20
 	// httpTimeout bounds one HTTP request; the source budget (timeout in
 	// config.yaml) bounds all the work done for a source.
 	httpTimeout = 30 * time.Second

@@ -712,6 +712,10 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-08** — `:=` dentro de um bloco cria variável nova se o nome não existe **naquele bloco**:
   o `err` do laço não é o `err` da função. Uma conferência que lê o `err` errado compila, passa no
   linter e nunca dispara — só um teste que derruba a mutação mostra que ela é morta.
+- **2026-10-08** — o `Ticker` nasce **depois** do primeiro ciclo, então o 1º tick vem `interval`
+  depois do **fim** dele; os seguintes vêm a cada `interval` a partir da criação, não importa quanto
+  o ciclo dure. No 5b: 1ª coleta 14:53:35→40, tick às 14:54:40 (66s entre os logs), depois 59s.
+  (Pergunta da 1.6.2 pulada pelo aluno; respondida pelo mentor.)
 
 ---
 
