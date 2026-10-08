@@ -11,8 +11,9 @@ de coleta, 2026-10-07) e **1.6.2** (parada limpa + compose de daemon, 2026-10-08
 coletor roda como daemon no compose, para em menos de 1s mesmo no meio de uma coleta e lê o
 `config.yaml` do disco. **1.6.3** (deploy no Pi, 2026-10-08) feita; o aquecimento revelou que o 1º
 ciclo depois de um restart do Docker falha (banco ainda subindo). **1.6.4** (esperar o banco na
-partida) e **1.6.5** (saúde por fonte, D36), ambas em 2026-10-08, fechadas. Próximo: **1.6.6 — os
-7 dias** (redeploy no Pi, prova do restart, consultas, relógio começa).
+partida) e **1.6.5** (saúde por fonte, D36), ambas em 2026-10-08, fechadas. **1.6.6 em curso: o
+relógio dos 7 dias começou em 2026-10-08 à noite**; conferência em **2026-10-15**. Enquanto isso:
+itens locais da 1.7 (D37, D17, README), sem deploy no Pi.
 
 Última sessão: **2026-10-08**.
 
@@ -595,6 +596,23 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - 🟢 `defer cancel()` dentro do laço: os cancelamentos se acumulam até o `run` voltar (3 timers).
 - ✅ **1.6.5 fechada.** D36 fechado: zero itens em K runs agora aparece no log.
 
+### 2026-10-08 — Subtarefa 1.6.6 (os 7 dias) — relógio começou
+
+- `fa638fd` no GitHub; o aluno relata deploy no Pi e restart do Docker. **A saída não foi colada**
+  (pedida 3×): a prova da 1.6.4 (voltar sozinho e coletar depois do restart) segue sem evidência
+  direta. O dia 7 cobre em parte: se houver queda no meio da semana e a espera falhar, o maior
+  intervalo passa de 6h.
+- `db/queries/health.sql` (`de94bb3`), feito pelo aluno no formato "o que a consulta devolve +
+  saída esperada" (ele pediu: o passo a passo em sub-passos não ajudou). 1ª consulta: runs e erros
+  por dia e por fonte — certa depois de trocar `dia` → `day` no `GROUP BY`/`ORDER BY`; converte
+  para São Paulo **antes** do `date_trunc` (a sessão do Postgres é UTC; a run #56, 01:24 UTC de
+  08/10, cai em 07/10). 2ª: maior intervalo por fonte com `lag` numa CTE e `max` por fora — o
+  filtro de `:'start'` faltava (remoteok com 14 dias); entrou **dentro** da CTE, antes do `lag`,
+  para não medir o intervalo entre o aquecimento e o 1º ciclo. Ordem por maior intervalo, escolha
+  do aluno (melhor que a pedida). Local: 13h22 nas 3 fontes (PC desligado de noite).
+- Formato do `start`: `'2026-10-08 18:30:12-03'`, o `started_at` da consulta com `+00`, ou
+  `date -Iseconds` — os três testados.
+
 ---
 
 ## Decisões tomadas
@@ -817,15 +835,16 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-**1.6.5 feita em 2026-10-08** (Pi em `~/pi/job-searcher`, banco próprio, coletando a cada 6h com
-20 páginas do Himalayas — aquecimento, o relógio dos 7 dias ainda não conta; o Pi ainda roda o
-código **antes** da 1.6.4). Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **1.6.6 — os 7 dias**:
-redeploy no Pi com 1.6.4 + 1.6.5, prova do restart do Docker com a saída colada (pendente desde a
-1.6.4), consulta de runs por dia e por fonte, consulta do maior intervalo entre ciclos, relógio
-começa; conferência no 7º dia. Antes do `collector`, a `waitForDB` espera o banco com backoff por
-até 2 min; ao fim de cada ciclo, `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0
-itens. O compose local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez,
-`config.yaml` montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
+**Relógio dos 7 dias começou em 2026-10-08 à noite** (Pi em `~/pi/job-searcher`, código `fa638fd`,
+coletando a cada 6h). **Conferência em 2026-10-15**, no Pi: `docker compose exec -T postgres psql
+-U postgres -d jobs -v start='<início>' < db/queries/health.sql` + `docker compose logs app | grep
+"source is broken"`. Pronto quando: as 3 fontes com runs em todos os dias, maior intervalo ~6h,
+`WARN`s revisados. Até lá, nada de deploy nem restart no Pi. Ordem da Fase 1: **1.6 → 1.5 → 1.7**;
+durante a semana, os itens locais da 1.7 (D37, D17, README) — a 1.5 (dedupe) espera os dados da
+semana. Antes do `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de
+cada ciclo, `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose
+local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml`
+montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
 Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é o `collector`,
 `-once` mantém a passada única; prazos derivam do `ctx` do sinal, o `closeRun` não. No
 `config.yaml`, `collect_every` é o intervalo entre coletas, `timeout` é o **orçamento da fonte**,
@@ -834,5 +853,6 @@ timeout HTTP é `httpTimeout` (30s), `interval` é o rate limit. Abertos relevan
 
 Estado verificado em 2026-10-08: `gofmt`/`go vet`/`golangci-lint` limpos; suíte verde com `-race`
 (`main` ~12s); runs #62–#70 e a sequência de 1m ao vivo no compose local. O `app` local ficou
-rodando com `collect_every: 6h`. Depois de mudar código, usar `docker compose up --build` (D25). A
+rodando com `collect_every: 6h` — mesmo IP público do Pi, então a Remotive vê 8 coletas/dia
+(limite: 4); recomendado parar com `docker compose stop app`. Depois de mudar código, usar `docker compose up --build` (D25). A
 DSN do terminal usa a porta `5433` (ver `.env.example`).

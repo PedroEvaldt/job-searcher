@@ -341,7 +341,10 @@ do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, c
       falhou). `TestSourceLooksBroken` com 5 casos. Ao vivo (cópia, remotive em `.invalid`): 1ª
       passada sem aviso, 2ª com `WARN source is broken source=remotive after=2`.
 - [ ] **1.6.6** Os 7 dias: redeploy com a 1.6.5 e o relógio começa; consulta de runs por dia e por
-      fonte; conferência no 7º dia.
+      fonte; conferência no 7º dia. 🕒 Relógio começou em 2026-10-08 (noite; deploy de `fa638fd` +
+      restart do Docker, relatados pelo aluno, saída não colada). `db/queries/health.sql`
+      (`de94bb3`): runs por dia (Brasília) e por fonte, e maior intervalo por fonte (`lag`).
+      Conferência em **2026-10-15**, sem mexer no Pi até lá.
 
 **Dividida em 2026-10-07:** a antiga 1.6.2 (compose + Pi) passava de 90 min com a parada limpa que
 a 1.6.1 revelou (Ctrl+C no meio de uma coleta só valia no fim dela; `docker stop` mata em 10s) e com
