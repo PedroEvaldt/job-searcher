@@ -177,7 +177,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -201,7 +201,7 @@ func TestFetch(t *testing.T) {
 		return
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -294,7 +294,7 @@ func TestPartialFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Fatalf("expected err nil; got %v", err)
 	}
@@ -355,7 +355,7 @@ func TestClientTimeout(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 
 	switch {
 	case err == nil:
@@ -427,7 +427,7 @@ func TestFailureThreshold(t *testing.T) {
 				t.Fatalf("failed to clean tables: %v", err)
 			}
 
-			err = run(slog.New(slog.DiscardHandler), dsn, &cfg)
+			err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 
 			var (
 				runsErrCount int
@@ -498,7 +498,7 @@ func TestPanic(t *testing.T) {
 		Enabled: true,
 		URL:     "https://test.url",
 	}
-	err = processSource(conn, slog.New(slog.DiscardHandler), dummy{}, cfg, testTimeout)
+	err = processSource(context.Background(), conn, slog.New(slog.DiscardHandler), dummy{}, cfg, testTimeout)
 	if err == nil {
 		t.Fatalf("expected err; got nil")
 	}
@@ -653,5 +653,93 @@ func TestFirstCycle(t *testing.T) {
 	}
 	if counter != 1 {
 		t.Errorf("expected 1 cycle; got %d", counter)
+	}
+}
+
+func TestCtxCancel(t *testing.T) {
+	err := pingDB(db)
+	if err != nil {
+		t.Fatalf("database not ready for testing cancellation: %v", err)
+	}
+	// Never answers on its own: it returns only once the request is cancelled.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		SourcesConfig: []sources.SourceConfig{
+			{
+				Name:    "remoteok",
+				Enabled: true,
+				URL:     srv.URL,
+				// A 2s budget against a cancel at 100ms: the cancel must fire first.
+				Timeout:     2 * time.Second,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
+			},
+			{
+				Name:    "remotive",
+				Enabled: true,
+				URL:     srv.URL,
+				// A 2s budget against a cancel at 100ms: the cancel must fire first.
+				Timeout:     2 * time.Second,
+				Retries:     testRetries,
+				InitialWait: testInitialWait,
+			},
+		},
+	}
+	// The container is shared with TestFetch, so start from empty tables.
+	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	time.AfterFunc(100*time.Millisecond, cancel)
+	begin := time.Now()
+	err = run(ctx, slog.New(slog.DiscardHandler), dsn, &cfg)
+	after := time.Since(begin)
+	if err == nil {
+		t.Fatalf("expected err; got nil")
+	}
+	if after > time.Second {
+		t.Errorf("expected duration less than 1s; got %v", after)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context canceled; got %v", err)
+	}
+	// Cancelled during remoteok, so the loop must stop before remotive is tried.
+	if strings.Contains(err.Error(), "remotive") {
+		t.Errorf("expected run to stop before remotive; got %v", err)
+	}
+
+	var (
+		runsCount int
+		fetched   int
+		runErr    string
+		finished  bool
+	)
+	err = db.QueryRow("SELECT fetched, error, finished_at IS NOT NULL, COUNT(*) OVER() FROM runs;").Scan(&fetched, &runErr, &finished, &runsCount)
+	if err != nil {
+		t.Fatalf("failed to query runs: %v", err)
+	}
+
+	if !finished {
+		t.Errorf("expected finished_at to be set")
+	}
+
+	if runsCount != 1 {
+		t.Errorf("expected 1 run; got %d", runsCount)
+	}
+
+	if fetched != 0 {
+		t.Errorf("expected 0 fetched; got %d", fetched)
+	}
+
+	if !strings.Contains(runErr, "context canceled") {
+		t.Errorf("expected error to contain 'context canceled'; got %s", runErr)
 	}
 }

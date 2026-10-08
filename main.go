@@ -78,12 +78,12 @@ func main() {
 	once := flag.Bool("once", false, "run one time only")
 	flag.Parse()
 
-	cycle := func() error {
-		return run(logger, dbURL, cfg)
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	cycle := func() error {
+		return run(ctx, logger, dbURL, cfg)
+	}
 
 	if *once {
 		if err := cycle(); err != nil {
@@ -121,8 +121,8 @@ func collector(ctx context.Context, logger *slog.Logger, interval time.Duration,
 // run performs one full collection pass: open the Postgres connection, apply
 // migrations, then process each enabled source in turn. A failure in one source is
 // logged and skipped, not fatal to the others; run fails only when no source succeeds.
-func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
-	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (err error) {
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	conn, err := openConn(dbCtx, dbURL)
@@ -153,6 +153,9 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	var runErrs []error
 	var success bool
 	for _, sourceConfig := range cfg.SourcesConfig {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
+		}
 		if !sourceConfig.Enabled {
 			continue
 		}
@@ -164,7 +167,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 			continue
 		}
 
-		err = processSource(conn, logger, source, sourceConfig, sourceConfig.Timeout)
+		err = processSource(ctx, conn, logger, source, sourceConfig, sourceConfig.Timeout)
 		if err != nil {
 			runErrs = append(runErrs, fmt.Errorf("failed to process %s: %w", sourceConfig.Name, err))
 			logger.Warn("failed to process source", "source", sourceConfig.Name, "error", err)
@@ -186,7 +189,7 @@ func run(logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 // runs table. It opens the run row first (closed via a deferred closeRun over the
 // named return) so even a failure before fetching leaves a trace, then resolves the
 // source id, fetches its items, and stores them. A panic inside becomes the error.
-func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceConfig sources.SourceConfig, timeout time.Duration) (err error) {
+func processSource(ctx context.Context, conn *pgx.Conn, logger *slog.Logger, source Source, sourceConfig sources.SourceConfig, timeout time.Duration) (err error) {
 	var (
 		fetched     int
 		failed      int
@@ -194,7 +197,7 @@ func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceCon
 		sourceIDPtr *int
 	)
 
-	runCtx, cancelRun := context.WithTimeout(context.Background(), 10*time.Second)
+	runCtx, cancelRun := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelRun()
 	runID, err := openRun(runCtx, conn)
 	if err != nil {
@@ -216,22 +219,22 @@ func processSource(conn *pgx.Conn, logger *slog.Logger, source Source, sourceCon
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	collectionCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	sourceID, err = getSourceID(ctx, conn, sourceConfig.Name)
+	sourceID, err = getSourceID(collectionCtx, conn, sourceConfig.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get source id: %w", err)
 	}
 	sourceIDPtr = &sourceID
 
-	items, err := source.Fetch(ctx, sourceConfig.URL)
+	items, err := source.Fetch(collectionCtx, sourceConfig.URL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}
 
 	fetched = len(items)
-	failed = collectAndStoreData(ctx, conn, logger, items, source, sourceID)
+	failed = collectAndStoreData(collectionCtx, conn, logger, items, source, sourceID)
 
 	// Checked before dividing: an empty feed is a success, not 0/0.
 	if fetched != 0 {
