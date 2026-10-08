@@ -312,13 +312,23 @@ do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, c
       a passada única. Teste do laço sem banco. ✅ 2026-10-07 — `collector(ctx, logger, interval,
       cycle)` recebe o ciclo como função (o `main` fecha `run` numa closure); `TestCollector` +
       `TestFirstCycle` com ciclo falso, 4 mutações pegas; ao vivo: runs #56–#61.
-- [ ] **1.6.2** Compose e Pi: `app` com `restart`, `analyzer` sem esperar o `app` terminar,
-      `config.yaml` montado como volume (revisita a decisão de 2026-09-15), rotação de log; deploy
-      no Pi. Aquecimento: os dados já entram, o relógio ainda não conta.
-- [ ] **1.6.3** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
+- [x] **1.6.2** Parada limpa e compose de daemon (local): o ciclo recebe o `ctx` do sinal e a
+      coleta em andamento é cancelada (run fechada com erro); `app` com `restart`, `analyzer` sem
+      esperar o `app` terminar, `config.yaml` montado como volume por cima do da imagem (revisita a
+      decisão de 2026-09-15), rotação de log. ✅ 2026-10-08 — prazos derivados do `ctx` (o
+      `closeRun` fica com `Background`), laço de fontes para no cancelamento; `TestCtxCancel` com 2
+      mutações pegas; ao vivo: `stop` em 0.33s (run #70 fechada com `context canceled`) e
+      `collect_every: 1m` sem rebuild.
+- [ ] **1.6.3** Deploy no Pi: Docker no Pi, clone, `.env`, `up -d --build` nativo em arm64.
+      Aquecimento: os dados já entram, o relógio ainda não conta.
+- [ ] **1.6.4** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
       K runs → `WARN`. Teste de integração.
-- [ ] **1.6.4** Os 7 dias: redeploy com a 1.6.3 e o relógio começa; consulta de runs por dia e por
+- [ ] **1.6.5** Os 7 dias: redeploy com a 1.6.4 e o relógio começa; consulta de runs por dia e por
       fonte; conferência no 7º dia.
+
+**Dividida em 2026-10-07:** a antiga 1.6.2 (compose + Pi) passava de 90 min com a parada limpa que
+a 1.6.1 revelou (Ctrl+C no meio de uma coleta só valia no fim dela; `docker stop` mata em 10s) e com
+o estado do Docker no Pi desconhecido. Local primeiro; o Pi recebe um compose já provado.
 
 ### Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
 

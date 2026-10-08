@@ -6,12 +6,12 @@
 
 ## Onde estou
 
-**Tarefa 1.6 — agendamento e os 7 dias** (ordem da Fase 1: **1.6 → 1.5 → 1.7**). **1.6.1 fechada
-em 2026-10-07**: o coletor agora é um processo que coleta a cada `collect_every` e encerra com
-SIGINT/SIGTERM (`-once` mantém a passada única). Próximo: **1.6.2 — compose e deploy no Raspberry
-Pi**.
+**Tarefa 1.6 — agendamento e os 7 dias** (ordem da Fase 1: **1.6 → 1.5 → 1.7**). **1.6.1** (laço
+de coleta, 2026-10-07) e **1.6.2** (parada limpa + compose de daemon, 2026-10-08) fechadas: o
+coletor roda como daemon no compose, para em menos de 1s mesmo no meio de uma coleta e lê o
+`config.yaml` do disco. Próximo: **1.6.3 — deploy no Raspberry Pi**.
 
-Última sessão: **2026-10-07**.
+Última sessão: **2026-10-08**.
 
 ---
 
@@ -484,6 +484,40 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ---
 
+### 2026-10-08 — Subtarefa 1.6.2 (parada limpa e compose de daemon)
+
+- ✅ **1.6.2 fechada.** `run(ctx, …)` e `processSource(ctx, …)`: os três prazos (banco 5s,
+  `openRun` 10s, orçamento da fonte → `collectionCtx`) **derivam** do `ctx` do sinal; o `closeRun`
+  continua com `Background` (grava o fim justamente depois do cancelamento). O laço de fontes
+  confere o `ctx` no topo de cada volta e devolve `ctx.Err()` embrulhado. No `main`, a closure
+  captura o `ctx` (o ciclo não mudou de forma — caminho do aluno, equivalente ao do cartão).
+- `TestCtxCancel`: servidor que só responde quando a requisição é cancelada, duas fontes com
+  orçamento de 2s, `cancel` aos 100ms → `run` volta em < 1s com `context.Canceled`, o erro não cita
+  `remotive`, 1 run com `finished_at` e `context canceled`. Mutações: orçamento nascendo do
+  `Background` → 2.01s; sem a parada do laço → erro cita `remotive`.
+- `compose.yaml`: `analyzer` depende do `postgres` saudável (antes esperava o `app` terminar — com
+  daemon, nunca); `app` com `restart: unless-stopped`, `./config.yaml:/app/config.yaml:ro` por cima
+  da cópia da imagem, `json-file` com `max-size "10m"` / `max-file "3"`. `go mod tidy`: `yaml` deixa
+  de ser `// indirect`.
+- Ao vivo: `docker compose stop app` no meio da coleta em **0.33s**; run #70 (Himalayas) fechada com
+  `fetch page 2: waiting for rate limit: context canceled` — o cancelamento chegou dentro do `sleep`
+  com `ctx` da 1.4.4. `collect_every: 1m` sem rebuild: coletas às 14:53:36, 14:54:42, 14:55:41.
+  Passo 5 rodado pelo mentor (não havia rastro no banco); o `up -d --build` do passo 4 também.
+- Pelo caminho: os `WithTimeout` **apagados** em vez de derivados (`TestClientTimeout` caiu: sem
+  orçamento); a parada do laço lendo o `err` da função (sempre `nil` desde o `migrate`, porque o
+  `source, err :=` do laço cria outro `err` a cada volta) — conferência morta, idêntica a não ter;
+  depois embrulhando `err` nil → `%!w(<nil>)`. Erro do mentor: o cartão previa que sem a parada
+  apareceriam 2 runs, mas com o `openRun` derivado a 2ª fonte falha antes do `INSERT` — corrigido
+  para "o erro não cita a 2ª fonte".
+- Feito pelo mentor a pedido: a conferência "não cita `remotive`" e a limpeza dos comentários e
+  mensagens copiados do `TestClientTimeout`.
+- 🟢 Mencionados uma vez: a parada confere só `context.Canceled` (não `Err() != nil`); cancelamento
+  durante a **última** fonte, com as anteriores bem-sucedidas, faz o `run` devolver `nil` (`-once` +
+  Ctrl+C nesse momento sai 0 — a run fica registrada com o erro); `processSource` recebe `timeout` e
+  `sourceConfig.Timeout` (o mesmo valor duas vezes).
+
+---
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -505,6 +539,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-09-09 | Dentro da transação, tudo-ou-nada: `insertJob` retorna no primeiro erro, sem `continue` | Postgres aborta a transação inteira no primeiro statement com erro (`25P02`) — o `continue` virava 245 erros falsos e o `Commit` falhava do mesmo jeito. É aceitável porque `jobs` é derivação **pura** de `raw_jobs`: nada se perde, a run seguinte reconstrói. **Custo aceito:** atraso até a próxima coleta, e o risco de pílula envenenada (D19). || 2026-09-15 | Identidade mora no `.env`; topologia mora no arquivo que descreve o ambiente | `user`/`senha` são invariantes (iguais no laptop e no container); `host:porta` varia com o observador. Grudadas numa string, a parte invariante é arrastada pela variante — foi o que quebrou o `go run .`. O `.env` guarda a URL do ponto de vista do terminal (`localhost:5433`); o `compose.yaml` monta a sua própria com `postgres:5432`, e `environment:` vence o `.env`. **Custo aceito:** o *molde* da URL fica escrito duas vezes — duplica-se o público, nunca o segredo. É a mesma linha que o k8s da Etapa 6 usa para separar `Secret` de manifesto. |
 | 2026-09-15 | `image:` mantido junto de `build:` no serviço `app` | Com as duas chaves, o compose constrói **e** aplica a tag dada, em vez de derivar `job-searcher-app` do nome do diretório. A Etapa 6 vai referenciar essa imagem num manifest que não sabe em que pasta o build ocorreu. |
 | 2026-09-15 | `config.yaml` assado na imagem, não montado como volume | Mantém a imagem autocontida: `docker run` funciona sem `-v`. **Custo aceito e não discutido pelo aluno:** mudar uma linha do `config.yaml` exige rebuild da imagem, o que atrita com a promessa do §6 do SPEC ("ajusta o `config.yaml` e roda `docker compose up`"). Revisitar na 0.4.3 ou na Etapa 1, quando a lista de fontes começar a mudar de verdade. |
+| 2026-10-08 | `config.yaml` assado na imagem **e** montado só-leitura por cima no compose (revisa a de 2026-09-15) | A imagem continua autocontida (`docker run` sem `-v` funciona) e no compose mudar o arquivo vale com `restart`, sem rebuild — paga o custo que a decisão de 2026-09-15 aceitou. Pegadinha registrada: bind mount de arquivo inexistente vira **diretório** no host. |
 
 ---
 
@@ -557,7 +592,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D33 | `main.go` (`insertJob`) | O modelo `sources.Job` carrega `Date`, `Location` e `Tags`, mapeados com cuidado nas três fontes (incl. 3 formatos de data), mas `insertJob` grava só `title/company/url/description`. `Date` é calculado e descartado **mesmo havendo coluna `posted_at`**; `Location`/`Tags` não têm coluna ainda. Owners futuros concretos: Fase 2 (filtro de localização lê `Location`), Fase 3a ("idade da vaga" lê `posted_at`). | aberto — 🟡; migration + colunas quando os donos chegarem |
 | ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
-| D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.2 (relatório de saúde: fonte com 0 itens em N runs seguidas) |
+| D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.4 (saúde por fonte: 0 itens ou erro em K runs seguidas) |
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 
@@ -667,21 +702,34 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-07** — um teste de "continua depois do erro" só prova algo se o ciclo falso continua
   sendo chamado **depois** de falhar: cancelar na 1ª chamada faz o laço sair de qualquer jeito, e o
   teste não distingue "segue" de "desiste". Por isso cancelar vem antes de falhar.
+- **2026-10-07** — o canal do `time.Ticker` guarda **no máximo 1** tick; os outros são descartados.
+  Ciclo de 90s com intervalo de 1m: o tick dos 60s fica guardado, o ciclo seguinte começa colado
+  (aos 90s), uma vez só — sem fila acumulando. (Pergunta da 1.6.1 pulada pelo aluno; respondida pelo
+  mentor.)
+- **2026-10-08** — derivar um contexto é **somar** o cancelamento do pai ao prazo do filho, não trocar
+  um pelo outro: o primeiro que vencer encerra. Apagar o `WithTimeout` para "usar o ctx" tira o
+  prazo — e no Pi ninguém aperta Ctrl+C.
+- **2026-10-08** — `:=` dentro de um bloco cria variável nova se o nome não existe **naquele bloco**:
+  o `err` do laço não é o `err` da função. Uma conferência que lê o `err` errado compila, passa no
+  linter e nunca dispara — só um teste que derruba a mutação mostra que ela é morta.
 
 ---
 
 ## Retomada rápida
 
-**1.6.1 fechada em 2026-10-07.** Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **1.6.2 — compose e
-Pi**: `analyzer` hoje depende de `service_completed_successfully` do `app`, o que quebra com o app
-virando daemon; `restart` no `app`; `config.yaml` como volume (hoje vai assado na imagem); rotação de
-log; parada no meio de uma coleta (ver ⚠️ da 1.6.1); deploy no Pi (arm64 — perguntar se o Docker já
-está instalado lá). Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é
-o `collector` em `main.go`, `-once` mantém a passada única. No `config.yaml`, `collect_every` é o
-intervalo entre coletas, `timeout` é o **orçamento da fonte**, timeout HTTP é `httpTimeout` (30s),
-`interval` é o rate limit. Abertos relevantes: D36 (fonte com 0 itens — dono 1.6.3), D38 (parcial),
-D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17.
+**1.6.2 fechada em 2026-10-08.** Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **1.6.3 — deploy no
+Pi** (Raspberry Pi 5, arm64, Debian): Docker no Pi (estado desconhecido — perguntar), clone, `.env`
+(a partir do `.env.example`), `config.yaml` presente antes do `up` (senão o bind mount cria um
+diretório), `up -d --build` nativo; aquecimento — os dados entram, o relógio dos 7 dias ainda não
+conta. O compose local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez,
+`config.yaml` montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
+Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é o `collector`,
+`-once` mantém a passada única; prazos derivam do `ctx` do sinal, o `closeRun` não. No
+`config.yaml`, `collect_every` é o intervalo entre coletas, `timeout` é o **orçamento da fonte**,
+timeout HTTP é `httpTimeout` (30s), `interval` é o rate limit. Abertos relevantes: D36 (fonte com 0
+itens — dono 1.6.4), D38 (parcial), D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17, D25.
 
-Estado verificado em 2026-10-07: `go vet`/`gofmt`/`golangci-lint` limpos, `TestLoad`,
-`TestCollector` e `TestFirstCycle` verdes com `-race`; runs #56–#61 ao vivo. Depois de mudar código,
-usar `docker compose up --build` (D25). A DSN do terminal usa a porta `5433` (ver `.env.example`).
+Estado verificado em 2026-10-08: `gofmt`/`go vet`/`golangci-lint` limpos, suíte verde com `-race`
+(`main` ~12s); runs #62–#70 e a sequência de 1m ao vivo no compose local. O `app` local ficou
+rodando com `collect_every: 6h`. Depois de mudar código, usar `docker compose up --build` (D25). A
+DSN do terminal usa a porta `5433` (ver `.env.example`).
