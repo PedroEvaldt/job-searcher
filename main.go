@@ -29,6 +29,10 @@ const (
 	// httpTimeout bounds one HTTP request; the source budget (timeout in
 	// config.yaml) bounds all the work done for a source.
 	httpTimeout = 30 * time.Second
+	// brokenAfterRuns is how many runs in a row a source must fail (error or zero
+	// items) before the cycle warns about it. At collect_every 6h, 2 runs is 12h
+	// without data.
+	brokenAfterRuns = 2
 )
 
 // Source is what the collector needs from a job source: fetch the raw items, read
@@ -117,7 +121,7 @@ func waitForDB(ctx context.Context, logger *slog.Logger, dbURL string, initialDB
 			}
 			initialDBWait *= 2
 		} else {
-			conn.Close(ctx)
+			_ = conn.Close(ctx) // only probing; run opens its own connection
 			return nil
 		}
 	}
@@ -203,6 +207,27 @@ func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (e
 		}
 		success = true
 	}
+
+	for _, sourceConfig := range cfg.SourcesConfig {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
+		}
+		if !sourceConfig.Enabled {
+			continue
+		}
+		checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		isBroken, err := sourceLooksBroken(checkCtx, conn, brokenAfterRuns, sourceConfig.Name)
+		if err != nil {
+			logger.Error("failed to check if source is broken", "source", sourceConfig.Name, "error", err)
+			continue
+		}
+		if isBroken {
+			logger.Warn("source is broken", "source", sourceConfig.Name, "after", brokenAfterRuns)
+		}
+	}
+
 	if !success {
 		finalErr := errors.Join(runErrs...)
 		if finalErr == nil {

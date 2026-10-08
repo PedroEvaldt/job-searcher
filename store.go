@@ -134,3 +134,39 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 	}
 	return nil
 }
+
+// sourceLooksBroken reports whether each of the last k runs of source failed, with
+// an error or with zero items fetched (D36). A source with fewer than k runs is not
+// broken yet: it may just be new.
+func sourceLooksBroken(ctx context.Context, conn *pgx.Conn, k int, source string) (bool, error) {
+	sourceID, err := getSourceID(ctx, conn, source)
+	if err != nil {
+		return false, err
+	}
+
+	const query = `SELECT error IS NOT NULL, fetched FROM runs WHERE source_id = $1 ORDER BY id DESC LIMIT $2;`
+	rows, err := conn.Query(ctx, query, sourceID, k)
+	if err != nil {
+		return false, fmt.Errorf("failed to query last runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs, failed int
+	for rows.Next() {
+		var (
+			hasErr  bool
+			fetched int
+		)
+		if err := rows.Scan(&hasErr, &fetched); err != nil {
+			return false, fmt.Errorf("failed to scan run: %w", err)
+		}
+		runs++
+		if hasErr || fetched == 0 {
+			failed++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("failed to read last runs: %w", err)
+	}
+	return runs == k && failed == k, nil
+}

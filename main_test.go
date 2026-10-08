@@ -774,3 +774,60 @@ func TestWaitForDB(t *testing.T) {
 		})
 	}
 }
+
+func TestSourceLooksBroken(t *testing.T) {
+	err := pingDB(db)
+	if err != nil {
+		t.Fatalf("database not ready for testing source health: %v", err)
+	}
+	ctx := context.Background()
+	conn, err := openConn(ctx, dsn)
+	if err != nil {
+		t.Fatalf("failed to open conn: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	// An empty runErr is stored as NULL, like a run that finished without error.
+	type pastRun struct {
+		fetched int
+		runErr  string
+	}
+	const k = 2
+	tests := []struct {
+		name string
+		runs []pastRun // oldest first: the newest run has the highest id
+		want bool
+	}{
+		// failureThreshold can close a run with an error and items fetched.
+		{"last k failed", []pastRun{{100, "too many items failed"}, {0, ""}}, true},
+		{"newest ok", []pastRun{{0, "boom"}, {0, "boom"}, {100, ""}}, false},
+		{"oldest ok", []pastRun{{100, ""}, {0, "boom"}, {0, ""}}, true},
+		{"fewer than k runs", []pastRun{{0, "boom"}}, false},
+		{"no runs", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := db.Exec("TRUNCATE runs;")
+			if err != nil {
+				t.Fatalf("failed to clean runs: %v", err)
+			}
+			for _, r := range tt.runs {
+				_, err := db.Exec(`
+					INSERT INTO runs (source_id, started_at, finished_at, fetched, error)
+					VALUES ((SELECT id FROM sources WHERE name = 'remoteok'), now(), now(), $1, NULLIF($2, ''));`,
+					r.fetched, r.runErr)
+				if err != nil {
+					t.Fatalf("failed to insert run: %v", err)
+				}
+			}
+
+			got, err := sourceLooksBroken(ctx, conn, k, "remoteok")
+			if err != nil {
+				t.Fatalf("failed to check source: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("expected broken = %v; got %v", tt.want, got)
+			}
+		})
+	}
+}
