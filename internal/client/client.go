@@ -41,7 +41,7 @@ func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
 		// Inside the loop on purpose: a retry is a request too. After a backoff
 		// longer than the interval, nothing is left to wait here.
 		if !c.lastRequest.IsZero() {
-			if err := sleep(ctx, time.Until(c.lastRequest.Add(c.Interval))); err != nil {
+			if err := Sleep(ctx, time.Until(c.lastRequest.Add(c.Interval))); err != nil {
 				return nil, fmt.Errorf("waiting for rate limit: %w", err)
 			}
 		}
@@ -69,7 +69,7 @@ func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
 			if i+1 == c.Retries {
 				continue
 			}
-			if err := sleep(ctx, backoff); err != nil {
+			if err := Sleep(ctx, backoff); err != nil {
 				return nil, fmt.Errorf("waiting to retry: %w", err)
 			}
 			backoff *= 2
@@ -80,9 +80,9 @@ func (c *Client) HTTPGetBody(ctx context.Context, url string) ([]byte, error) {
 	return nil, fmt.Errorf("giving up after %d attempts: last status %d", c.Retries, lastStatus)
 }
 
-// sleep waits for d, or until ctx is done, whichever comes first. A d of zero or
+// Sleep waits for d, or until ctx is done, whichever comes first. A d of zero or
 // less returns at once.
-func sleep(ctx context.Context, d time.Duration) error {
+func Sleep(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return nil
 	}
