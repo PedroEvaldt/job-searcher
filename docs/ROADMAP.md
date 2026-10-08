@@ -319,16 +319,27 @@ do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, c
       `closeRun` fica com `Background`), laço de fontes para no cancelamento; `TestCtxCancel` com 2
       mutações pegas; ao vivo: `stop` em 0.33s (run #70 fechada com `context canceled`) e
       `collect_every: 1m` sem rebuild.
-- [ ] **1.6.3** Deploy no Pi: Docker no Pi, clone, `.env`, `up -d --build` nativo em arm64.
-      Aquecimento: os dados já entram, o relógio ainda não conta.
-- [ ] **1.6.4** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
+- [x] **1.6.3** Deploy no Pi: Docker no Pi, clone, `.env`, `up -d --build` nativo em arm64.
+      Aquecimento: os dados já entram, o relógio ainda não conta. ✅ 2026-10-08 — Pi em `88cdde0`,
+      banco novo (runs #1–#3; Himalayas com 20 páginas: 400 vagas em 23.5s). O restart do Docker
+      (no lugar do reboot) religou os containers sozinho, mas revelou a largada sem `depends_on`:
+      o 1º ciclo falhou com `connection refused` → próximo só em 6h. O critério "volta sozinho e
+      coleta" passou para a 1.6.4.
+- [ ] **1.6.4** Esperar o banco na partida: antes do primeiro ciclo, tentar conectar com backoff
+      respeitando o `ctx`, com prazo total; esgotou → sai com 1 e o `restart` sobe de novo. Prova
+      no Pi: restart do Docker → 3 runs novas.
+- [ ] **1.6.5** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
       K runs → `WARN`. Teste de integração.
-- [ ] **1.6.5** Os 7 dias: redeploy com a 1.6.4 e o relógio começa; consulta de runs por dia e por
+- [ ] **1.6.6** Os 7 dias: redeploy com a 1.6.5 e o relógio começa; consulta de runs por dia e por
       fonte; conferência no 7º dia.
 
 **Dividida em 2026-10-07:** a antiga 1.6.2 (compose + Pi) passava de 90 min com a parada limpa que
 a 1.6.1 revelou (Ctrl+C no meio de uma coleta só valia no fim dela; `docker stop` mata em 10s) e com
 o estado do Docker no Pi desconhecido. Local primeiro; o Pi recebe um compose já provado.
+
+**Inserida em 2026-10-08:** a 1.6.4 (esperar o banco) nasceu do aquecimento no Pi — no boot o Docker
+religa os containers sem a ordem do `depends_on`, e um 1º ciclo perdido custa 6h, o que quebraria o
+critério dos 7 dias. Saúde e 7 dias viraram 1.6.5 e 1.6.6.
 
 ### Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
 

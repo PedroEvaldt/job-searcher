@@ -9,7 +9,9 @@
 **Tarefa 1.6 — agendamento e os 7 dias** (ordem da Fase 1: **1.6 → 1.5 → 1.7**). **1.6.1** (laço
 de coleta, 2026-10-07) e **1.6.2** (parada limpa + compose de daemon, 2026-10-08) fechadas: o
 coletor roda como daemon no compose, para em menos de 1s mesmo no meio de uma coleta e lê o
-`config.yaml` do disco. Próximo: **1.6.3 — deploy no Raspberry Pi**.
+`config.yaml` do disco. **1.6.3** (deploy no Pi, 2026-10-08) feita; o aquecimento revelou que o 1º
+ciclo depois de um restart do Docker falha (banco ainda subindo). Próximo: **1.6.4 — esperar o banco
+na partida**.
 
 Última sessão: **2026-10-08**.
 
@@ -518,6 +520,29 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ---
 
+### 2026-10-08 — Subtarefa 1.6.3 (deploy no Pi) e escolha de valores
+
+- **Medição para escolher ciclo e páginas** (banco do PC): RemoteOK e Remotive trazem **0–1** vagas
+  novas por coleta mesmo depois de 13h; o Himalayas traz **100 de 100** novas sempre — o feed tem
+  118.068 vagas, ordenado por `pubDate`, e 100 vagas cobrem só 17–78 min de publicações. A Remotive
+  orienta no máximo 4 coletas por dia (README da API). Decisão: `collect_every` fica em **6h**;
+  `himalayasMaxPages` 5 → **20** (20 × 1.5s + 60s de pior caso = 90s ≤ orçamento de 120s); log fica
+  em 10m×3 (~3 KB/dia). Curiosidade: a 1ª página do Himalayas às vezes vem atrasada (às 11:48 a
+  vaga mais nova era das 09:34; às 11:52, das 11:33) — cache do lado deles, provavelmente.
+- ✅ **1.6.3 feita.** Pi: Docker `enabled`, chave SSH da conta (o mentor recomendou senha na chave;
+  deploy key só se houver deploy automático), clone em `~/pi/job-searcher`, `.env` próprio. Banco
+  do Pi é novo: runs #1–#3 (RemoteOK 99, Remotive 19, Himalayas **400 em 23.5s** — previsto 25–30s).
+- **Reboot trocado por `sudo systemctl restart docker`** (o aluno não quis reiniciar o Pi): mesma
+  prova das políticas de restart, sem o compose. Resultado: `shutting down` no SIGTERM, containers
+  de volta sozinhos (`app` Up, `postgres` healthy) — mas o 1º ciclo falhou: `failed to open db
+  conn: … dial tcp 172.18.0.3:5432: connect: connection refused`. No boot o Docker religa tudo ao
+  mesmo tempo (o `depends_on` só vale no `compose up`); o `app` sobe em milissegundos, o Postgres
+  leva segundos, e o próximo ciclo só vem em 6h. Vira a **1.6.4**.
+- 🟢 Commit `88cdde0` com prefixo `refactor:` numa mudança de comportamento (devia ser `feat:` ou
+  `chore:`); já estava no GitHub, ficou.
+
+---
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -592,7 +617,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D33 | `main.go` (`insertJob`) | O modelo `sources.Job` carrega `Date`, `Location` e `Tags`, mapeados com cuidado nas três fontes (incl. 3 formatos de data), mas `insertJob` grava só `title/company/url/description`. `Date` é calculado e descartado **mesmo havendo coluna `posted_at`**; `Location`/`Tags` não têm coluna ainda. Owners futuros concretos: Fase 2 (filtro de localização lê `Location`), Fase 3a ("idade da vaga" lê `posted_at`). | aberto — 🟡; migration + colunas quando os donos chegarem |
 | ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
-| D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.4 (saúde por fonte: 0 itens ou erro em K runs seguidas) |
+| D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | aberto — 🟡, dono: 1.6.5 (saúde por fonte: 0 itens ou erro em K runs seguidas) |
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 
@@ -721,17 +746,17 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 
 ## Retomada rápida
 
-**1.6.2 fechada em 2026-10-08.** Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **1.6.3 — deploy no
-Pi** (Raspberry Pi 5, arm64, Debian): Docker no Pi (estado desconhecido — perguntar), clone, `.env`
-(a partir do `.env.example`), `config.yaml` presente antes do `up` (senão o bind mount cria um
-diretório), `up -d --build` nativo; aquecimento — os dados entram, o relógio dos 7 dias ainda não
-conta. O compose local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez,
+**1.6.3 feita em 2026-10-08** (Pi em `~/pi/job-searcher`, banco próprio, coletando a cada 6h com
+20 páginas do Himalayas — aquecimento, o relógio dos 7 dias ainda não conta). Ordem da Fase 1:
+**1.6 → 1.5 → 1.7**. Próximo: **1.6.4 — esperar o banco na partida**: no restart do Docker o `app`
+sobe antes do Postgres, o 1º ciclo falha com `connection refused` e o próximo só vem em 6h. Depois:
+1.6.5 saúde por fonte, 1.6.6 os 7 dias. O compose local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez,
 `config.yaml` montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
 Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é o `collector`,
 `-once` mantém a passada única; prazos derivam do `ctx` do sinal, o `closeRun` não. No
 `config.yaml`, `collect_every` é o intervalo entre coletas, `timeout` é o **orçamento da fonte**,
 timeout HTTP é `httpTimeout` (30s), `interval` é o rate limit. Abertos relevantes: D36 (fonte com 0
-itens — dono 1.6.4), D38 (parcial), D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17, D25.
+itens — dono 1.6.5), D38 (parcial), D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17, D25.
 
 Estado verificado em 2026-10-08: `gofmt`/`go vet`/`golangci-lint` limpos, suíte verde com `-race`
 (`main` ~12s); runs #62–#70 e a sequência de 1m ao vivo no compose local. O `app` local ficou
