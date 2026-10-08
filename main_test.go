@@ -743,3 +743,34 @@ func TestCtxCancel(t *testing.T) {
 		t.Errorf("expected error to contain 'context canceled'; got %s", runErr)
 	}
 }
+
+func TestWaitForDB(t *testing.T) {
+	tests := []struct {
+		name    string
+		dsn     string
+		wantErr bool
+		timeout time.Duration
+	}{
+		{"database up", dsn, false, 5 * time.Second},
+		{"nobody listening", "postgres://postgres:postgres@localhost:1/postgres?sslmode=disable", true, 300 * time.Millisecond},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+			err := waitForDB(ctx, slog.New(slog.DiscardHandler), tt.dsn, testInitialWait)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error got nil")
+				}
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Errorf("expected error deadline exceeded; got %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("failed to wait for db: %v", err)
+				}
+			}
+		})
+	}
+}

@@ -81,10 +81,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cycle := func() error {
-		return run(ctx, logger, dbURL, cfg)
+	dbCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	err = waitForDB(dbCtx, logger, dbURL, 100*time.Millisecond)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Error("could not connect to database in less than 2 minutes", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("shutting down")
+		return
 	}
 
+	cycle := func() error { return run(ctx, logger, dbURL, cfg) }
 	if *once {
 		if err := cycle(); err != nil {
 			logger.Error("failed to run", "error", err)
@@ -92,6 +101,25 @@ func main() {
 		}
 	} else {
 		collector(ctx, logger, cfg.CollectEvery, cycle)
+	}
+}
+
+func waitForDB(ctx context.Context, logger *slog.Logger, dbURL string, initialDBWait time.Duration) error {
+	counter := 1
+	for {
+		conn, err := openConn(ctx, dbURL)
+		if err != nil {
+			logger.Warn("failed to connect to database", "error", err, "attempt", counter)
+			counter++
+			err := client.Sleep(ctx, initialDBWait)
+			if err != nil {
+				return err
+			}
+			initialDBWait *= 2
+		} else {
+			conn.Close(ctx)
+			return nil
+		}
 	}
 }
 
