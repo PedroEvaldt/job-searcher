@@ -333,8 +333,13 @@ do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, c
       `TestWaitForDB` (banco de pé / porta sem ninguém), mutação sem retry pega pelo
       `errors.Is(DeadlineExceeded)`. Commits `f3de19f`, `1b15b5c`. Pi: relatado pelo aluno, sem
       saída colada — a prova com saída vem no redeploy da 1.6.6.
-- [ ] **1.6.5** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
-      K runs → `WARN` (K = 2: 12h sem dado no ciclo de 6h). Teste de integração.
+- [x] **1.6.5** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
+      K runs → `WARN` (K = 2: 12h sem dado no ciclo de 6h). Teste de integração. ✅ 2026-10-08 —
+      `sourceLooksBroken` (`store.go`): as K runs mais recentes por `id`, cada uma falha com erro
+      **ou** 0 itens, quebrada = K lidas e K falhas; menos de K = fonte nova, não quebrada. No
+      `run`, a checagem roda **antes** do `if !success` (o aviso sai justo no ciclo em que tudo
+      falhou). `TestSourceLooksBroken` com 5 casos. Ao vivo (cópia, remotive em `.invalid`): 1ª
+      passada sem aviso, 2ª com `WARN source is broken source=remotive after=2`.
 - [ ] **1.6.6** Os 7 dias: redeploy com a 1.6.5 e o relógio começa; consulta de runs por dia e por
       fonte; conferência no 7º dia.
 
