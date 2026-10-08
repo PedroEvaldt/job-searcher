@@ -22,6 +22,7 @@ func TestLoad(t *testing.T) {
 		{
 			name: "valid",
 			yaml: `
+collect_every: 6h
 sources:
   - name: remotive
     enabled: true
@@ -44,6 +45,7 @@ sources:
 		{
 			name: "enabled source without retries",
 			yaml: `
+collect_every: 6h
 sources:
   - name: remotive
     enabled: true
@@ -58,6 +60,7 @@ sources:
 		{
 			name: "enabled source without interval",
 			yaml: `
+collect_every: 6h
 sources:
   - name: remotive
     enabled: true
@@ -72,6 +75,7 @@ sources:
 		{
 			name: "disabled source without retry fields",
 			yaml: `
+collect_every: 6h
 sources:
   - name: remotive
     enabled: false
@@ -81,6 +85,20 @@ sources:
 				Name: "remotive",
 				URL:  "https://remotive.com/api/remote-jobs",
 			},
+		},
+		{
+			name: "without collect_every",
+			yaml: `
+sources:
+  - name: remotive
+    enabled: false
+    url: https://remotive.com/api/remote-jobs
+    timeout: 30s
+    retries: 3
+    initial_wait: 5s
+`,
+			wantErr:     true,
+			errContains: []string{"collect_every", "greater"},
 		},
 	}
 	for _, tt := range tests {

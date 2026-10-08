@@ -1,3 +1,4 @@
+collect_every: 6h
 sources:
   - name: remoteok
     enabled: true

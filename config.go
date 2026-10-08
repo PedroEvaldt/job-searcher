@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/PedroEvaldt/job-searcher/internal/sources"
 	"go.yaml.in/yaml/v3"
@@ -11,6 +12,7 @@ import (
 
 // Config is the parsed config.yaml: the list of sources the collector may pull from.
 type Config struct {
+	CollectEvery  time.Duration          `yaml:"collect_every"`
 	SourcesConfig []sources.SourceConfig `yaml:"sources"`
 }
 
@@ -28,6 +30,10 @@ func loadConfig(path string) (*Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal: %w", err)
+	}
+
+	if cfg.CollectEvery <= 0 {
+		return nil, fmt.Errorf("collect_every must be greater than 0")
 	}
 
 	for _, c := range cfg.SourcesConfig {
