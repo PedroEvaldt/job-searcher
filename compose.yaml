@@ -9,6 +9,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   postgres:
     image: postgres:16-alpine
@@ -36,7 +44,7 @@ services:
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
     depends_on:
-      app:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
 volumes:
   postgres_data:
