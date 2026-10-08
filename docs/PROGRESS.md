@@ -6,9 +6,10 @@
 
 ## Onde estou
 
-**Tarefa 1.4 fechada em 2026-10-07**, seguida de uma limpeza geral do código (mentor, a pedido).
-Fase 1 reordenada para **1.6 → 1.5 → 1.7** (0 duplicatas medidas). Próximo: **Tarefa 1.6 —
-agendamento e os 7 dias**, rodando no Raspberry Pi do aluno (detalhar ao abrir).
+**Tarefa 1.6 — agendamento e os 7 dias** (ordem da Fase 1: **1.6 → 1.5 → 1.7**). **1.6.1 fechada
+em 2026-10-07**: o coletor agora é um processo que coleta a cada `collect_every` e encerra com
+SIGINT/SIGTERM (`-once` mantém a passada única). Próximo: **1.6.2 — compose e deploy no Raspberry
+Pi**.
 
 Última sessão: **2026-10-07**.
 
@@ -455,6 +456,34 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   o backoff depois da **última** tentativa.
 - 🟡 D18 pago de vez (`new raw_job inserted` → `Debug`).
 
+### 2026-10-07 — Subtarefa 1.6.1 (laço de coleta)
+
+- ✅ **1.6.1 fechada.** `collect_every` no `Config` (validado `> 0` no `loadConfig`, `6h` no
+  `config.yaml`) + caso "without collect_every" no `TestLoad`. `collector(ctx, logger, interval,
+  cycle)`: ciclo na hora, depois um `time.Ticker` (criado uma vez, `defer t.Stop()`) num `for` +
+  `select` entre o tick e o `ctx.Done()`; ciclo que falha vira `ERROR` e o laço segue; `ctx`
+  cancelado → `INFO shutting down` e retorno. No `main`: `signal.NotifyContext(SIGINT, SIGTERM)`,
+  flag `-once` (passada única, sai 1 se falhar) e o `run` fechado numa closure — o `collector` decide
+  **quando**, o `main` decide **o quê**.
+- Testes sem banco: `TestCollector` (tabela: "runs until cancelled", "keeps going after failed
+  cycles") e `TestFirstCycle` (intervalo 1s, volta em < 500ms). Mutações: `select` sem `for` → os
+  dois casos da tabela; sem a chamada imediata → `TestFirstCycle` (1.0s); `return` depois do erro na
+  chamada imediata → `got 1`; no tick → `got 2`.
+- Ao vivo: runs #56–#58 (`go run .` + Ctrl+C) e #59–#61 (`-once`), 0 falhas, Himalayas ~6s.
+- Pelo caminho: ticker recriado a cada tick e `defer` dentro do `for`; `ctx.Done()` só logava e o
+  laço girava para sempre (o teste travou — era o teste funcionando); ciclo falso que devolvia o erro
+  **antes** de cancelar → `t2` pendurado; corrigido para "cancela na 1ª, espera 1", que passava com
+  as duas mutações de `return` (não provava nada); TAB na indentação do YAML do caso novo.
+- Feito pelo mentor a pedido: a última rodada de pendências (ordem cancelar → falhar e linha (b) com
+  3/3, TABs do YAML, `WithCancel` + `defer`, QF1011, nomes dos casos, comentários do `main` e do
+  `collector`).
+- ⚠️ Para a 1.6.2: o ciclo não recebe o `ctx`, então Ctrl+C **durante** uma coleta só encerra quando
+  ela termina (hoje ~8s; pior caso = soma dos orçamentos das fontes). O `docker stop` dá 10s antes do
+  SIGKILL → run sem `finished_at`. Decidir entre `stop_grace_period` e passar o `ctx` ao ciclo.
+- 🟢 Mencionados uma vez: `flag.Parse()` no meio do `main`; mensagem `bidibi bodobo` no ciclo falso.
+
+---
+
 ## Decisões tomadas
 
 | Data       | Decisão                                                                            | Por quê                                                                                                                                                                   |
@@ -633,19 +662,26 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-07** — retry também gasta orçamento: Himalayas com 120s, espera inicial 20s e 3
   tentativas → pior caso ≈ 61s por página (20s + 40s + 3 requisições); cabe 1 página, o teto 5 não.
   (Pergunta da 1.4.3 pulada pelo aluno; respondida pelo mentor.)
+- **2026-10-07** — injetar o ciclo como função separa **quando** (o laço) de **o quê** (a coleta):
+  o laço vira testável sem banco, com um ciclo falso que conta chamadas e cancela o `ctx`.
+- **2026-10-07** — um teste de "continua depois do erro" só prova algo se o ciclo falso continua
+  sendo chamado **depois** de falhar: cancelar na 1ª chamada faz o laço sair de qualquer jeito, e o
+  teste não distingue "segue" de "desiste". Por isso cancelar vem antes de falhar.
 
 ---
 
 ## Retomada rápida
 
-**Tarefa 1.4 fechada e limpeza geral feitas em 2026-10-07.** Ordem da Fase 1: **1.6 → 1.5 → 1.7**.
-Próximo: **Tarefa 1.6 — agendamento e os 7 dias**, no Raspberry Pi do aluno (arm64: build da imagem
-no próprio Pi ou multi-arch; detalhar ao abrir). Código do `main` agora em `main.go` / `config.go` /
-`migrate.go` / `store.go`. No `config.yaml`, `timeout` é o **orçamento da fonte**; timeout HTTP é
-`httpTimeout` (30s); `interval` é o rate limit. Abertos relevantes: D38 (parcial: teto no código,
-`Config` sem `Load` nos testes), D37 (`items[1:]` do Remote OK com `[]`), D36 (fonte com 0 itens —
-dono 1.6), D32 (auto-cura/reprocessamento), D33 (`Date`/`Location`/`Tags` não persistidos), D17.
+**1.6.1 fechada em 2026-10-07.** Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **1.6.2 — compose e
+Pi**: `analyzer` hoje depende de `service_completed_successfully` do `app`, o que quebra com o app
+virando daemon; `restart` no `app`; `config.yaml` como volume (hoje vai assado na imagem); rotação de
+log; parada no meio de uma coleta (ver ⚠️ da 1.6.1); deploy no Pi (arm64 — perguntar se o Docker já
+está instalado lá). Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é
+o `collector` em `main.go`, `-once` mantém a passada única. No `config.yaml`, `collect_every` é o
+intervalo entre coletas, `timeout` é o **orçamento da fonte**, timeout HTTP é `httpTimeout` (30s),
+`interval` é o rate limit. Abertos relevantes: D36 (fonte com 0 itens — dono 1.6.3), D38 (parcial),
+D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17.
 
-Estado verificado em 2026-10-07: `go build`/`go vet`/`gofmt`/`golangci-lint` limpos, suíte verde com
-`-race` (`main` ~13s; `internal/client` 1.5s; `internal/sources` 1.0s). Run #55 ao vivo: Himalayas 6.3s. Depois de mudar código, usar `docker compose up --build` (D25).
-A DSN do terminal usa a porta `5433` (ver `.env.example`).
+Estado verificado em 2026-10-07: `go vet`/`gofmt`/`golangci-lint` limpos, `TestLoad`,
+`TestCollector` e `TestFirstCycle` verdes com `-race`; runs #56–#61 ao vivo. Depois de mudar código,
+usar `docker compose up --build` (D25). A DSN do terminal usa a porta `5433` (ver `.env.example`).

@@ -291,7 +291,34 @@ fontes em 607 (empresa + título, sem caixa nem pontuação); as 6 empresas pres
 vagas diferentes. Dedupe agora seria abstração antes da dor. A 1.6 vai primeiro porque os 7 dias são
 de calendário — o relógio corre enquanto o resto é feito — e a semana de dados alimenta a 1.5.
 
-### 📍 Tarefa 1.6 — Agendamento e os 7 dias *(detalhar ao abrir)* — coletor roda sozinho de tempos em tempos (no Raspberry Pi do aluno, arm64) + relatório de saúde por fonte (D36); uma semana sem intervenção.
+### 📍 Tarefa 1.6 — Agendamento e os 7 dias
+
+**Objetivo:** o coletor vira um processo que coleta sozinho a cada N horas, roda no Raspberry Pi 5
+(arm64, Debian) dentro do compose e avisa quando uma fonte parece quebrada.
+
+**Critério de aceite:** 7 dias seguidos de runs em `runs` no Pi, no intervalo configurado, sem
+nenhuma intervenção manual; uma consulta mostra runs por dia e por fonte; uma fonte com 0 itens ou
+erro em K ciclos seguidos gera um aviso no log (D36).
+
+**Conceitos novos:** `time.Ticker`, desligamento gracioso com `signal.NotifyContext`, injetar a função
+do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, consulta com janela.
+
+**Onde ler:** [signal.NotifyContext](https://pkg.go.dev/os/signal#NotifyContext) ·
+[time.Ticker](https://pkg.go.dev/time#Ticker) ·
+[Compose `restart`](https://docs.docker.com/reference/compose-file/services/#restart)
+
+- [x] **1.6.1** Laço de coleta: `collect_every` no `config.yaml`, primeira coleta na hora, ciclo
+      com falha vira log `ERROR` e o processo segue; SIGINT/SIGTERM encerram; flag `-once` mantém
+      a passada única. Teste do laço sem banco. ✅ 2026-10-07 — `collector(ctx, logger, interval,
+      cycle)` recebe o ciclo como função (o `main` fecha `run` numa closure); `TestCollector` +
+      `TestFirstCycle` com ciclo falso, 4 mutações pegas; ao vivo: runs #56–#61.
+- [ ] **1.6.2** Compose e Pi: `app` com `restart`, `analyzer` sem esperar o `app` terminar,
+      `config.yaml` montado como volume (revisita a decisão de 2026-09-15), rotação de log; deploy
+      no Pi. Aquecimento: os dados já entram, o relógio ainda não conta.
+- [ ] **1.6.3** Saúde por fonte (D36): ao fim de cada ciclo, fonte com 0 itens ou erro nas últimas
+      K runs → `WARN`. Teste de integração.
+- [ ] **1.6.4** Os 7 dias: redeploy com a 1.6.3 e o relógio começa; consulta de runs por dia e por
+      fonte; conferência no 7º dia.
 
 ### Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
 
