@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/PedroEvaldt/job-searcher/internal/client"
@@ -51,7 +54,8 @@ func newSource(name string, c *client.Client) (Source, error) {
 }
 
 // main wires the process together: load .env and DATABASE_URL, load config.yaml,
-// then run a single collection pass. It is the only place that exits the process.
+// then collect every collect_every until SIGINT or SIGTERM, or run a single
+// collection pass with -once. It is the only place that exits the process.
 func main() {
 	logger := slog.Default()
 
@@ -71,9 +75,46 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(logger, dbURL, cfg); err != nil {
+	once := flag.Bool("once", false, "run one time only")
+	flag.Parse()
+
+	cycle := func() error {
+		return run(logger, dbURL, cfg)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if *once {
+		if err := cycle(); err != nil {
+			logger.Error("failed to run", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		collector(ctx, logger, cfg.CollectEvery, cycle)
+	}
+}
+
+// collector runs cycle once right away, then again on every tick of interval, and
+// returns when ctx is cancelled. A failed cycle is logged and does not stop the
+// loop: the next tick tries again.
+func collector(ctx context.Context, logger *slog.Logger, interval time.Duration, cycle func() error) {
+	if err := cycle(); err != nil {
 		logger.Error("failed to run", "error", err)
-		os.Exit(1)
+	}
+
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			if err := cycle(); err != nil {
+				logger.Error("failed to run", "error", err)
+			}
+		case <-ctx.Done():
+			logger.Info("shutting down")
+			return
+		}
 	}
 }
 

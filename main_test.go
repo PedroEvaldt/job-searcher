@@ -599,3 +599,59 @@ func setupPostgres() (*sql.DB, func() error, error) {
 	}
 	return db, teardown, nil
 }
+
+func TestCollector(t *testing.T) {
+	tests := []struct {
+		name        string
+		interval    time.Duration
+		toCancel    int
+		wantedCalls int
+		alwaysFail  bool
+	}{
+		{"runs until cancelled", 10 * time.Millisecond, 3, 3, false},
+		{"keeps going after failed cycles", 10 * time.Millisecond, 3, 3, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			counter := 0
+			cycle := func() error {
+				counter++
+				// Cancel before failing, so a failing cycle still ends the loop.
+				if counter == tt.toCancel {
+					cancel()
+				}
+				if tt.alwaysFail {
+					return errors.New("bidibi bodobo")
+				}
+				return nil
+			}
+			collector(ctx, slog.New(slog.DiscardHandler), tt.interval, cycle)
+
+			if counter != tt.wantedCalls {
+				t.Errorf("expected %d; got %d", tt.wantedCalls, counter)
+			}
+		})
+	}
+}
+
+func TestFirstCycle(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	counter := 0
+	cycle := func() error {
+		counter++
+		cancel()
+		return nil
+	}
+	begin := time.Now()
+	collector(ctx, slog.New(slog.DiscardHandler), time.Second, cycle)
+	after := time.Since(begin)
+	if after > 500*time.Millisecond {
+		t.Errorf("expected time < 500ms; got %v", after)
+	}
+	if counter != 1 {
+		t.Errorf("expected 1 cycle; got %d", counter)
+	}
+}
