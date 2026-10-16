@@ -376,11 +376,15 @@ Lemon.io).
 **Onde ler:** [`regexp_replace`](https://www.postgresql.org/docs/16/functions-matching.html#FUNCTIONS-POSIX-REGEXP) ·
 [agregados e `HAVING`](https://www.postgresql.org/docs/16/tutorial-agg.html)
 
-- [ ] **1.5.1** Medir: `db/queries/duplicates.sql` — grupos por empresa + título normalizados,
+- [x] **1.5.1** Medir: `db/queries/duplicates.sql` — grupos por empresa + título normalizados,
       entre fontes × dentro da mesma fonte, com quantos têm descrição idêntica; lista dos casos
-      entre fontes.
-- [ ] **1.5.2** A regra: decidir a chave a partir da 1.5.1 (descrição idêntica conta dentro da
-      mesma fonte?) e escrevê-la em Go, com teste em tabela dos casos reais.
+      entre fontes. ✅ 2026-10-16 — `cross_source` 2/4/0, `same_source` 382/1102/190; 2ª consulta
+      com as chaves num `WITH` e volta a `jobs` pelo `JOIN` normalizado (Huzzle, Lemon.io).
+- [ ] **1.5.2** A regra, em Go, com teste em tabela dos casos reais: chave = empresa + título
+      normalizados (minúsculas, só `a-z0-9`); duplicata = mesma chave **e** (fonte diferente **ou**
+      descrição idêntica). Os 192 grupos da mesma fonte com descrição diferente **não** são
+      duplicata: na Bjak, "Engineering Manager" aparece em duas versões que só diferem no bloco
+      Location — uma híbrida, outra remota global.
 - [ ] **1.5.3** Marcar: preencher `duplicate_of` apontando para a vaga mais antiga do grupo;
       teste de integração.
 - [ ] **1.5.4** Re-medir no banco do Pi copiado: o critério de aceite.

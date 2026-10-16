@@ -10,8 +10,8 @@
 Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
 energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
-Próximo: **1.5.1 — medir duplicatas** (`db/queries/duplicates.sql`). Depois, 1.7 (D37, D17, D39,
-README).
+**1.5.1** (medir duplicatas, 2026-10-16) fechada. Próximo: **1.5.2 — a regra de dedupe em Go**.
+Depois, 1.5.3–1.5.4 e a 1.7 (D37, D17, D39, README).
 
 Última sessão: **2026-10-16**.
 
@@ -642,6 +642,22 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **Medição da 1.5 (mentor, para planejar):** 382 grupos repetidos dentro da mesma fonte (1.102
   vagas, Himalayas; 190 com descrição idêntica), 2 entre fontes. Tarefa 1.5 detalhada no ROADMAP.
 
+### 2026-10-16 — Subtarefa 1.5.1 (medir duplicatas)
+
+- O aluno pediu o enunciado no formato "o que a consulta devolve + saída esperada" e explicação de
+  `regexp_replace` (padrão `[^a-z0-9]+`, `lower` por dentro), `GROUP BY`/`HAVING` (coluna solta
+  não pode aparecer na linha do grupo) e `FILTER`.
+- Furos pelo caminho: `HAVING` some do `WITH` (todo singleton virava grupo: 11.860);
+  `COUNT(vaga)` contava grupos, não vagas (→ `SUM`); na 2ª consulta, agrupar pelo texto original
+  dava 0 linhas ("Full-stack" × "Full stack") e `source_id` solto no `WITH` dava erro de
+  agregação — resolvido com as chaves no `WITH` e `JOIN` de volta a `jobs` pelas expressões
+  normalizadas. Nomes trocados para inglês pelo mentor, a pedido; `ORDER BY kind` adicionado.
+- **Para a regra (mentor):** nos 192 grupos da mesma fonte com descrição diferente, salário e
+  `remote_scope` não variam (o Himalayas não preenche `remote_scope`); 106 diferem em menos de
+  200 caracteres. Diff de duas versões da Bjak "Engineering Manager": só o bloco Location muda —
+  "hybrid role, 3 days per week" × "remote role, we hire globally".
+- ✅ **1.5.1 fechada.**
+
 ---
 
 ## Decisões tomadas
@@ -667,6 +683,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-09-15 | `config.yaml` assado na imagem, não montado como volume | Mantém a imagem autocontida: `docker run` funciona sem `-v`. **Custo aceito e não discutido pelo aluno:** mudar uma linha do `config.yaml` exige rebuild da imagem, o que atrita com a promessa do §6 do SPEC ("ajusta o `config.yaml` e roda `docker compose up`"). Revisitar na 0.4.3 ou na Etapa 1, quando a lista de fontes começar a mudar de verdade. |
 | 2026-10-08 | `config.yaml` assado na imagem **e** montado só-leitura por cima no compose (revisa a de 2026-09-15) | A imagem continua autocontida (`docker run` sem `-v` funciona) e no compose mudar o arquivo vale com `restart`, sem rebuild — paga o custo que a decisão de 2026-09-15 aceitou. Pegadinha registrada: bind mount de arquivo inexistente vira **diretório** no host. |
 | 2026-10-08 | Espera inicial pelo banco no `main` (`waitForDB`), não `depends_on` | O `depends_on` só vale no `compose up`; no boot e no restart do Docker os containers voltam sem ordem. Esperar no próprio processo também cobre o k8s da Etapa 6, que não tem ordem de partida. Prazo de 2 min; esgotou → exit 1 e o `restart` tenta de novo. |
+| 2026-10-16 | Duplicata = mesma empresa + título normalizados **e** (fonte diferente **ou** descrição idêntica) | Entre fontes a descrição nunca bate (HTML × texto), então a chave basta (2 grupos/semana, os dois a mesma vaga). Dentro da mesma fonte, descrição diferente pode ser outra vaga para quem procura remoto: a Bjak publica a mesma "Engineering Manager" híbrida e remota global, e só o bloco Location muda. Fundir esconderia a remota atrás da híbrida. **Custo aceito:** variações cosméticas da mesma vaga (106 grupos diferem em < 200 caracteres) continuam aparecendo repetidas. |
 | 2026-10-08 | `sleep` do client exportado (`client.Sleep`) em vez de copiado no `main` | Uma espera que respeita o `ctx`, num lugar só. **Custo aceito:** o pacote `client` (HTTP) passa a exportar um utilitário que não é de HTTP. Se aparecer um terceiro uso, mudar para um pacote próprio. |
 
 ---
