@@ -8,9 +8,10 @@
 
 **Tarefa 1.6 fechada em 2026-10-16** — o critério da Fase 1 ("roda 7 dias sozinho") foi atendido no
 Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
-energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **copiar os
-dados do Pi para o PC** (`pg_dump` → banco `jobs_pi` local) e a **Tarefa 1.5** (medir duplicatas
-com a semana de dados). Depois, 1.7 (D37, D17, D39, README).
+energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
+para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
+Próximo: **1.5.1 — medir duplicatas** (`db/queries/duplicates.sql`). Depois, 1.7 (D37, D17, D39,
+README).
 
 Última sessão: **2026-10-16**.
 
@@ -633,6 +634,13 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   recupera a sequência pulando os valores que já tinha pré-registrado no WAL (até 32). 135 ids,
   105 runs.
 - ✅ **1.6.6 fechada; Tarefa 1.6 fechada.**
+- **Cópia para o PC:** o aluno apagou o volume local; `pg_dump -Fc` do Pi (45 MB) restaurado no
+  `jobs` local (`dropdb --force` + `createdb` + `pg_restore --no-owner`). 1ª tentativa deu 3 runs:
+  o dump não tinha sido feito e um `docker compose up -d` completo subiu o `app` local, que migrou
+  e coletou no banco vazio. O dump ficou em `db_dump/` dentro do repositório → `db_dump/` no
+  `.gitignore`. Aula de `-T` (sem TTY quando há `<`/`>`/`|`) e dos binários do Postgres.
+- **Medição da 1.5 (mentor, para planejar):** 382 grupos repetidos dentro da mesma fonte (1.102
+  vagas, Himalayas; 190 com descrição idêntica), 2 entre fontes. Tarefa 1.5 detalhada no ROADMAP.
 
 ---
 
@@ -864,10 +872,10 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 ## Retomada rápida
 
 **Tarefa 1.6 fechada em 2026-10-16** (Pi em `~/pi/job-searcher`, código `de94bb3`, coletando a cada
-6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). Próximo: copiar os dados do Pi
-(`ssh pi '… pg_dump -Fc jobs' > ~/job-radar-dumps/…` → `createdb jobs_pi` + `pg_restore --no-owner`
-no Postgres local) e a **Tarefa 1.5** (duplicatas medidas com a semana de dados); depois 1.7 (D37,
-D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
+6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). O `jobs` local é a cópia do Pi de 2026-10-16
+(dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.1 — medir
+duplicatas**; depois 1.5.2–1.5.4 e a 1.7 (D37, D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
 `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose local já está
 provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml` montado `:ro`,

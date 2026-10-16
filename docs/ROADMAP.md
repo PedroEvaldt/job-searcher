@@ -357,7 +357,33 @@ o estado do Docker no Pi desconhecido. Local primeiro; o Pi recebe um compose j�
 religa os containers sem a ordem do `depends_on`, e um 1º ciclo perdido custa 6h, o que quebraria o
 critério dos 7 dias. Saúde e 7 dias viraram 1.6.5 e 1.6.6.
 
-### 📍 Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
+### 📍 Tarefa 1.5 — Deduplicação
+
+**Objetivo:** a mesma vaga aparece uma vez só para quem lê `jobs`: as cópias apontam para a
+original por `duplicate_of`.
+
+**Por quê:** medido em 2026-10-16 no banco do Pi copiado (12.584 vagas, 7 dias): empresa + título
+sem caixa nem pontuação repetem em **382 grupos dentro da mesma fonte** (1.102 vagas, quase tudo
+Himalayas; 190 grupos com descrição idêntica — a CapsLock publicou a mesma vaga 12× no mesmo
+segundo, só o número no fim da URL muda) e em **2 grupos entre fontes** (Huzzle, Lemon.io). Sem
+dedupe, o ranking e o digest da Fase 5 mostram a mesma vaga N vezes. Em 2026-10-07 (607 vagas)
+eram 0 — a dor apareceu com volume.
+
+**Critério de aceite:** a consulta de duplicatas, rodada de novo, não acha grupo com mais de uma
+vaga viva (`duplicate_of IS NULL`); teste de integração com os casos reais (CapsLock, Huzzle,
+Lemon.io).
+
+**Onde ler:** [`regexp_replace`](https://www.postgresql.org/docs/16/functions-matching.html#FUNCTIONS-POSIX-REGEXP) ·
+[agregados e `HAVING`](https://www.postgresql.org/docs/16/tutorial-agg.html)
+
+- [ ] **1.5.1** Medir: `db/queries/duplicates.sql` — grupos por empresa + título normalizados,
+      entre fontes × dentro da mesma fonte, com quantos têm descrição idêntica; lista dos casos
+      entre fontes.
+- [ ] **1.5.2** A regra: decidir a chave a partir da 1.5.1 (descrição idêntica conta dentro da
+      mesma fonte?) e escrevê-la em Go, com teste em tabela dos casos reais.
+- [ ] **1.5.3** Marcar: preencher `duplicate_of` apontando para a vaga mais antiga do grupo;
+      teste de integração.
+- [ ] **1.5.4** Re-medir no banco do Pi copiado: o critério de aceite.
 
 ### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
 
