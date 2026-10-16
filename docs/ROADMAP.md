@@ -291,7 +291,7 @@ fontes em 607 (empresa + título, sem caixa nem pontuação); as 6 empresas pres
 vagas diferentes. Dedupe agora seria abstração antes da dor. A 1.6 vai primeiro porque os 7 dias são
 de calendário — o relógio corre enquanto o resto é feito — e a semana de dados alimenta a 1.5.
 
-### 📍 Tarefa 1.6 — Agendamento e os 7 dias
+### Tarefa 1.6 — Agendamento e os 7 dias ✅ fechada 2026-10-16
 
 **Objetivo:** o coletor vira um processo que coleta sozinho a cada N horas, roda no Raspberry Pi 5
 (arm64, Debian) dentro do compose e avisa quando uma fonte parece quebrada.
@@ -340,11 +340,14 @@ do ciclo para testar o laço sem banco, `restart` do compose, deploy em arm64, c
       `run`, a checagem roda **antes** do `if !success` (o aviso sai justo no ciclo em que tudo
       falhou). `TestSourceLooksBroken` com 5 casos. Ao vivo (cópia, remotive em `.invalid`): 1ª
       passada sem aviso, 2ª com `WARN source is broken source=remotive after=2`.
-- [ ] **1.6.6** Os 7 dias: redeploy com a 1.6.5 e o relógio começa; consulta de runs por dia e por
-      fonte; conferência no 7º dia. 🕒 Relógio começou em 2026-10-08 (noite; deploy de `fa638fd` +
-      restart do Docker, relatados pelo aluno, saída não colada). `db/queries/health.sql`
-      (`de94bb3`): runs por dia (Brasília) e por fonte, e maior intervalo por fonte (`lag`).
-      Conferência em **2026-10-15**, sem mexer no Pi até lá.
+- [x] **1.6.6** Os 7 dias: redeploy com a 1.6.5 e o relógio começa; consulta de runs por dia e por
+      fonte; conferência no 7º dia. ✅ 2026-10-16 — relógio de 2026-10-08 17:56 (run #1 do banco
+      do Pi) a 2026-10-16: as 3 fontes com runs **todos os dias**, maior intervalo **6h03**, sem
+      intervenção. `db/queries/health.sql` (`de94bb3`). Três quedas de energia no meio (14/10
+      ~16:12 e ~16:19, 15/10 14:30): o compose voltou sozinho e o banco foi esperado (prova real da
+      1.6.4), mas o 1º ciclo de cada volta falhou por DNS (`lookup … on 127.0.0.11:53: server
+      misbehaving` — o roteador volta depois do Pi) → D39. Conferência feita pelo mentor via SSH,
+      só leitura.
 
 **Dividida em 2026-10-07:** a antiga 1.6.2 (compose + Pi) passava de 90 min com a parada limpa que
 a 1.6.1 revelou (Ctrl+C no meio de uma coleta só valia no fim dela; `docker stop` mata em 10s) e com
@@ -354,7 +357,7 @@ o estado do Docker no Pi desconhecido. Local primeiro; o Pi recebe um compose j�
 religa os containers sem a ordem do `depends_on`, e um 1º ciclo perdido custa 6h, o que quebraria o
 critério dos 7 dias. Saúde e 7 dias viraram 1.6.5 e 1.6.6.
 
-### Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
+### 📍 Tarefa 1.5 — Deduplicação *(resumo)* — medir de novo com a semana de dados: construir com casos reais se houver duplicata; senão, registrar a decisão medida e adiar até entrar fonte ATS.
 
 ### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
 

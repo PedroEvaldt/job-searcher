@@ -6,16 +6,13 @@
 
 ## Onde estou
 
-**Tarefa 1.6 — agendamento e os 7 dias** (ordem da Fase 1: **1.6 → 1.5 → 1.7**). **1.6.1** (laço
-de coleta, 2026-10-07) e **1.6.2** (parada limpa + compose de daemon, 2026-10-08) fechadas: o
-coletor roda como daemon no compose, para em menos de 1s mesmo no meio de uma coleta e lê o
-`config.yaml` do disco. **1.6.3** (deploy no Pi, 2026-10-08) feita; o aquecimento revelou que o 1º
-ciclo depois de um restart do Docker falha (banco ainda subindo). **1.6.4** (esperar o banco na
-partida) e **1.6.5** (saúde por fonte, D36), ambas em 2026-10-08, fechadas. **1.6.6 em curso: o
-relógio dos 7 dias começou em 2026-10-08 à noite**; conferência em **2026-10-15**. Enquanto isso:
-itens locais da 1.7 (D37, D17, README), sem deploy no Pi.
+**Tarefa 1.6 fechada em 2026-10-16** — o critério da Fase 1 ("roda 7 dias sozinho") foi atendido no
+Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
+energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Próximo: **copiar os
+dados do Pi para o PC** (`pg_dump` → banco `jobs_pi` local) e a **Tarefa 1.5** (medir duplicatas
+com a semana de dados). Depois, 1.7 (D37, D17, D39, README).
 
-Última sessão: **2026-10-08**.
+Última sessão: **2026-10-16**.
 
 ---
 
@@ -613,6 +610,30 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - Formato do `start`: `'2026-10-08 18:30:12-03'`, o `started_at` da consulta com `+00`, ou
   `date -Iseconds` — os três testados.
 
+### 2026-10-16 — Subtarefa 1.6.6 fechada (conferência do dia 7) · Tarefa 1.6 fechada
+
+- Conferência feita pelo mentor via `ssh pi` (só leitura), depois que o aluno não entendeu o passo
+  de achar o início do relógio. **Antes:** o aluno tinha rodado `docker compose down` no Pi (journal:
+  containers parados às 16:40:16) — volume intacto, mas **os logs da semana foram junto** (o log
+  `json-file` mora no container), então o `grep` dos `WARN` virou leitura do banco. Subiu de novo
+  com `up -d`.
+- **O banco do Pi foi recriado no deploy da 1.6.5**: a run #1 é de 2026-10-08 17:56:46 -03 (as runs
+  do aquecimento, 12:48, sumiram — provavelmente um `down -v`). Não houve o par de ciclos "deploy +
+  restart um minuto depois": a prova do restart da 1.6.4 não foi feita no deploy.
+- **Resultado** (`start = 2026-10-08 20:56:46+00`): 4 runs por fonte por dia (2 no dia parcial de
+  08/10, 5 em 14/10); maior intervalo **6h03** nas 3 fontes. 105 runs, 9 com erro, todas por DNS.
+- **Três quedas de energia, e a prova real da 1.6.4:** 14/10 ~16:12 e ~16:19 e 15/10 14:30 (o
+  único boot no journal, que não é persistente). Em cada uma o compose voltou sozinho e o `app`
+  conectou no banco (abriu as runs), mas o ciclo imediato falhou nas 3 fontes com `dial tcp: lookup
+  remoteok.com on 127.0.0.11:53: server misbehaving` — o DNS embutido do Docker sem upstream: o
+  roteador volta depois do Pi. Próxima coleta boa só 6h depois (D39). Às 16:19 de 14/10 a 2ª falha
+  seguida teria disparado o `WARN source is broken` nas 3 fontes ao mesmo tempo — a assinatura de
+  rede, não de formato (era a pergunta da 1.6.5).
+- O `id` das runs pulou de 75 para 106 em 14/10: depois de um desligamento sujo, o Postgres
+  recupera a sequência pulando os valores que já tinha pré-registrado no WAL (até 32). 135 ids,
+  105 runs.
+- ✅ **1.6.6 fechada; Tarefa 1.6 fechada.**
+
 ---
 
 ## Decisões tomadas
@@ -694,6 +715,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | ✅ fechado 2026-10-08 (1.6.5) — `sourceLooksBroken` + `WARN source is broken` ao fim de cada ciclo; o parser continua devolvendo zero sem erro, mas não passa mais calado |
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
+| D39 | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | aberto — 🟡, dono: 1.7 |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -830,26 +852,31 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   (`docker stop`/`compose stop`) — nem depois de um restart do daemon. O código de saída importa
   para `on-failure` e para quem lê o `docker ps` (`Exited (1)` diz "morreu", `Exited (0)` diz
   "parou"). (Pergunta da 1.6.4 pulada pelo aluno; respondida pelo mentor.)
+- **2026-10-16** — `docker compose down` remove os containers e, com eles, os **logs** (`json-file`
+  mora em `/var/lib/docker/containers/<id>/`); os volumes ficam. `down -v` apaga também os volumes —
+  o banco inteiro. Para parar sem perder log: `docker compose stop`.
+- **2026-10-16** — container resolve nomes pelo DNS embutido do Docker (`127.0.0.11`), que repassa
+  para o DNS do host. `server misbehaving` ali = o host sem DNS (roteador ainda bootando), não o site
+  fora do ar. Três fontes falhando juntas com o mesmo erro de rede = problema de casa.
 
 ---
 
 ## Retomada rápida
 
-**Relógio dos 7 dias começou em 2026-10-08 à noite** (Pi em `~/pi/job-searcher`, código `fa638fd`,
-coletando a cada 6h). **Conferência em 2026-10-15**, no Pi: `docker compose exec -T postgres psql
--U postgres -d jobs -v start='<início>' < db/queries/health.sql` + `docker compose logs app | grep
-"source is broken"`. Pronto quando: as 3 fontes com runs em todos os dias, maior intervalo ~6h,
-`WARN`s revisados. Até lá, nada de deploy nem restart no Pi. Ordem da Fase 1: **1.6 → 1.5 → 1.7**;
-durante a semana, os itens locais da 1.7 (D37, D17, README) — a 1.5 (dedupe) espera os dados da
-semana. Antes do `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de
-cada ciclo, `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose
-local já está provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml`
-montado `:ro`, log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
+**Tarefa 1.6 fechada em 2026-10-16** (Pi em `~/pi/job-searcher`, código `de94bb3`, coletando a cada
+6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). Próximo: copiar os dados do Pi
+(`ssh pi '… pg_dump -Fc jobs' > ~/job-radar-dumps/…` → `createdb jobs_pi` + `pg_restore --no-owner`
+no Postgres local) e a **Tarefa 1.5** (duplicatas medidas com a semana de dados); depois 1.7 (D37,
+D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
+`collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
+`sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose local já está
+provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml` montado `:ro`,
+log `json-file` 10m×3, `stop` em < 1s mesmo no meio de uma coleta.
 Código do `main` em `main.go` / `config.go` / `migrate.go` / `store.go`; o laço é o `collector`,
 `-once` mantém a passada única; prazos derivam do `ctx` do sinal, o `closeRun` não. No
 `config.yaml`, `collect_every` é o intervalo entre coletas, `timeout` é o **orçamento da fonte**,
-timeout HTTP é `httpTimeout` (30s), `interval` é o rate limit. Abertos relevantes: D38 (parcial), D37
-(`items[1:]` do Remote OK com `[]`), D32, D33, D17, D25.
+timeout HTTP é `httpTimeout` (30s), `interval` é o rate limit. Abertos relevantes: D39 (ciclo falho
+espera 6h), D38 (parcial), D37 (`items[1:]` do Remote OK com `[]`), D32, D33, D17, D25.
 
 Estado verificado em 2026-10-08: `gofmt`/`go vet`/`golangci-lint` limpos; suíte verde com `-race`
 (`main` ~12s); runs #62–#70 e a sequência de 1m ao vivo no compose local. O `app` local ficou
