@@ -831,3 +831,121 @@ func TestSourceLooksBroken(t *testing.T) {
 		})
 	}
 }
+
+// jobSource is a Source whose items are sources.Job values encoded as JSON, so a test
+// can feed collectAndStoreData any job it wants. Fetch is never called there.
+type jobSource struct{}
+
+func (jobSource) Fetch(context.Context, string) ([]json.RawMessage, error) {
+	return nil, nil
+}
+
+func (s jobSource) ExternalID(item json.RawMessage) (string, error) {
+	job, err := s.ToJob(item)
+	return job.ExternalID, err
+}
+
+func (jobSource) ToJob(item json.RawMessage) (sources.Job, error) {
+	var job sources.Job
+	err := json.Unmarshal(item, &job)
+	return job, err
+}
+
+// jobItem encodes one job in the format jobSource reads.
+func jobItem(t *testing.T, externalID, company, title, description string) json.RawMessage {
+	t.Helper()
+	item, err := json.Marshal(sources.Job{ExternalID: externalID, Company: company, Title: title, Description: description})
+	if err != nil {
+		t.Fatalf("failed to encode job %s: %v", externalID, err)
+	}
+	return item
+}
+
+// TestMarkDuplicates writes the real cases from 1.5.1 through collectAndStoreData,
+// in order, and checks where each job's duplicate_of points: copies point at the
+// oldest live match, never at a copy, and jobs the rule keeps apart stay live.
+func TestMarkDuplicates(t *testing.T) {
+	_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	ctx := t.Context()
+	conn := newConn(t)
+	logger := slog.New(slog.DiscardHandler)
+
+	himalayasID, err := getSourceID(ctx, conn, "himalayas")
+	if err != nil {
+		t.Fatalf("failed to get himalayas id: %v", err)
+	}
+	remoteokID, err := getSourceID(ctx, conn, "remoteok")
+	if err != nil {
+		t.Fatalf("failed to get remoteok id: %v", err)
+	}
+
+	const (
+		editor = "Social Media Video Editor & Designer"
+		sdr    = "Junior Sales Development Representative"
+	)
+	himalayas := []json.RawMessage{
+		jobItem(t, "h1", "CapsLock", editor, "Edit short videos."),
+		jobItem(t, "h2", "CapsLock", editor, "Edit short videos."),
+		jobItem(t, "h3", "CapsLock", editor, "Edit short videos."),
+		jobItem(t, "h4", "Bjak", "Engineering Manager", "Hybrid role, 3 days in the office."),
+		jobItem(t, "h5", "Bjak", "Engineering Manager", "Remote role, we hire globally."),
+		jobItem(t, "h6", "Huzzle", sdr+" - IT Industry", "<p>Sell IT services.</p>"),
+		jobItem(t, "h7", "Gate", "内容风控专家", "Content risk."),
+	}
+	remoteok := []json.RawMessage{
+		jobItem(t, "r1", "Huzzle", sdr+" IT Industry", "Sell IT services."),
+		jobItem(t, "r2", "Bjak", "Engineering Manager", "Bjak engineering manager."),
+		jobItem(t, "r3", "Gate", "测试负责人", "Test lead."),
+	}
+	if failed := collectAndStoreData(ctx, conn, logger, himalayas, jobSource{}, himalayasID); failed != 0 {
+		t.Fatalf("expected 0 failed himalayas items; got %d", failed)
+	}
+	if failed := collectAndStoreData(ctx, conn, logger, remoteok, jobSource{}, remoteokID); failed != 0 {
+		t.Fatalf("expected 0 failed remoteok items; got %d", failed)
+	}
+
+	// Each job's external id, and the external id of the job it points at ("" = live).
+	rows, err := conn.Query(ctx, `
+		SELECT j.external_id, COALESCE(o.external_id, '')
+		FROM jobs j
+		LEFT JOIN jobs o ON o.id = j.duplicate_of;`)
+	if err != nil {
+		t.Fatalf("failed to query jobs: %v", err)
+	}
+	defer rows.Close()
+	got := map[string]string{}
+	for rows.Next() {
+		var job, original string
+		if err := rows.Scan(&job, &original); err != nil {
+			t.Fatalf("failed to scan job: %v", err)
+		}
+		got[job] = original
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("failed to read jobs: %v", err)
+	}
+
+	want := map[string]string{
+		"h1": "",
+		"h2": "h1",
+		"h3": "h1", // not h2: a copy is never a candidate, so copies do not chain
+		"h4": "",
+		"h5": "", // same source, different description: kept apart from h4
+		"h6": "",
+		"h7": "",
+		"r1": "h6",
+		"r2": "h4", // matches h4 and h5 (other source); the oldest wins
+		"r3": "",   // title normalizes to "": never a duplicate
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d jobs; got %d", len(want), len(got))
+	}
+	for job, original := range want {
+		if got[job] != original {
+			t.Errorf("%s: expected duplicate_of %q; got %q", job, original, got[job])
+		}
+	}
+}

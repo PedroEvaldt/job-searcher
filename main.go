@@ -336,9 +336,15 @@ func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logge
 			failed++
 			continue
 		}
-		err = insertJob(ctx, conn, rawJobID, sourceID, externalID, job)
+		jobID, err := insertJob(ctx, conn, rawJobID, sourceID, externalID, job)
 		if err != nil {
 			logger.Warn("failed to insert job", "external_id", externalID, "error", err)
+			failed++
+			continue
+		}
+		err = updateDuplicate(ctx, conn, jobID, sourceID, job)
+		if err != nil {
+			logger.Warn("failed to update jobs duplicate_of field", "external_id", externalID, "error", err)
 			failed++
 			continue
 		}

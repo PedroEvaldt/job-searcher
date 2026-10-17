@@ -112,11 +112,13 @@ func insertRawJob(ctx context.Context, conn querier, logger *slog.Logger, item j
 
 // insertJob upserts one normalized job into the jobs table. On conflict it updates
 // the row in place and resets scored_at to NULL whenever the underlying raw_job
-// changed, pushing a job whose text changed back into the scoring queue.
-func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, externalID string, job sources.Job) error {
+// changed, pushing a job whose text changed back into the scoring queue. It also
+// writes the dedupe keys (normalize) and returns the job's id, inserted or updated.
+func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, externalID string, job sources.Job) (int, error) {
+	companyKey, titleKey := normalize(job.Company, job.Title)
 	const query = `
-		INSERT INTO jobs (raw_job_id, source_id, external_id, title, company, url, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO jobs (raw_job_id, source_id, external_id, title, company, url, description, company_key, title_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT ON CONSTRAINT uq_source_id_external_id
 		DO UPDATE SET
 			title = EXCLUDED.title,
@@ -124,13 +126,65 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 			url = EXCLUDED.url,
 			description = EXCLUDED.description,
 			raw_job_id = EXCLUDED.raw_job_id,
+			company_key = EXCLUDED.company_key,
+			title_key = EXCLUDED.title_key,
 			scored_at = CASE
 				WHEN EXCLUDED.raw_job_id = jobs.raw_job_id THEN jobs.scored_at
 				ELSE NULL
-			END;`
-	_, err := conn.Exec(ctx, query, rawJobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description)
+			END RETURNING id;`
+	var jobID int
+	err := conn.QueryRow(ctx, query, rawJobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description, companyKey, titleKey).Scan(&jobID)
 	if err != nil {
-		return fmt.Errorf("failed to insert job: %w", err)
+		return 0, fmt.Errorf("failed to insert job: %w", err)
+	}
+	return jobID, nil
+}
+
+// updateDuplicate points the job just written (jobID, from source1) at the oldest
+// live job that isDuplicate accepts, or clears duplicate_of when none does: an edit
+// can turn a copy back into a job of its own. Only older jobs are candidates, so a
+// job never points at itself, and only live ones, so copies never chain.
+func updateDuplicate(ctx context.Context, conn querier, jobID, source1 int, job1 sources.Job) error {
+	companyKey, titleKey := normalize(job1.Company, job1.Title)
+	const query = `
+		SELECT id, source_id, company, title, description
+		FROM jobs
+		WHERE company_key = $1 AND title_key = $2 AND duplicate_of IS NULL AND id < $3
+		ORDER BY id;`
+	rows, err := conn.Query(ctx, query, companyKey, titleKey, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to query rows: %w", err)
+	}
+	defer rows.Close()
+
+	// Stays nil when no candidate matches; pgx writes a nil pointer as NULL.
+	var duplicatedID *int
+	for rows.Next() {
+		var (
+			id      int
+			source2 int
+			job2    sources.Job
+		)
+		err = rows.Scan(&id, &source2, &job2.Company, &job2.Title, &job2.Description)
+		if err != nil {
+			return fmt.Errorf("failed to scan rows: %w", err)
+		}
+		if isDuplicate(job1, job2, source1, source2) {
+			duplicatedID = &id
+			break
+		}
+	}
+	// Closed before the UPDATE: a pgx.Conn runs one query at a time, and the break
+	// above leaves rows open (the deferred Close only runs at return). pgx reads
+	// rows.Err only after Close.
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed to get duplicates: %w", err)
+	}
+
+	_, err = conn.Exec(ctx, "UPDATE jobs SET duplicate_of = $1 WHERE id = $2;", duplicatedID, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to update job duplicated: %w", err)
 	}
 	return nil
 }
