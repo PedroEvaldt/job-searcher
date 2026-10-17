@@ -384,7 +384,8 @@ Lemon.io).
       normalizados (minúsculas, só `a-z0-9`); duplicata = mesma chave **e** (fonte diferente **ou**
       descrição idêntica). Os 192 grupos da mesma fonte com descrição diferente **não** são
       duplicata: na Bjak, "Engineering Manager" aparece em duas versões que só diferem no bloco
-      Location — uma híbrida, outra remota global.
+      Location — uma híbrida, outra remota global. Chave com parte vazia **nunca** é duplicata: 13
+      títulos (10 da Gate, em chinês) viram `""` e cairiam todos no mesmo grupo.
 - [ ] **1.5.3** Marcar: preencher `duplicate_of` apontando para a vaga mais antiga do grupo;
       teste de integração.
 - [ ] **1.5.4** Re-medir no banco do Pi copiado: o critério de aceite.
