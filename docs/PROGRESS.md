@@ -10,10 +10,11 @@
 Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
 energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
-**1.5.1** (medir duplicatas, 2026-10-16) fechada. Próximo: **1.5.2 — a regra de dedupe em Go**.
-Depois, 1.5.3–1.5.4 e a 1.7 (D37, D17, D39, README).
+**1.5.1** (medir duplicatas, 2026-10-16) e **1.5.2** (a regra em Go, 2026-10-17) fechadas.
+Próximo: **1.5.3 — marcar `duplicate_of` na gravação**. Depois, 1.5.4 (histórico), 1.5.5
+(re-medir) e a 1.7 (D37, D17, D39, README).
 
-Última sessão: **2026-10-16**.
+Última sessão: **2026-10-17**.
 
 ---
 
@@ -658,6 +659,26 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   "hybrid role, 3 days per week" × "remote role, we hire globally".
 - ✅ **1.5.1 fechada.**
 
+### 2026-10-17 — Subtarefa 1.5.2 (a regra de dedupe em Go)
+
+- O aluno propôs mudar o pipeline (Go só grava `raw_jobs`, Python normaliza e deduplica); revisto
+  e mantido "por enquanto" — ver decisões. Testando a chave no banco, o mentor achou 13 títulos
+  que normalizam para `""` (10 da Gate, em chinês) → regra nova: chave com parte vazia nunca é
+  duplicata, 6º caso na tabela.
+- O aluno pediu explicação do que cada função faz, do que é "receber uma vaga" e de onde vem a
+  fonte (não está no `Job`: na 1.5.3 vem do `sourceID` do `collectAndStoreData` e da coluna
+  `source_id`). Escolheu `sources.Job` + id da fonte como parâmetros.
+- Furos no 1º `/check`: sem `ToLower` (a expressão apagava as **maiúsculas**: `Lemon.io` →
+  `emonio`, `IBM` → `""`); a regra saía com `true` só pela chave igual e testava a descrição no
+  ramo das chaves **diferentes** (Bjak dava `true`). Os dois consertados pelo aluno; nomes do
+  retorno trocados, `findSameJob` → `isDuplicate`, `regexExp` → `nonKeyChars` e comentários de
+  documentação feitos pelo mentor, a pedido.
+- O mentor errou a lista de mutações (tirar o `ToLower` não derrubava caso nenhum: Huzzle e
+  Lemon.io têm as mesmas maiúsculas dos dois lados) → 7º caso real, MWDN (empresa em capitais,
+  5 clones idênticos). Casos da tabela montados pelo mentor, a pedido; o laço com `t.Run` é do
+  aluno.
+- ✅ **1.5.2 fechada.** Suíte inteira verde com `-race`.
+
 ---
 
 ## Decisões tomadas
@@ -884,6 +905,12 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-16** — container resolve nomes pelo DNS embutido do Docker (`127.0.0.11`), que repassa
   para o DNS do host. `server misbehaving` ali = o host sem DNS (roteador ainda bootando), não o site
   fora do ar. Três fontes falhando juntas com o mesmo erro de rede = problema de casa.
+- **2026-10-17** — `[^a-z0-9]` apaga tudo o que não está na lista, **inclusive maiúsculas**: sem
+  `ToLower` antes, "IBM" vira `""`. E um teste só pega o furo se tiver um caso onde o furo muda a
+  resposta: Huzzle e Lemon.io têm as mesmas maiúsculas dos dois lados, então só a MWDN derruba a
+  falta do `ToLower`.
+- **2026-10-17** — struct literal pelo **nome** dos campos (`sources.Job{Company: …}`) deixa os
+  outros no valor zero; pela **posição** exige todos, na ordem.
 
 ---
 
@@ -892,8 +919,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 **Tarefa 1.6 fechada em 2026-10-16** (Pi em `~/pi/job-searcher`, código `de94bb3`, coletando a cada
 6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.1 — medir
-duplicatas**; depois 1.5.2–1.5.4 e a 1.7 (D37, D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.3 — marcar
+`duplicate_of` na gravação** (regra pronta em `dedup.go`); depois 1.5.4–1.5.5 e a 1.7 (D37, D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
 `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose local já está
 provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml` montado `:ro`,

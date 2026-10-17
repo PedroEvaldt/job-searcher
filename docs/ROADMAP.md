@@ -369,9 +369,10 @@ segundo, só o número no fim da URL muda) e em **2 grupos entre fontes** (Huzzl
 dedupe, o ranking e o digest da Fase 5 mostram a mesma vaga N vezes. Em 2026-10-07 (607 vagas)
 eram 0 — a dor apareceu com volume.
 
-**Critério de aceite:** a consulta de duplicatas, rodada de novo, não acha grupo com mais de uma
-vaga viva (`duplicate_of IS NULL`); teste de integração com os casos reais (CapsLock, Huzzle,
-Lemon.io).
+**Critério de aceite:** entre as vagas vivas (`duplicate_of IS NULL`), nenhum par que a regra da
+1.5.2 chama de duplicata — nenhum grupo de chave com mais de uma fonte, e nenhum grupo da mesma
+fonte com descrição repetida (grupos como o da Bjak, mesma fonte e descrições diferentes, continuam
+com várias vagas vivas de propósito); teste de integração com os casos reais.
 
 **Onde ler:** [`regexp_replace`](https://www.postgresql.org/docs/16/functions-matching.html#FUNCTIONS-POSIX-REGEXP) ·
 [agregados e `HAVING`](https://www.postgresql.org/docs/16/tutorial-agg.html)
@@ -380,15 +381,23 @@ Lemon.io).
       entre fontes × dentro da mesma fonte, com quantos têm descrição idêntica; lista dos casos
       entre fontes. ✅ 2026-10-16 — `cross_source` 2/4/0, `same_source` 382/1102/190; 2ª consulta
       com as chaves num `WITH` e volta a `jobs` pelo `JOIN` normalizado (Huzzle, Lemon.io).
-- [ ] **1.5.2** A regra, em Go, com teste em tabela dos casos reais: chave = empresa + título
+- [x] **1.5.2** A regra, em Go, com teste em tabela dos casos reais: chave = empresa + título
       normalizados (minúsculas, só `a-z0-9`); duplicata = mesma chave **e** (fonte diferente **ou**
       descrição idêntica). Os 192 grupos da mesma fonte com descrição diferente **não** são
       duplicata: na Bjak, "Engineering Manager" aparece em duas versões que só diferem no bloco
       Location — uma híbrida, outra remota global. Chave com parte vazia **nunca** é duplicata: 13
-      títulos (10 da Gate, em chinês) viram `""` e cairiam todos no mesmo grupo.
-- [ ] **1.5.3** Marcar: preencher `duplicate_of` apontando para a vaga mais antiga do grupo;
-      teste de integração.
-- [ ] **1.5.4** Re-medir no banco do Pi copiado: o critério de aceite.
+      títulos (10 da Gate, em chinês) viram `""` e cairiam todos no mesmo grupo. ✅ 2026-10-17 —
+      `dedup.go` (`normalize`, `isDuplicate`) + `TestIsDuplicate` com 7 casos reais (o 7º, MWDN,
+      pega a falta do `ToLower`); 5 mutações, cada uma derruba o seu caso.
+- [ ] **1.5.3** Marcar na gravação: migração `007` com as colunas de chave (`company_key`,
+      `title_key`, anuláveis) e índice nas duas; `insertJob` grava as chaves e devolve o `id`; logo
+      depois, a vaga aponta `duplicate_of` para a vaga **viva mais antiga que ela** (menor `id`) que
+      o `isDuplicate` aceita, ou `NULL` se nenhuma. Teste de integração passando pelo
+      `collectAndStoreData` com uma fonte falsa: 3 clones CapsLock (2ª e 3ª → 1ª, sem corrente),
+      Bjak (as duas vivas), Huzzle entre fontes, Gate (as duas vivas).
+- [ ] **1.5.4** Histórico: as vagas gravadas antes da 1.5.3 (chaves `NULL`) recebem chaves e
+      `duplicate_of` pelo mesmo código Go, em ordem de `id`.
+- [ ] **1.5.5** Re-medir no banco do Pi copiado: o critério de aceite.
 
 ### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
 
