@@ -10,9 +10,10 @@
 Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
 energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
-**1.5.1** (medir duplicatas, 2026-10-16) e **1.5.2** (a regra em Go, 2026-10-17) fechadas.
-Próximo: **1.5.3 — marcar `duplicate_of` na gravação**. Depois, 1.5.4 (histórico), 1.5.5
-(re-medir) e a 1.7 (D37, D17, D39, README).
+**1.5.1** (medir duplicatas, 2026-10-16), **1.5.2** (a regra em Go) e **1.5.3** (marcar na
+gravação), as duas em 2026-10-17, fechadas. Próximo: **1.5.4 — o histórico** (vagas com chave
+`NULL`, em lotes, no começo do `run`). Depois, 1.5.5 (deploy no Pi + re-medir) e a 1.7 (D37, D17,
+D39, README).
 
 Última sessão: **2026-10-17**.
 
@@ -679,6 +680,26 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   aluno.
 - ✅ **1.5.2 fechada.** Suíte inteira verde com `-race`.
 
+### 2026-10-17 — Subtarefa 1.5.3 (marcar `duplicate_of` na gravação)
+
+- Critério de aceite da 1.5 corrigido (pedia "nenhum grupo com mais de uma vaga viva", o que
+  contradiz a Bjak); antiga 1.5.3 partida em gravação (1.5.3), histórico (1.5.4) e re-medir (1.5.5).
+- O aluno pediu a `007` no formato de especificação; `Up` certo de primeira; `Down` com
+  `DROP INDEX CONCURRENTLY` quebrava (goose roda cada migração numa transação) — consertado.
+- Perguntas boas do aluno: por que não juntar todas as candidatas numa lista (o `duplicate_of`
+  guarda um `id` só; a lista viraria "pegar a primeira") e por que gravar `NULL` se a coluna já é
+  nula (o `insertJob` também roda no `UPDATE` de uma vaga editada — a marca velha precisa sair).
+  Daí saiu o **D40** (original editada deixa as cópias apontando para ela).
+- Furos pelo caminho: chaves fora do `DO UPDATE SET`; `EXLUCDE` (derrubava todo `INSERT`:
+  `TestFetch` 0 de 137); `UPDATE` **sem `WHERE`** (reescreveria as 12 mil vagas); escrita através
+  de ponteiro `nil`; parâmetros do `UPDATE` trocados (a original virava cópia); `rows` aberto no
+  `break` (`conn busy`). Consertados pelo aluno; o mentor juntou os dois `UPDATE` num só (a pedido),
+  devolveu o `defer rows.Close()` e pôs o `Close` antes do `Err`.
+- `TestMarkDuplicates` escrito pelo mentor, a pedido. Mutações rodadas pelo mentor (o aluno
+  autorizou de vez): `id <= $3` → toda vaga aponta para si; `ORDER BY id DESC` → r2 → h5. Tirar o
+  `id < $3` de vez só gera erro de parâmetro (3 args, 2 `$`) — mutação ruim, trocada.
+- ✅ **1.5.3 fechada.**
+
 ---
 
 ## Decisões tomadas
@@ -920,8 +941,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 **Tarefa 1.6 fechada em 2026-10-16** (Pi em `~/pi/job-searcher`, código `de94bb3`, coletando a cada
 6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.3 — marcar
-`duplicate_of` na gravação** (regra pronta em `dedup.go`); depois 1.5.4–1.5.5 e a 1.7 (D37, D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.4 — o
+histórico** (regra em `dedup.go`, marcação em `store.go:updateDuplicate`); depois 1.5.5 e a 1.7 (D37, D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
 `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose local já está
 provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml` montado `:ro`,

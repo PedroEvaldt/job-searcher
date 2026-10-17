@@ -389,15 +389,24 @@ com várias vagas vivas de propósito); teste de integração com os casos reais
       títulos (10 da Gate, em chinês) viram `""` e cairiam todos no mesmo grupo. ✅ 2026-10-17 —
       `dedup.go` (`normalize`, `isDuplicate`) + `TestIsDuplicate` com 7 casos reais (o 7º, MWDN,
       pega a falta do `ToLower`); 5 mutações, cada uma derruba o seu caso.
-- [ ] **1.5.3** Marcar na gravação: migração `007` com as colunas de chave (`company_key`,
+- [x] **1.5.3** Marcar na gravação: migração `007` com as colunas de chave (`company_key`,
       `title_key`, anuláveis) e índice nas duas; `insertJob` grava as chaves e devolve o `id`; logo
       depois, a vaga aponta `duplicate_of` para a vaga **viva mais antiga que ela** (menor `id`) que
       o `isDuplicate` aceita, ou `NULL` se nenhuma. Teste de integração passando pelo
       `collectAndStoreData` com uma fonte falsa: 3 clones CapsLock (2ª e 3ª → 1ª, sem corrente),
-      Bjak (as duas vivas), Huzzle entre fontes, Gate (as duas vivas).
-- [ ] **1.5.4** Histórico: as vagas gravadas antes da 1.5.3 (chaves `NULL`) recebem chaves e
-      `duplicate_of` pelo mesmo código Go, em ordem de `id`.
-- [ ] **1.5.5** Re-medir no banco do Pi copiado: o critério de aceite.
+      Bjak (as duas vivas), Huzzle entre fontes, Gate (as duas vivas). ✅ 2026-10-17 — migração
+      `007`, `insertJob` com chaves + `RETURNING id`, `updateDuplicate` (um `UPDATE` só, ponteiro
+      `nil` = `NULL`), `TestMarkDuplicates` com 10 vagas; mutações `id <= $3` (toda vaga aponta
+      para si) e `ORDER BY id DESC` (r2 → h5) derrubam o teste.
+- [ ] **1.5.4** Histórico, automático: no começo de cada `run`, depois da migração e **antes** das
+      fontes, as vagas com `company_key IS NULL` são processadas em lotes, em ordem de `id`: marca
+      (`updateDuplicate`) e grava as chaves. O lote é "as próximas N com chave `NULL`": a vaga
+      processada sai do filtro sozinha. Teste reaproveita o cenário da 1.5.3 (grava, zera chaves e
+      marcas, roda o histórico com lote pequeno). Depois do 1º ciclo no Pi, vira uma consulta
+      vazia. **Alavanca do D40:** `UPDATE jobs SET company_key = NULL` faz o próximo ciclo
+      reavaliar tudo, em ordem.
+- [ ] **1.5.5** Deploy no Pi e re-medir lá (consulta de duplicatas só nas vagas vivas): o critério
+      de aceite.
 
 ### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
 
