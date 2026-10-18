@@ -182,8 +182,9 @@ func collector(ctx context.Context, logger *slog.Logger, interval time.Duration,
 }
 
 // run performs one full collection pass: open the Postgres connection, apply
-// migrations, then process each enabled source in turn. A failure in one source is
-// logged and skipped, not fatal to the others; run fails only when no source succeeds.
+// migrations, backfill dedupe keys for older jobs, process each enabled source in turn,
+// then warn about sources that look broken. A failure in one source is logged and
+// skipped, not fatal to the others; run fails only when no source succeeds.
 func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (err error) {
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -260,10 +261,9 @@ func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (e
 		if !sourceConfig.Enabled {
 			continue
 		}
-		checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
+		checkCtx, cancelCheck := context.WithTimeout(ctx, 10*time.Second)
 		isBroken, err := sourceLooksBroken(checkCtx, conn, brokenAfterRuns, sourceConfig.Name)
+		cancelCheck()
 		if err != nil {
 			logger.Error("failed to check if source is broken", "source", sourceConfig.Name, "error", err)
 			continue
