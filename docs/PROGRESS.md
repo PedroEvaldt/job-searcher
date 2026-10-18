@@ -11,9 +11,9 @@ Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 
 energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
 **Tarefa 1.5 fechada em 2026-10-18** — dedupe no ar no Pi (`26cccd7`): marcação na gravação +
-histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Próximo: **Tarefa 1.7 —
-fechamento da Fase 1**, começando pela **1.7.1 (D37, Remote OK com `[]`)**; depois 1.7.2 (D39) e
-1.7.3 (README + D17).
+histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Tarefa 1.7 (fechamento da
+Fase 1): **1.7.1 (D37)** fechada em 2026-10-18. Próximo: **1.7.2 (D39, nova tentativa depois de
+ciclo falho)**; depois 1.7.3 (README + D17).
 
 Última sessão: **2026-10-18**.
 
@@ -737,6 +737,17 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - ✅ **1.5.5 fechada · Tarefa 1.5 fechada.** Tarefa 1.7 detalhada no ROADMAP (1.7.1 D37, 1.7.2
   D39, 1.7.3 README + D17).
 
+### 2026-10-18 — Subtarefa 1.7.1 (D37, Remote OK com `[]`)
+
+- O aluno quis fazer o resto da Fase 1 de uma vez, no passo a passo; o protocolo segue uma
+  subtarefa por vez, com o cartão seguinte junto da aprovação.
+- `TestRemoteOK` do aluno. 1ª versão passava **pelo motivo errado**: o corpo do caso "vazio" era
+  `[{"}]`, JSON inválido — o `Fetch` falhava no `Unmarshal` e nunca chegava ao `items[1:]`. O ✔️
+  do passo 1 (ver o `panic` antes do conserto) foi o que pegou.
+- Conserto (conferir o tamanho antes de cortar) feito pelo mentor, a pedido, junto com as duas
+  sugestões opcionais do teste (`"legal"` no lugar de `"cool"`, `t.Cleanup(srv.Close)`).
+- ✅ **1.7.1 fechada · D37 pago.**
+
 ---
 
 ## Decisões tomadas
@@ -818,7 +829,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D34~~ | `internal/sources/himalayas.go:51` | Rótulo de erro copiado do Remotive + typo `localtion`. | ✅ pago 2026-10-03 (mentor, mecânico) — `remotive:` → `himalayas:`, `localtion` → `location`. |
 | ~~D35~~ | `origin/main` (`d0296ea`) | Commit `docs: change docs` com marcador de conflito `=======` esquecido no `ROADMAP.md` e `PROGRESS.md` de volta ao estado pré-1.2. | ✅ pago 2026-10-05 — merge `8383222` de `feature/client` no `main` resolvido com `--theirs` nos dois docs; `main` idêntico ao branch, sem marcador. |
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | ✅ fechado 2026-10-08 (1.6.5) — `sourceLooksBroken` + `WARN source is broken` ao fim de cada ciclo; o parser continua devolvendo zero sem erro, mas não passa mais calado |
-| D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
+| ~~D37~~ | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | ✅ pago 2026-10-18 (1.7.1) — `[]` vira `remoteok: empty feed, the legal notice is missing`; só o aviso = 0 itens sem erro; `TestRemoteOK` |
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 | D39 | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | aberto — 🟡, dono: 1.7 |
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
@@ -976,6 +987,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-18** — `COUNT(col)` conta as linhas em que `col` não é `NULL`; `COUNT(DISTINCT col)`
   conta os valores diferentes. E uma consulta de aceite que dá 0 só prova algo se a mesma
   consulta, sem o filtro que conserta, der mais que 0.
+- **2026-10-18** — teste que já passa **antes** do conserto não prova o conserto: o caso "feed
+  vazio" com JSON inválido recebia um erro, só que de outro lugar. Ver o teste falhar pelo motivo
+  certo é parte do teste.
 
 ---
 
@@ -984,8 +998,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 **Tarefas 1.6 e 1.5 fechadas** (Pi em `~/pi/job-searcher`, código `26cccd7` desde 2026-10-18,
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.7.1 — D37**
-(Remote OK com `[]`); depois 1.7.2 (D39) e 1.7.3 (README + D17). Dedupe: regra em `dedup.go`,
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.7.2 — D39**
+(nova tentativa depois de ciclo falho, no `collector`); depois 1.7.3 (README + D17). Dedupe: regra em `dedup.go`,
 marcação em `store.go:updateDuplicate`, histórico em `store.go:backfillDedupe` (no `run`, antes das
 fontes), aceite em `db/queries/live_duplicates.sql`. O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,

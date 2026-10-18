@@ -430,10 +430,12 @@ primeira coleta.
 **Onde ler:** [expressões de slice](https://go.dev/ref/spec#Slice_expressions) ·
 [`time.Timer`](https://pkg.go.dev/time#Timer)
 
-- [ ] **1.7.1** D37: a Remote OK com resposta `[]` vira erro da fonte com mensagem própria, não
+- [x] **1.7.1** D37: a Remote OK com resposta `[]` vira erro da fonte com mensagem própria, não
       `panic` recuperado com "slice bounds out of range". Array só com o aviso legal = feed vazio,
       zero itens sem erro. Teste em tabela com servidor `httptest` (`[]`, só o aviso, aviso + 2
-      vagas).
+      vagas). ✅ 2026-10-18 — `TestRemoteOK` do aluno; conserto pelo mentor, a pedido
+      (`remoteok: empty feed, the legal notice is missing`). Mutações: sem a conferência → `panic`
+      em `remoteok.go`; `[]` sem erro → `expected err got nil`.
 - [ ] **1.7.2** D39: ciclo que falha inteiro tenta de novo em poucos minutos, com teto de
       tentativas, antes de voltar ao ritmo do `collect_every`. Teste no `collector` com ciclo
       falso e intervalos curtos.
