@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -23,6 +24,11 @@ func (r RemoteOK) Fetch(ctx context.Context, url string) ([]json.RawMessage, err
 	var items []json.RawMessage
 	if err := json.Unmarshal(body, &items); err != nil {
 		return nil, fmt.Errorf("remoteok: decode body: %w", err)
+	}
+	// The legal notice comes first even when there are no jobs, so an empty array
+	// means the feed changed, not that it ran out of jobs.
+	if len(items) == 0 {
+		return nil, errors.New("remoteok: empty feed, the legal notice is missing")
 	}
 	return items[1:], nil
 }
