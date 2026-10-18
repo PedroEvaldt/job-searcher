@@ -13,8 +13,9 @@ para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, i
 **Tarefa 1.5 fechada em 2026-10-18** — dedupe no ar no Pi (`26cccd7`): marcação na gravação +
 histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Tarefa 1.7 (fechamento da
 Fase 1): **1.7.1 (D37)**, **1.7.2 (D39)** e **1.7.3 (README + D17)** fechadas em 2026-10-18. **Fase 1
-fechada em 2026-10-18.** Pendente: commit + push do aluno e deploy no Pi (o Pi está em `26cccd7`,
-sem o D37 e o D39). Próximo: **abertura da Fase 2** — diagnóstico, detalhar a fase no ROADMAP,
+fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴). Pendente: commit +
+push do aluno (nits da auditoria, diagrama removido), branches velhas apagadas e deploy no Pi (o
+Pi está em `26cccd7`, sem o D37 e o D39). Próximo: **abertura da Fase 2** — diagnóstico, detalhar a fase no ROADMAP,
 apresentar a 2.1.1.
 
 Última sessão: **2026-10-18**.
@@ -780,6 +781,19 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   — virou o **D41**.
 - ✅ **1.7.3 fechada · Tarefa 1.7 fechada · Fase 1 fechada.**
 
+### 2026-10-18 — Auditoria de fim da Fase 1 (a pedido do aluno)
+
+- Sem 🔴. Lint, `tidy`, testes e Python limpos; Pi saudável (143 MB, disco 41%).
+- Docs: marcas de status velhas no ROADMAP e no PROGRESS corrigidas; três decisões revistas
+  ganharam a nota de revisão. SPEC (aprovado pelo aluno): coletor com laço próprio (não cron),
+  I/O hoje sequencial, ATS e Arbeitnow em backlog, estado atual do layout no §7.
+- Repo (aprovado pelo aluno): `db/diagram/job_searcher.png` (31/08, anterior às migrações 003–007)
+  removido; branches `feature/client` (mesclada), `backup/rascunho` e `origin/etapa-01` (rascunhos
+  já superados; a `etapa-01` expunha o `CLAUDE.md`) a apagar pelo aluno.
+- Nits pagos pelo mentor, a pedido: comentário do `run` (histórico + aviso de fonte quebrada),
+  `defer cancel()` no laço de fonte quebrada virou `cancelCheck()` logo após a chamada (sugestão
+  da 1.6.5), typo "Cluade" no `.gitignore`.
+
 ---
 
 ## Decisões tomadas
@@ -808,6 +822,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-10-16 | Duplicata = mesma empresa + título normalizados **e** (fonte diferente **ou** descrição idêntica) | Entre fontes a descrição nunca bate (HTML × texto), então a chave basta (2 grupos/semana, os dois a mesma vaga). Dentro da mesma fonte, descrição diferente pode ser outra vaga para quem procura remoto: a Bjak publica a mesma "Engineering Manager" híbrida e remota global, e só o bloco Location muda. Fundir esconderia a remota atrás da híbrida. **Custo aceito:** variações cosméticas da mesma vaga (106 grupos diferem em < 200 caracteres) continuam aparecendo repetidas. |
 | 2026-10-17 | Normalização (`ToJob`) e dedupe exata ficam no Go; o Python não vira a camada de transformação do `raw_jobs` (proposta do aluno, revista e mantida "por enquanto") | O formato de cada fonte fica num lugar só: o Go já lê o payload para o `ExternalID`, e um `ToJob` em Python criaria dois parsers por fonte sem teste que pegue a divergência. Um processo basta para a vaga ficar pronta (o coletor provou 7 dias sozinho), e o reprocessamento sem recoleta já vem do `raw_jobs`. **Reabrir se:** a Fase 2 achar duplicatas que só a análise de texto pega (descrições que diferem só no boilerplate); essa camada seria do Python, por cima da do Go. |
 | 2026-10-08 | `sleep` do client exportado (`client.Sleep`) em vez de copiado no `main` | Uma espera que respeita o `ctx`, num lugar só. **Custo aceito:** o pacote `client` (HTTP) passa a exportar um utilitário que não é de HTTP. Se aparecer um terceiro uso, mudar para um pacote próprio. |
+| 2026-10-18 | ATS (Greenhouse, Lever, Ashby) e Arbeitnow em backlog, sem fase | Saíram da Fase 1 sem registro (o SPEC ainda os punha nela). A Fase 1 fechou com três boards; a EDA da Fase 2 diz se elas cobrem o que interessa antes de gastar tempo com fonte nova. |
 
 ---
 

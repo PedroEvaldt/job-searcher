@@ -24,7 +24,7 @@ O critério é: cada linguagem faz o que a outra faria mal.
 
 | Go — plano de controle | Python — cérebro |
 |---|---|
-| I/O concorrente contra N fontes HTTP | Extração de skills (NLP) |
+| I/O contra N fontes HTTP (hoje em sequência; concorrência entra quando uma fonte lenta justificar) | Extração de skills (NLP) |
 | Rate limit e retry por fonte | Ranking, embeddings, modelo |
 | Normalização e deduplicação | EDA e análise exploratória |
 | CLI distribuível (binário único) | Ecossistema científico (pandas, sklearn, sentence-transformers) |
@@ -34,7 +34,7 @@ O critério é: cada linguagem faz o que a outra faria mal.
 
 | Binário | Papel |
 |---|---|
-| `collector` | Roda no cron. Busca as fontes, grava `raw_jobs`, normaliza para `jobs`, registra em `runs`. |
+| `collector` | Processo de longa duração com laço próprio: coleta na partida e a cada `collect_every` (desde a 1.6; antes era previsto cron). Busca as fontes, grava `raw_jobs`, normaliza para `jobs`, marca duplicatas, registra em `runs`. |
 | `radar` | CLI do usuário: `init`, `label`, `digest`, `status`. |
 | `api` | Servidor HTTP. Nasce na Fase 5. |
 
@@ -133,9 +133,13 @@ Três tipos, dificuldade crescente:
 
 | Tipo | Fontes | Dificuldade |
 |---|---|---|
-| **Boards com feed aberto** | Remote OK, Remotive, Himalayas, Arbeitnow | JSON estruturado, sem auth. Fase 0–1. |
-| **ATS por empresa** | Greenhouse, Lever, Ashby | Sem busca global — cobertura = tamanho da sua lista de empresas no `config.yaml`. Fase 1. |
+| **Boards com feed aberto** | Remote OK, Remotive, Himalayas (feitas, Fase 0–1); Arbeitnow (backlog) | JSON estruturado, sem auth. |
+| **ATS por empresa** | Greenhouse, Lever, Ashby | Sem busca global — cobertura = tamanho da sua lista de empresas no `config.yaml`. Backlog. |
 | **Comunidade** | Repositórios de vagas no GitHub (API de issues), Hacker News "Who is hiring" | Texto livre, sem estrutura. É o que **justifica NLP**. Hacker News por último. |
+
+**Revisão de 2026-10-18 (fim da Fase 1):** a Fase 1 fechou com as três boards. ATS e Arbeitnow
+saíram dela sem registro na época; ficam em backlog, sem fase, e voltam à mesa depois da EDA da
+Fase 2 — se ela mostrar que as três fontes não cobrem o que interessa.
 
 ---
 
@@ -171,7 +175,10 @@ Se um dia houver UI de configuração, ela nasce como página do FastAPI na Fase
 ## 7. Estrutura de diretórios (alvo)
 
 O código **não** nasce assim. Ele chega aqui por pressão, quando a duplicação doer.
-Isto é destino, não ponto de partida.
+Isto é destino, não ponto de partida. Hoje (fim da Fase 1) o coletor é um `package main` na
+raiz (`main.go`, `config.go`, `migrate.go`, `store.go`, `dedup.go`) mais `internal/client` e
+`internal/sources`; os pacotes `internal/store` e `internal/config` e o `cmd/` nascem quando o
+segundo binário (`radar`, Fase 3b) precisar deles (decisão de 2026-10-07).
 
 ```
 job-radar/
