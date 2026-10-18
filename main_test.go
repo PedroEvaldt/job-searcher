@@ -627,7 +627,8 @@ func TestCollector(t *testing.T) {
 				}
 				return nil
 			}
-			collector(ctx, slog.New(slog.DiscardHandler), tt.interval, cycle)
+			// No retries: a failed cycle waits for the next tick, as before them.
+			collector(ctx, slog.New(slog.DiscardHandler), tt.interval, 0, 0, cycle)
 
 			if counter != tt.wantedCalls {
 				t.Errorf("expected %d; got %d", tt.wantedCalls, counter)
@@ -646,13 +647,54 @@ func TestFirstCycle(t *testing.T) {
 		return nil
 	}
 	begin := time.Now()
-	collector(ctx, slog.New(slog.DiscardHandler), time.Second, cycle)
+	// Interval and retry wait both 1s: the first call must wait for neither.
+	collector(ctx, slog.New(slog.DiscardHandler), time.Second, 3, time.Second, cycle)
 	after := time.Since(begin)
 	if after > 500*time.Millisecond {
 		t.Errorf("expected time < 500ms; got %v", after)
 	}
 	if counter != 1 {
 		t.Errorf("expected 1 cycle; got %d", counter)
+	}
+}
+
+// TestCollectorRetry checks the retries after a cycle that fails whole. The tick is an
+// hour away, so every call after the first is a retry, and each case ends when ctx
+// times out with the collector waiting: for the tick, or in the middle of a retry wait.
+func TestCollectorRetry(t *testing.T) {
+	const retries = 3
+	tests := []struct {
+		name      string
+		fails     int // how many calls fail before one succeeds
+		retryWait time.Duration
+		wantCalls int
+	}{
+		{"recovers after two failures", 2, 10 * time.Millisecond, 3},
+		{"gives up after the retries", 100, 10 * time.Millisecond, 1 + retries},
+		{"cancelled while waiting to retry", 100, time.Hour, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			calls := 0
+			cycle := func() error {
+				calls++
+				if calls <= tt.fails {
+					return errors.New("network is down")
+				}
+				return nil
+			}
+			begin := time.Now()
+			collector(ctx, slog.New(slog.DiscardHandler), time.Hour, retries, tt.retryWait, cycle)
+
+			if calls != tt.wantCalls {
+				t.Errorf("expected %d calls; got %d", tt.wantCalls, calls)
+			}
+			if elapsed := time.Since(begin); elapsed > time.Second {
+				t.Errorf("expected the collector to return soon after ctx timed out; got %v", elapsed)
+			}
+		})
 	}
 }
 

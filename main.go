@@ -40,6 +40,12 @@ const (
 	// backfillBatchSize is how many jobs the backfill reads at a time. Descriptions
 	// average about 5 KB, so a batch holds a few MB.
 	backfillBatchSize = 1000
+	// cycleRetries is how many more times the collector tries a cycle that failed whole
+	// before it waits for the next tick. With cycleRetryWait it covers about 15 min,
+	// enough for the router to come back after a power cut (the Pi boots first).
+	cycleRetries = 3
+	// cycleRetryWait is how long the collector waits before each of those tries.
+	cycleRetryWait = 5 * time.Minute
 )
 
 // Source is what the collector needs from a job source: fetch the raw items, read
@@ -111,7 +117,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		collector(ctx, logger, cfg.CollectEvery, cycle)
+		collector(ctx, logger, cfg.CollectEvery, cycleRetries, cycleRetryWait, cycle)
 	}
 }
 
@@ -134,22 +140,40 @@ func waitForDB(ctx context.Context, logger *slog.Logger, dbURL string, initialDB
 	}
 }
 
-// collector runs cycle once right away, then again on every tick of interval, and
-// returns when ctx is cancelled. A failed cycle is logged and does not stop the
-// loop: the next tick tries again.
-func collector(ctx context.Context, logger *slog.Logger, interval time.Duration, cycle func() error) {
-	if err := cycle(); err != nil {
-		logger.Error("failed to run", "error", err)
+// runWithRetries calls cycle and, while it fails, calls it again after retryWait, up to
+// retries more times. It returns when a call succeeds, when the retries run out, or
+// when ctx is cancelled.
+func runWithRetries(ctx context.Context, logger *slog.Logger, cycle func() error, retries int, retryWait time.Duration) {
+	for attempt := 1; ; attempt++ {
+		err := cycle()
+		// A cycle cut short by shutdown is not worth a warning or a retry.
+		if err == nil || ctx.Err() != nil {
+			return
+		}
+		if attempt > retries {
+			logger.Error("failed to run, waiting for the next tick", "attempts", attempt, "error", err)
+			return
+		}
+		logger.Warn("failed to run, trying again", "attempt", attempt, "retry_in", retryWait, "error", err)
+		if err := client.Sleep(ctx, retryWait); err != nil {
+			return
+		}
 	}
+}
+
+// collector runs cycle right away, then again on every tick of interval, and returns
+// when ctx is cancelled. A cycle that fails whole is tried again up to retries more
+// times, retryWait apart, before the loop goes back to waiting for the tick: a cycle
+// lost to a network that is still coming up costs minutes, not a whole interval.
+func collector(ctx context.Context, logger *slog.Logger, interval time.Duration, retries int, retryWait time.Duration, cycle func() error) {
+	runWithRetries(ctx, logger, cycle, retries, retryWait)
 
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
 		select {
 		case <-t.C:
-			if err := cycle(); err != nil {
-				logger.Error("failed to run", "error", err)
-			}
+			runWithRetries(ctx, logger, cycle, retries, retryWait)
 		case <-ctx.Done():
 			logger.Info("shutting down")
 			return
