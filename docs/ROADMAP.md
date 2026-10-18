@@ -1,7 +1,7 @@
 # ROADMAP — job-radar
 
-Só a fase atual aparece em detalhe. As próximas ficam em uma linha.
-Quando a Fase 0 fechar, a Fase 1 é expandida.
+Só a fase atual aparece em detalhe. As próximas ficam em uma linha; cada uma é expandida quando
+a anterior fecha.
 
 ---
 
@@ -9,9 +9,9 @@ Quando a Fase 0 fechar, a Fase 1 é expandida.
 
 | Fase   | Nome                          | Pronto quando                                                                                          |
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **0**  | Uma fonte só, ponta a ponta   | `docker compose up` coleta, o teste de integração passa e o Python enxerga o banco                     |
-| 1      | Coleta de verdade             | Mais fontes atrás de `Source`, normalização, dedupe, rate limit, métricas — roda 7 dias sozinho        |
-| 2      | Olhar o dado                  | EDA + boilerplate medido, política de localização, vagas PT-BR — 5 defeitos listados + corte de boilerplate com teste |
+| 0 ✅   | Uma fonte só, ponta a ponta   | `docker compose up` coleta, o teste de integração passa e o Python enxerga o banco                     |
+| 1 ✅   | Coleta de verdade             | Mais fontes atrás de `Source`, normalização, dedupe, rate limit, métricas — roda 7 dias sozinho        |
+| **2**  | Olhar o dado                  | EDA + boilerplate medido, política de localização, vagas PT-BR — 5 defeitos listados + corte de boilerplate com teste |
 | 3a     | Extração no código            | Skills, anos exigidos, salário, idade da vaga; ranking TF-IDF — extrator acerta as skills do currículo |
 | 3b     | Rotulagem e avaliação         | `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele                            |
 | 4a     | Embeddings                    | sentence-transformers + pgvector vs baseline — sabe qual ganha e por quanto, no conjunto congelado     |
@@ -187,7 +187,7 @@ limiar de erro, rate limit e agendamento.
 **Pronto quando:** o coletor roda sozinho por 7 dias, coletando de pelo menos três fontes
 atrás da interface `Source`, com dedupe, rate limit por fonte e toda execução medida em `runs`.
 
-### Tarefa 1.1 — Segunda fonte e a interface `Source`
+### Tarefa 1.1 — Segunda fonte e a interface `Source` ✅ (fechada 2026-10-03)
 
 **Objetivo:** o coletor passa a trazer vagas do Remotive além do Remote OK, e a lógica
 específica de cada fonte deixa de estar assada em `fetchData`/`models.go` e passa a viver
