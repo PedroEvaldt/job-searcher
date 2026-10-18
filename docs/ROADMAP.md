@@ -398,13 +398,17 @@ com várias vagas vivas de propósito); teste de integração com os casos reais
       `007`, `insertJob` com chaves + `RETURNING id`, `updateDuplicate` (um `UPDATE` só, ponteiro
       `nil` = `NULL`), `TestMarkDuplicates` com 10 vagas; mutações `id <= $3` (toda vaga aponta
       para si) e `ORDER BY id DESC` (r2 → h5) derrubam o teste.
-- [ ] **1.5.4** Histórico, automático: no começo de cada `run`, depois da migração e **antes** das
+- [x] **1.5.4** Histórico, automático: no começo de cada `run`, depois da migração e **antes** das
       fontes, as vagas com `company_key IS NULL` são processadas em lotes, em ordem de `id`: marca
       (`updateDuplicate`) e grava as chaves. O lote é "as próximas N com chave `NULL`": a vaga
       processada sai do filtro sozinha. Teste reaproveita o cenário da 1.5.3 (grava, zera chaves e
       marcas, roda o histórico com lote pequeno). Depois do 1º ciclo no Pi, vira uma consulta
       vazia. **Alavanca do D40:** `UPDATE jobs SET company_key = NULL` faz o próximo ciclo
-      reavaliar tudo, em ordem.
+      reavaliar tudo, em ordem. ✅ 2026-10-18 — `backfillDedupe` (lotes de 1000, prazo de 5 min,
+      devolve quantas terminou também no erro), log com `duration`; `TestBackfillDedupe` com lote
+      3 (4 lotes, 10 vagas, 2º passe = 0). Mutações: um lote só, `ORDER BY id DESC` e sem marcar —
+      as três derrubam o teste. Na cópia local do Pi (transação desfeita): 12.584 vagas em 2,7 s,
+      448 marcadas (446 mesma fonte, 2 entre fontes), 0 corrente, critério de aceite 0 / 0.
 - [ ] **1.5.5** Deploy no Pi e re-medir lá (consulta de duplicatas só nas vagas vivas): o critério
       de aceite.
 

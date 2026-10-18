@@ -10,12 +10,12 @@
 Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
 energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
-**1.5.1** (medir duplicatas, 2026-10-16), **1.5.2** (a regra em Go) e **1.5.3** (marcar na
-gravação), as duas em 2026-10-17, fechadas. Próximo: **1.5.4 — o histórico** (vagas com chave
-`NULL`, em lotes, no começo do `run`). Depois, 1.5.5 (deploy no Pi + re-medir) e a 1.7 (D37, D17,
-D39, README).
+**1.5.1** (medir duplicatas, 2026-10-16), **1.5.2** (a regra em Go), **1.5.3** (marcar na
+gravação, 2026-10-17) e **1.5.4** (o histórico, 2026-10-18) fechadas. Próximo: **1.5.5 — deploy no
+Pi + consulta de aceite** (`db/queries/live_duplicates.sql`, esperado `0 | 0`). Depois, a 1.7 (D37,
+D17, D39, README).
 
-Última sessão: **2026-10-17**.
+Última sessão: **2026-10-18**.
 
 ---
 
@@ -700,6 +700,28 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   `id < $3` de vez só gera erro de parâmetro (3 args, 2 `$`) — mutação ruim, trocada.
 - ✅ **1.5.3 fechada.**
 
+### 2026-10-18 — Subtarefa 1.5.4 (o histórico)
+
+- Dúvida do aluno: onde guardar `id` e `source_id` se o `sources.Job` não tem esses campos. Ele
+  criou o struct no pacote `sources` e sem descrição; foi para o `store.go` (o par vaga + ids do
+  banco é coisa do store) com um `sources.Job` inteiro dentro — sem a descrição, nenhum clone da
+  mesma fonte seria marcado.
+- Furos pelo caminho: busca sem `LIMIT` (as 12 mil vagas, ~65 MB, de uma vez); o slice no lugar
+  da variável do laço; `SET` duas vezes no `UPDATE`; `continue` no erro (laço infinito: a vaga
+  com erro volta na busca seguinte); sem `return` depois do laço. Consertados pelo aluno.
+- A pedido, o mentor renomeou (`backfillDedupe`, `storedJob`, `backfillTimeout`,
+  `backfillBatchSize`, `cancelBackfill` — o `run` já tinha um `cancel`), escreveu as mensagens de
+  log com `duration` (para medir no Pi) e fez a função devolver quantas terminou também no erro
+  (padrão do `io.Writer`). Também escreveu o `TestBackfillDedupe`, com os helpers
+  `writeDuplicateScenario` / `checkDuplicateMarks` extraídos do `TestMarkDuplicates`.
+- Mutações (mentor): um lote só → 3 de 10, r1/r2 sem marca; `ORDER BY id DESC` → h2, h3, r1, r2
+  sem marca; sem `updateDuplicate` → as mesmas 4 (o teste zera as marcas, senão essa passaria).
+- Medição na cópia local do Pi, numa transação desfeita: 12.584 vagas em 2,7 s, 2º passe 0 em
+  5 ms; 448 marcadas (446 mesma fonte, 2 entre fontes), 12.136 vivas, 0 corrente, 0 apontando
+  para si; critério de aceite 0 grupos entre fontes, 0 grupos da mesma fonte com descrição
+  repetida. No Pi deve demorar mais (cada `UPDATE` faz commit no disco).
+- ✅ **1.5.4 fechada.**
+
 ---
 
 ## Decisões tomadas
@@ -784,7 +806,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D37 | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | aberto — 🟡; depois da 1.3.4 vira fonte com erro registrado; conserto = checar o tamanho antes de cortar |
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 | D39 | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | aberto — 🟡, dono: 1.7 |
-| D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡, dono: 1.5.4 — se o passe do histórico reavaliar todas as vagas em ordem de `id`, rodá-lo de novo conserta marcas velhas |
+| D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -933,6 +955,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   falta do `ToLower`.
 - **2026-10-17** — struct literal pelo **nome** dos campos (`sources.Job{Company: …}`) deixa os
   outros no valor zero; pela **posição** exige todos, na ordem.
+- **2026-10-18** — `defer` dentro de um `for` só roda quando a **função** termina, não a cada
+  volta: num laço de lotes, o `rows` de cada volta fica aberto até o fim. Feche à mão (inclusive
+  antes de cada `return`) ou extraia a volta para uma função própria.
 
 ---
 
@@ -941,8 +966,10 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 **Tarefa 1.6 fechada em 2026-10-16** (Pi em `~/pi/job-searcher`, código `de94bb3`, coletando a cada
 6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.4 — o
-histórico** (regra em `dedup.go`, marcação em `store.go:updateDuplicate`); depois 1.5.5 e a 1.7 (D37, D17, D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.5 — deploy
+no Pi + consulta de aceite** (regra em `dedup.go`, marcação em `store.go:updateDuplicate`,
+histórico em `store.go:backfillDedupe`, chamado no `run` antes das fontes); depois a 1.7 (D37, D17,
+D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
 `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose local já está
 provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml` montado `:ro`,
