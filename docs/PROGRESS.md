@@ -12,8 +12,10 @@ energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
 **Tarefa 1.5 fechada em 2026-10-18** — dedupe no ar no Pi (`26cccd7`): marcação na gravação +
 histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Tarefa 1.7 (fechamento da
-Fase 1): **1.7.1 (D37)** e **1.7.2 (D39)** fechadas em 2026-10-18; D17 pago (mentor). Próximo:
-**1.7.3 — README da Fase 1**, a última da fase.
+Fase 1): **1.7.1 (D37)**, **1.7.2 (D39)** e **1.7.3 (README + D17)** fechadas em 2026-10-18. **Fase 1
+fechada em 2026-10-18.** Pendente: commit + push do aluno e deploy no Pi (o Pi está em `26cccd7`,
+sem o D37 e o D39). Próximo: **abertura da Fase 2** — diagnóstico, detalhar a fase no ROADMAP,
+apresentar a 2.1.1.
 
 Última sessão: **2026-10-18**.
 
@@ -767,6 +769,17 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   senha nem caminho no arquivo.
 - ✅ **1.7.2 fechada · D39 pago · D17 pago.**
 
+### 2026-10-18 — Subtarefa 1.7.3 (README) · Tarefa 1.7 fechada · **Fase 1 fechada**
+
+- README escrito pelo mentor, a pedido. O antigo descrevia a Fase 0: `app` saindo com 0,
+  `config.yaml` embutido na imagem (hoje é montado `:ro` por cima), migrações até a 3.
+- Conferido contra o código: `retries` = tentativas no total (`for i := range c.Retries`),
+  `initial_wait` dobra a cada nova tentativa, limiar de itens `> 0.5`, `jobs.raw_job_id` aponta
+  para a versão mais nova. `health.sql` (com `-v start=…`) e `make gstatus` rodados.
+- Achado ao escrever o Quick start: o `analyzer` depende só do `postgres` saudável, não do `app`
+  — virou o **D41**.
+- ✅ **1.7.3 fechada · Tarefa 1.7 fechada · Fase 1 fechada.**
+
 ---
 
 ## Decisões tomadas
@@ -852,6 +865,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
 | ~~D39~~ | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | ✅ pago 2026-10-18 (1.7.2) — `runWithRetries`: 3 novas tentativas, 5 min entre elas, antes de voltar ao tick; `TestCollectorRetry` |
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
+| D41 | `compose.yaml` (`analyzer`) | O `analyzer` espera só o `postgres` ficar saudável, não o `app`. No primeiro `up` de um clone limpo ele pode rodar antes das migrações (`UndefinedTable`, traceback cru — D26) ou antes da 1ª coleta (`0 of 0`). Hoje é contornado no README (`docker compose run --rm analyzer`). Não verificado na prática. | aberto — 🟡, dono: Fase 2, quando o analyzer ganhar lógica real |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -1020,8 +1034,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 **Tarefas 1.6 e 1.5 fechadas** (Pi em `~/pi/job-searcher`, código `26cccd7` desde 2026-10-18,
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.7.3 — README
-da Fase 1** (D17 já pago); com ela a Fase 1 fecha e a Fase 2 (EDA em Python) começa. Dedupe: regra em `dedup.go`,
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
+2026-10-18.** Próximo: deploy no Pi do D37/D39 (se o aluno ainda não fez) e **abertura da Fase 2**
+(EDA em Python): diagnóstico, detalhar a fase no ROADMAP, 2.1.1. Dedupe: regra em `dedup.go`,
 marcação em `store.go:updateDuplicate`, histórico em `store.go:backfillDedupe` (no `run`, antes das
 fontes), aceite em `db/queries/live_duplicates.sql`. O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,

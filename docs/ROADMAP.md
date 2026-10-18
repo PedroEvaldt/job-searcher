@@ -177,7 +177,7 @@ projeto lendo só o README.
 
 ---
 
-## 📍 Fase 1 — Coleta de verdade
+## Fase 1 — Coleta de verdade ✅ fechada 2026-10-18
 
 **Objetivo de aprendizado:** sair de uma fonte para N fontes com formatos de API
 diferentes, atrás de uma abstração que **nasce da dor da duplicação** (não antes dela),
@@ -415,7 +415,7 @@ com várias vagas vivas de propósito); teste de integração com os casos reais
       vivas, chaves não vazias): **`0 | 0`**; sem o filtro de vivas, `3 | 292` — a consulta enxerga
       os grupos.
 
-### 📍 Tarefa 1.7 — Fechamento da Fase 1
+### Tarefa 1.7 — Fechamento da Fase 1 ✅ fechada 2026-10-18
 
 **Objetivo:** os débitos que a Fase 1 deixou no coletor pagos, e um README que leva um clone até
 a coleta rodando.
@@ -442,8 +442,13 @@ primeira coleta.
       entre elas, `client.Sleep` com o `ctx`), usado na partida e em cada tick; `collector`
       recebe as duas como parâmetro. `TestCollectorRetry` (recupera, desiste no teto, cancelado na
       espera) e `TestFirstCycle` com espera de 1s. Cinco mutações, todas derrubam.
-- [ ] **1.7.3** README da Fase 1 + D17 (`Makefile` lendo a DSN do `.env`, boilerplate do mentor —
-      feito em 2026-10-18: `make gstatus` lê o `.env`).
+- [x] **1.7.3** README da Fase 1 + D17 (`Makefile` lendo a DSN do `.env`, boilerplate do mentor —
+      feito em 2026-10-18: `make gstatus` lê o `.env`). ✅ 2026-10-18 — README escrito pelo mentor,
+      a pedido: arquitetura com as 3 fontes, o que acontece em cada falha, tabelas, regra da dedupe,
+      `config.yaml` campo a campo (montado `:ro`, `restart` basta), `-once`, `make`, consultas de
+      `db/queries/`, Raspberry Pi, status. Comandos conferidos contra `compose.yaml`, `config.yaml`,
+      `Makefile` e o código; `health.sql` e `make gstatus` rodados. Clone limpo **não** rodado (o
+      `container_name` fixo, D23, exige parar o Postgres local).
 
 ---
 
