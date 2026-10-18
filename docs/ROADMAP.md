@@ -452,9 +452,69 @@ primeira coleta.
 
 ---
 
-## Fases seguintes (resumo)
+## 📍 Fase 2 — Olhar o dado
 
-**Fase 2 — Olhar o dado.** EDA em Python, boilerplate medido, política de localização, vagas PT-BR. Sai com 5 defeitos concretos e uma função de corte de boilerplate testada.
+**Objetivo de aprendizado:** explorar dado real com pandas antes de qualquer modelo; transformar
+observação em número e número em decisão (o que cortar, o que filtrar); escrever a primeira função
+Python "de produção" — type hints, `pytest`, `ruff`, `mypy --strict` — a partir do que a
+exploração mostrou.
+
+**Pronto quando:** `docs/eda.md` lista **5 defeitos concretos** do dado (cada um com número,
+exemplo e dono) e as políticas de **localização** e de **vagas PT-BR**, cada uma medida; a função
+de **corte de boilerplate** existe no `analyzer` com `pytest` de casos reais; `ruff`, `mypy
+--strict` e `pytest` limpos.
+
+**Ponto de partida (medido no Pi em 2026-10-18):** 15.279 vagas, 14.714 vivas. **99% Himalayas**
+(15.123); Remote OK 137, Remotive 19 — os dois feeds devolvem só as vagas mais recentes. Descrição
+média de ~5,4 mil caracteres, em **HTML em 100%** das da Himalayas, com entidades (`&amp;`…) em
+metade; `posted_at` vazio em **todas** (D33).
+
+**Onde ler:** [pandas — primeiros passos](https://pandas.pydata.org/docs/getting_started/index.html) ·
+[psycopg — uso básico](https://www.psycopg.org/psycopg3/docs/basic/usage.html) ·
+[uv — grupos de dependência](https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-groups) ·
+[pytest](https://docs.pytest.org/en/stable/getting-started.html)
+
+### 📍 Tarefa 2.1 — Bancada de EDA
+
+**Objetivo:** um notebook no `analyzer` carrega as vagas vivas, com dado fresco do Pi, num
+`DataFrame`, e mostra o primeiro retrato delas.
+
+**Por quê:** toda a Fase 2 acontece em cima desse `DataFrame`; o banco local é a cópia de 16/10,
+sem a migração `007` nem as marcas de duplicata.
+
+- [ ] **2.1.1** Dado fresco do Pi no banco local (boilerplate do mentor: `pg_dump` pelo `ssh`,
+      `dropdb`/`createdb`/`pg_restore`); grupo de dependências `eda` no `analyzer` (`pandas`,
+      `jupyterlab`), fora do `dev` e da imagem; `analyzer/notebooks/01_overview.ipynb` carrega as
+      vagas vivas com o nome da fonte: `shape`, `dtypes`, contagem por fonte.
+- [ ] **2.1.2** Primeiro retrato: tamanho das descrições por fonte (`describe`, histograma),
+      empresas que mais publicam, vagas novas por dia (primeiro `fetched_at` em `raw_jobs`, já
+      que `posted_at` está vazio).
+
+### Tarefa 2.2 — Defeitos do dado *(resumo)*
+
+Medir e listar 5 defeitos, com número, exemplo e dono, em `docs/eda.md`: texto (HTML, entidades,
+mojibake — D10); campos que os payloads trazem e `jobs` descarta (data, localização, salário,
+tags — D33) e sentinelas (`salary_min: 0`).
+
+### Tarefa 2.3 — Boilerplate *(resumo)*
+
+HTML → parágrafos de texto (função + `pytest`); medir parágrafos repetidos entre vagas (por
+empresa e no geral) e quanto do texto ocupam; `cut_boilerplate` com o limiar que a medição
+sugerir, testado com casos reais.
+
+### Tarefa 2.4 — Localização e PT-BR *(resumo)*
+
+O que cada fonte diz sobre localização, em categorias, e quantas vagas servem a quem mora no
+Brasil → política aceita / rejeita / dúvida. Quantas vagas estão em português → política de lote
+separado (invariante).
+
+### Tarefa 2.5 — Fechamento da Fase 2 *(resumo)*
+
+Débitos com dono na Fase 2 (D10, D32, D33, D41) pagos ou reagendados; README da parte Python.
+
+---
+
+## Fases seguintes (resumo)
 
 **Fase 3a — Extração no código.** `cv.md`, skills por dicionário/regex, anos exigidos, salário, idade da vaga, ranking TF-IDF.
 

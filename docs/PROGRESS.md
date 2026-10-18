@@ -13,9 +13,11 @@ para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, i
 **Tarefa 1.5 fechada em 2026-10-18** — dedupe no ar no Pi (`26cccd7`): marcação na gravação +
 histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Tarefa 1.7 (fechamento da
 Fase 1): **1.7.1 (D37)**, **1.7.2 (D39)** e **1.7.3 (README + D17)** fechadas em 2026-10-18. **Fase 1
-fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴). Pendente: commit +
-push do aluno (nits da auditoria, diagrama removido), branches velhas apagadas e deploy no Pi (o
-Pi está em `26cccd7`, sem o D37 e o D39). Próximo: **abertura da Fase 2** — diagnóstico, detalhar a fase no ROADMAP,
+fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
+
+**Fase 2 aberta em 2026-10-18** (EDA em Python). Próximo: **2.1.1 — bancada de EDA** (dump fresco
+do Pi no banco local, grupo `eda` no `analyzer`, notebook carregando as vagas vivas). Pendente: o
+Pi tem o código `8498ca2` puxado, mas roda a imagem de `26cccd7` (falta o `up -d --build app`). Próximo: **abertura da Fase 2** — diagnóstico, detalhar a fase no ROADMAP,
 apresentar a 2.1.1.
 
 Última sessão: **2026-10-18**.
@@ -794,6 +796,18 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   `defer cancel()` no laço de fonte quebrada virou `cancelCheck()` logo após a chamada (sugestão
   da 1.6.5), typo "Cluade" no `.gitignore`.
 
+### 2026-10-18 — Abertura da Fase 2 (diagnóstico)
+
+- Diagnóstico: nada bloqueando. Commits da auditoria, branches apagadas e `git pull` no Pi feitos
+  pelo aluno; o `up -d --build app` não rodou (container e imagem de 14:24 UTC, `26cccd7`): D37 e
+  D39 ainda não estão em produção.
+- Medição no Pi para planejar: 15.279 vagas (14.714 vivas), **99% Himalayas**; Remote OK 137 e
+  Remotive 19 no total — os feeds só devolvem as mais recentes. Descrições em HTML (100% da
+  Himalayas), entidades em metade, `posted_at` vazio em todas.
+- Fase 2 detalhada no ROADMAP (2.1 em subtarefas; 2.2–2.5 em resumo). Decisões de método: dados
+  da EDA vêm do banco local restaurado do Pi; dependências de EDA num grupo `eda` (fora do `dev` e
+  da imagem); notebook só para explorar, o que roda de verdade vai para `.py` com `pytest`.
+
 ---
 
 ## Decisões tomadas
@@ -1050,8 +1064,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
 parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
-2026-10-18.** Próximo: deploy no Pi do D37/D39 (se o aluno ainda não fez) e **abertura da Fase 2**
-(EDA em Python): diagnóstico, detalhar a fase no ROADMAP, 2.1.1. Dedupe: regra em `dedup.go`,
+2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.1.1 — bancada de EDA**. Pendente no Pi:
+`docker compose up -d --build app` (roda a imagem de `26cccd7`). Dedupe: regra em `dedup.go`,
 marcação em `store.go:updateDuplicate`, histórico em `store.go:backfillDedupe` (no `run`, antes das
 fontes), aceite em `db/queries/live_duplicates.sql`. O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
