@@ -861,16 +861,15 @@ func jobItem(t *testing.T, externalID, company, title, description string) json.
 	return item
 }
 
-// TestMarkDuplicates writes the real cases from 1.5.1 through collectAndStoreData,
-// in order, and checks where each job's duplicate_of points: copies point at the
-// oldest live match, never at a copy, and jobs the rule keeps apart stay live.
-func TestMarkDuplicates(t *testing.T) {
+// writeDuplicateScenario empties the tables and writes the real cases from 1.5.1
+// through collectAndStoreData, in order: the himalayas jobs first, then remoteok.
+func writeDuplicateScenario(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
 	_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
 	if err != nil {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 	ctx := t.Context()
-	conn := newConn(t)
 	logger := slog.New(slog.DiscardHandler)
 
 	himalayasID, err := getSourceID(ctx, conn, "himalayas")
@@ -906,9 +905,15 @@ func TestMarkDuplicates(t *testing.T) {
 	if failed := collectAndStoreData(ctx, conn, logger, remoteok, jobSource{}, remoteokID); failed != 0 {
 		t.Fatalf("expected 0 failed remoteok items; got %d", failed)
 	}
+}
 
+// checkDuplicateMarks reads where each job of the scenario points and compares it with
+// the expected marks: copies point at the oldest live match, never at a copy, and jobs
+// the rule keeps apart stay live.
+func checkDuplicateMarks(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
 	// Each job's external id, and the external id of the job it points at ("" = live).
-	rows, err := conn.Query(ctx, `
+	rows, err := conn.Query(t.Context(), `
 		SELECT j.external_id, COALESCE(o.external_id, '')
 		FROM jobs j
 		LEFT JOIN jobs o ON o.id = j.duplicate_of;`)
@@ -947,5 +952,46 @@ func TestMarkDuplicates(t *testing.T) {
 		if got[job] != original {
 			t.Errorf("%s: expected duplicate_of %q; got %q", job, original, got[job])
 		}
+	}
+}
+
+// TestMarkDuplicates checks the marks set as each job is written.
+func TestMarkDuplicates(t *testing.T) {
+	conn := newConn(t)
+	writeDuplicateScenario(t, conn)
+	checkDuplicateMarks(t, conn)
+}
+
+// TestBackfillDedupe turns the scenario into jobs written before dedupe keys existed
+// and checks that the backfill rebuilds the same marks, then finds nothing left to do.
+func TestBackfillDedupe(t *testing.T) {
+	ctx := t.Context()
+	conn := newConn(t)
+	writeDuplicateScenario(t, conn)
+
+	// Marks are cleared too, so only the backfill can put them back.
+	_, err := conn.Exec(ctx, "UPDATE jobs SET company_key = NULL, title_key = NULL, duplicate_of = NULL;")
+	if err != nil {
+		t.Fatalf("failed to clear keys and marks: %v", err)
+	}
+
+	// 3 per batch: the 10 jobs take four batches. h2 and h3 find h1 inside their own
+	// batch; r1 and r2 find h6 and h4 in an earlier one.
+	const batchSize = 3
+	backfilled, err := backfillDedupe(ctx, conn, batchSize)
+	if err != nil {
+		t.Fatalf("failed to backfill: %v", err)
+	}
+	if backfilled != 10 {
+		t.Errorf("expected 10 backfilled jobs; got %d", backfilled)
+	}
+	checkDuplicateMarks(t, conn)
+
+	backfilled, err = backfillDedupe(ctx, conn, batchSize)
+	if err != nil {
+		t.Fatalf("failed to backfill a second time: %v", err)
+	}
+	if backfilled != 0 {
+		t.Errorf("expected 0 backfilled jobs on the second pass; got %d", backfilled)
 	}
 }

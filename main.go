@@ -33,6 +33,13 @@ const (
 	// items) before the cycle warns about it. At collect_every 6h, 2 runs is 12h
 	// without data.
 	brokenAfterRuns = 2
+	// backfillTimeout bounds the backfill at the start of a run. The first pass after
+	// the deploy covers every job written before dedupe keys existed; if it runs out
+	// of time, the next run picks up where it stopped.
+	backfillTimeout = 5 * time.Minute
+	// backfillBatchSize is how many jobs the backfill reads at a time. Descriptions
+	// average about 5 KB, so a batch holds a few MB.
+	backfillBatchSize = 1000
 )
 
 // Source is what the collector needs from a job source: fetch the raw items, read
@@ -182,6 +189,20 @@ func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (e
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
 	}
+
+	// Before the sources: a new job only finds its duplicates among jobs that
+	// already have keys.
+	backfillCtx, cancelBackfill := context.WithTimeout(ctx, backfillTimeout)
+	backfillStart := time.Now()
+	backfilled, err := backfillDedupe(backfillCtx, conn, backfillBatchSize)
+	cancelBackfill()
+	backfillDuration := time.Since(backfillStart).Round(time.Millisecond)
+	if err != nil {
+		logger.Error("failed to backfill dedupe keys", "backfilled", backfilled, "duration", backfillDuration, "error", err)
+	} else if backfilled > 0 {
+		logger.Info("backfilled dedupe keys and duplicate marks", "jobs", backfilled, "duration", backfillDuration)
+	}
+
 	var runErrs []error
 	var success bool
 	for _, sourceConfig := range cfg.SourcesConfig {

@@ -224,3 +224,58 @@ func sourceLooksBroken(ctx context.Context, conn *pgx.Conn, k int, source string
 	}
 	return runs == k && failed == k, nil
 }
+
+// storedJob is a job read back from the jobs table: its row id and source id, which
+// sources.Job does not carry, plus the fields the dedupe rule compares.
+type storedJob struct {
+	id       int
+	sourceID int
+	job      sources.Job
+}
+
+// backfillDedupe gives dedupe keys and duplicate marks to the jobs written before the
+// keys existed, the ones whose company_key is still NULL. It reads them batchSize at a
+// time in id order, so every older job is already keyed when a newer one looks for its
+// original. Each job is marked first and keyed last: if marking fails, the key stays
+// NULL and the next run retries it. Setting company_key back to NULL is how to make a
+// run re-evaluate jobs. It returns how many jobs it finished, also on error.
+func backfillDedupe(ctx context.Context, conn querier, batchSize int) (int, error) {
+	backfilled := 0
+	for {
+		batch := []storedJob{}
+		rows, err := conn.Query(ctx, "SELECT id, source_id, title, company, description FROM jobs WHERE company_key IS NULL ORDER BY id LIMIT $1;", batchSize)
+		if err != nil {
+			return backfilled, fmt.Errorf("failed to query keyless jobs: %w", err)
+		}
+		for rows.Next() {
+			j := storedJob{}
+			err = rows.Scan(&j.id, &j.sourceID, &j.job.Title, &j.job.Company, &j.job.Description)
+			if err != nil {
+				rows.Close()
+				return backfilled, fmt.Errorf("failed to scan keyless job: %w", err)
+			}
+			batch = append(batch, j)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return backfilled, fmt.Errorf("failed to read batch: %w", err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+
+		for _, j := range batch {
+			err = updateDuplicate(ctx, conn, j.id, j.sourceID, j.job)
+			if err != nil {
+				return backfilled, fmt.Errorf("failed to mark job %d: %w", j.id, err)
+			}
+			companyKey, titleKey := normalize(j.job.Company, j.job.Title)
+			_, err = conn.Exec(ctx, "UPDATE jobs SET company_key = $1, title_key = $2 WHERE id = $3;", companyKey, titleKey, j.id)
+			if err != nil {
+				return backfilled, fmt.Errorf("failed to write keys of job %d: %w", j.id, err)
+			}
+			backfilled++
+		}
+	}
+	return backfilled, nil
+}
