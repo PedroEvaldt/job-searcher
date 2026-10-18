@@ -436,10 +436,14 @@ primeira coleta.
       vagas). ✅ 2026-10-18 — `TestRemoteOK` do aluno; conserto pelo mentor, a pedido
       (`remoteok: empty feed, the legal notice is missing`). Mutações: sem a conferência → `panic`
       em `remoteok.go`; `[]` sem erro → `expected err got nil`.
-- [ ] **1.7.2** D39: ciclo que falha inteiro tenta de novo em poucos minutos, com teto de
+- [x] **1.7.2** D39: ciclo que falha inteiro tenta de novo em poucos minutos, com teto de
       tentativas, antes de voltar ao ritmo do `collect_every`. Teste no `collector` com ciclo
-      falso e intervalos curtos.
-- [ ] **1.7.3** README da Fase 1 + D17 (`Makefile` lendo a DSN do `.env`, boilerplate do mentor).
+      falso e intervalos curtos. ✅ 2026-10-18 — `runWithRetries` (3 novas tentativas, 5 min
+      entre elas, `client.Sleep` com o `ctx`), usado na partida e em cada tick; `collector`
+      recebe as duas como parâmetro. `TestCollectorRetry` (recupera, desiste no teto, cancelado na
+      espera) e `TestFirstCycle` com espera de 1s. Cinco mutações, todas derrubam.
+- [ ] **1.7.3** README da Fase 1 + D17 (`Makefile` lendo a DSN do `.env`, boilerplate do mentor —
+      feito em 2026-10-18: `make gstatus` lê o `.env`).
 
 ---
 

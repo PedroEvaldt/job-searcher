@@ -12,8 +12,8 @@ energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
 **Tarefa 1.5 fechada em 2026-10-18** — dedupe no ar no Pi (`26cccd7`): marcação na gravação +
 histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Tarefa 1.7 (fechamento da
-Fase 1): **1.7.1 (D37)** fechada em 2026-10-18. Próximo: **1.7.2 (D39, nova tentativa depois de
-ciclo falho)**; depois 1.7.3 (README + D17).
+Fase 1): **1.7.1 (D37)** e **1.7.2 (D39)** fechadas em 2026-10-18; D17 pago (mentor). Próximo:
+**1.7.3 — README da Fase 1**, a última da fase.
 
 Última sessão: **2026-10-18**.
 
@@ -748,6 +748,25 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   sugestões opcionais do teste (`"legal"` no lugar de `"cool"`, `t.Cleanup(srv.Close)`).
 - ✅ **1.7.1 fechada · D37 pago.**
 
+### 2026-10-18 — Subtarefa 1.7.2 (D39, nova tentativa depois de ciclo falho)
+
+- Helper do aluno usado nos dois lugares certos (partida e tick), com contador e `ctx`. Furos: a
+  espera vinha com um ticker, então **toda** chamada esperava antes de rodar — a coleta da
+  partida atrasaria 5 min mesmo sem falha (`TestFirstCycle` 1.0s); espera e teto fixos dentro
+  do `collector`; constantes entre o comentário do `himalayasMaxPages` e a declaração (2ª vez);
+  `Error` a cada falha; "shutting down" duplicado. Numa 2ª versão, `time.Sleep` sem o `ctx`.
+- A pedido, o mentor terminou: `runWithRetries` ("chama → falhou? espera → chama"),
+  `cycleRetries = 3` (novas tentativas, não chamadas) e `cycleRetryWait = 5m`, `Warn` por
+  tentativa e `Error` ao desistir, saída silenciosa quando o ciclo falhou por desligamento.
+  `TestCollectorRetry` com 3 casos; testes antigos passam `0, 0` (sem novas tentativas).
+- Mutações (mentor): sem teto → 20 chamadas; sem nova tentativa → 1; `>=` no teto → 3 de 4;
+  `Sleep` sem o `ctx` → teste estoura o prazo; espera antes da 1ª chamada (a 1ª versão do aluno)
+  → **passava**, porque o `TestFirstCycle` usava espera 0. Corrigido: espera de 1s, cai com
+  `expected time < 500ms; got 1.0s`.
+- D17 pago pelo mentor (boilerplate): `Makefile` monta a DSN do `.env` (`set -a; . ./.env`), sem
+  senha nem caminho no arquivo.
+- ✅ **1.7.2 fechada · D39 pago · D17 pago.**
+
 ---
 
 ## Decisões tomadas
@@ -809,7 +828,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D14 | `main_test.go:90` | Loop `for rows.Next()` sem checar `rows.Err()` depois. | ✅ pago 2026-09-09 |
 | D15 | `main.go:230` | `defer rows.Close()` vinha antes do `if err != nil`. Não quebra em pgx (`Query` sempre devolve `rows` não-nil), mas quebraria em `database/sql`. | ✅ pago 2026-09-09 |
 | D16 | `main.go` | Nenhuma transação no projeto, apesar de "transação" estar nos conceitos da Tarefa 0.2. | ✅ pago 2026-09-09 — ver decisão da fronteira |
-| D17 | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | 🔶 parcial — caminho relativo desde 2026-09-09; a DSN literal repetida 3× continua aberta (ver D4) |
+| ~~D17~~ | `Makefile:2,4,6` | Caminho absoluto `/mnt/ssd_m2/...` nos três alvos do goose: quebra em qualquer outra máquina, inclusive no CI da Etapa 7. Senha repetida três vezes (D4 com outro rosto). | ✅ pago 2026-10-18 (1.7.3, mentor) — `Makefile` lê `DATABASE_URL` do `.env`; nenhuma credencial no arquivo |
 | ~~D18~~ | `main.go:246` | `logger.Info` por item: ~100 linhas INFO por execução escondendo as poucas que importam. `runs` já guarda a contagem. | ✅ pago 2026-10-07 — `Debug` por item + `source collected` por fonte em 2026-09-30 (0.5.1); o resto (`new raw_job inserted` em `insertRawJob`, reaberto no mesmo dia) virou `Debug` na limpeza geral |
 | ~~D19~~ | `main.go` | Pílula envenenada: com tudo-ou-nada no laço de `insertJob`, um item permanentemente inválido faz **toda** run futura falhar, já que ele reaparece a cada coleta. Saída conhecida: savepoint por item (`tx.Begin()` sobre uma `Tx`). | ✅ pago 2026-10-03 junto com o D29 — sem transação no laço, erro de item é `Warn` + `failed++` + `continue`; um item inválido permanente não trava mais as runs seguintes (e, com o limiar da 1.3.3, 1 item em N não derruba a fonte). Constatado no fechamento da 1.3 |
 | ~~D20~~ | `main.go:102` | `processSource` sem resultado nomeado: o `defer` lê o `err` **local**, então `runs.error` grava o erro cru sem o `fmt.Errorf` que envolve o retorno (verificado: `WARN` diz `failed to get source id: ...`, `runs.error` diz só `failed to query db: ...`). No dia que houver um `return fmt.Errorf("algo")` sem `err`, o `defer` grava `error=NULL` — D11 por outro caminho. | ✅ pago 2026-09-30 (0.5.1) — resultado nomeado; verificado com fonte `fake` (run 45) |
@@ -831,7 +850,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D36 | `internal/sources/*.go` (`Fetch`) | Fonte que muda o formato da resposta (ex.: envelope `jobs` → `data`) faz o parser devolver **zero itens sem erro**. Pela regra da 1.3.3, zero itens não é falha (feed vazio pode ser legítimo, ex.: empresa de ATS sem vagas), então a quebra passa calada: `exit=0`, `error` NULL, `fetched=0`. | ✅ fechado 2026-10-08 (1.6.5) — `sourceLooksBroken` + `WARN source is broken` ao fim de cada ciclo; o parser continua devolvendo zero sem erro, mas não passa mais calado |
 | ~~D37~~ | `internal/sources/remoteok.go:25` | `items[1:]` (pular o aviso legal do índice 0) entra em **panic** (`slice bounds out of range [1:0]`) se a API devolver `[]`. Hoje isso derruba o processo e grava a run com `error` NULL (D11). | ✅ pago 2026-10-18 (1.7.1) — `[]` vira `remoteok: empty feed, the legal notice is missing`; só o aviso = 0 itens sem erro; `TestRemoteOK` |
 | D38 | `internal/client/client.go` (`HTTPGetBody`) | Com `Retries = 0` o laço não roda: nenhuma requisição é feita e a fonte falha com `maximum number of retries made: 0`. Hoje o valor é uma constante (3); na 1.4.3 vem do `config.yaml`, onde campo ausente = zero. Falha barulhenta (todas as fontes caem → `exit≠0`), mas com causa enganosa. Junto: o erro final não diz o último status (429 × 503), que antes da 1.4.1 ia para `runs.error`. **Irmão pior (1.4.2):** teto de páginas do Himalayas = 0 → nenhuma requisição, **zero itens e nenhum erro** — falha calada, classe do D36. Visto no `TestCursor` em 2026-10-07 (`Himalayas{}` sem o teto: 0 itens, 0 requisições). | 🔶 parcial 2026-10-07 (1.4.3) — zero/negativo em fonte ligada agora é erro na partida, no `Load`; o erro final diz o último status (`giving up after N attempts: last status S`, limpeza geral). Abertos: o teto continua no código (validar quando for para o config); `Config` montado sem `Load` (testes) ainda aceita zero |
-| D39 | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | aberto — 🟡, dono: 1.7 |
+| ~~D39~~ | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | ✅ pago 2026-10-18 (1.7.2) — `runWithRetries`: 3 novas tentativas, 5 min entre elas, antes de voltar ao tick; `TestCollectorRetry` |
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
 
 ### 🟢 Nits — mencionados uma vez
@@ -990,6 +1009,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-18** — teste que já passa **antes** do conserto não prova o conserto: o caso "feed
   vazio" com JSON inválido recebia um erro, só que de outro lugar. Ver o teste falhar pelo motivo
   certo é parte do teste.
+- **2026-10-18** — um ticker sempre **espera e depois** dispara; para "tenta, e só se falhar
+  espera", a espera vem depois da chamada (`Sleep` com o `ctx`). E teste com espera 0 não enxerga
+  atraso nenhum: o `TestFirstCycle` só pegou o bug quando passou a usar uma espera de verdade.
 
 ---
 
@@ -998,8 +1020,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 **Tarefas 1.6 e 1.5 fechadas** (Pi em `~/pi/job-searcher`, código `26cccd7` desde 2026-10-18,
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.7.2 — D39**
-(nova tentativa depois de ciclo falho, no `collector`); depois 1.7.3 (README + D17). Dedupe: regra em `dedup.go`,
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.7.3 — README
+da Fase 1** (D17 já pago); com ela a Fase 1 fecha e a Fase 2 (EDA em Python) começa. Dedupe: regra em `dedup.go`,
 marcação em `store.go:updateDuplicate`, histórico em `store.go:backfillDedupe` (no `run`, antes das
 fontes), aceite em `db/queries/live_duplicates.sql`. O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
