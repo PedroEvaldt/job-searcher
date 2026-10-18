@@ -357,7 +357,7 @@ o estado do Docker no Pi desconhecido. Local primeiro; o Pi recebe um compose j�
 religa os containers sem a ordem do `depends_on`, e um 1º ciclo perdido custa 6h, o que quebraria o
 critério dos 7 dias. Saúde e 7 dias viraram 1.6.5 e 1.6.6.
 
-### 📍 Tarefa 1.5 — Deduplicação
+### Tarefa 1.5 — Deduplicação ✅ fechada 2026-10-18
 
 **Objetivo:** a mesma vaga aparece uma vez só para quem lê `jobs`: as cópias apontam para a
 original por `duplicate_of`.
@@ -409,10 +409,35 @@ com várias vagas vivas de propósito); teste de integração com os casos reais
       3 (4 lotes, 10 vagas, 2º passe = 0). Mutações: um lote só, `ORDER BY id DESC` e sem marcar —
       as três derrubam o teste. Na cópia local do Pi (transação desfeita): 12.584 vagas em 2,7 s,
       448 marcadas (446 mesma fonte, 2 entre fontes), 0 corrente, critério de aceite 0 / 0.
-- [ ] **1.5.5** Deploy no Pi e re-medir lá (consulta de duplicatas só nas vagas vivas): o critério
-      de aceite.
+- [x] **1.5.5** Deploy no Pi e re-medir lá (consulta de duplicatas só nas vagas vivas): o critério
+      de aceite. ✅ 2026-10-18 — Pi em `26cccd7`: migração `007` em 87 ms, histórico de **15.279
+      vagas em 1 min 20 s**, 565 marcadas. `db/queries/live_duplicates.sql` (chaves gravadas, só
+      vivas, chaves não vazias): **`0 | 0`**; sem o filtro de vivas, `3 | 292` — a consulta enxerga
+      os grupos.
 
-### Tarefa 1.7 — Fechamento da Fase 1 *(resumo)* — débitos restantes (D17, D37), README.
+### 📍 Tarefa 1.7 — Fechamento da Fase 1
+
+**Objetivo:** os débitos que a Fase 1 deixou no coletor pagos, e um README que leva um clone até
+a coleta rodando.
+
+**Por quê:** a Fase 2 lê o banco que o coletor enche; ela começa sobre um coletor que não perde
+ciclo à toa nem entra em panic por resposta de rede, e com o caminho de instalação escrito.
+
+**Pronto quando:** D37 e D39 pagos com teste; D17 fechado; o README descreve as 3 fontes, o
+`config.yaml`, o laço de coleta, a dedupe e o deploy no Pi, e um clone limpo segue ele até a
+primeira coleta.
+
+**Onde ler:** [expressões de slice](https://go.dev/ref/spec#Slice_expressions) ·
+[`time.Timer`](https://pkg.go.dev/time#Timer)
+
+- [ ] **1.7.1** D37: a Remote OK com resposta `[]` vira erro da fonte com mensagem própria, não
+      `panic` recuperado com "slice bounds out of range". Array só com o aviso legal = feed vazio,
+      zero itens sem erro. Teste em tabela com servidor `httptest` (`[]`, só o aviso, aviso + 2
+      vagas).
+- [ ] **1.7.2** D39: ciclo que falha inteiro tenta de novo em poucos minutos, com teto de
+      tentativas, antes de voltar ao ritmo do `collect_every`. Teste no `collector` com ciclo
+      falso e intervalos curtos.
+- [ ] **1.7.3** README da Fase 1 + D17 (`Makefile` lendo a DSN do `.env`, boilerplate do mentor).
 
 ---
 

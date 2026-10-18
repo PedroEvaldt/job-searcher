@@ -10,10 +10,10 @@
 Pi: 2026-10-08 17:56 → 2026-10-16, as 3 fontes todos os dias, maior intervalo 6h03, três quedas de
 energia atravessadas sem intervenção. Ordem da Fase 1: **1.6 → 1.5 → 1.7**. Dados do Pi copiados
 para o `jobs` local em 2026-10-16 (105 runs, 12.584 vagas; dump em `db_dump/`, ignorado pelo git).
-**1.5.1** (medir duplicatas, 2026-10-16), **1.5.2** (a regra em Go), **1.5.3** (marcar na
-gravação, 2026-10-17) e **1.5.4** (o histórico, 2026-10-18) fechadas. Próximo: **1.5.5 — deploy no
-Pi + consulta de aceite** (`db/queries/live_duplicates.sql`, esperado `0 | 0`). Depois, a 1.7 (D37,
-D17, D39, README).
+**Tarefa 1.5 fechada em 2026-10-18** — dedupe no ar no Pi (`26cccd7`): marcação na gravação +
+histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Próximo: **Tarefa 1.7 —
+fechamento da Fase 1**, começando pela **1.7.1 (D37, Remote OK com `[]`)**; depois 1.7.2 (D39) e
+1.7.3 (README + D17).
 
 Última sessão: **2026-10-18**.
 
@@ -722,6 +722,21 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   repetida. No Pi deve demorar mais (cada `UPDATE` faz commit no disco).
 - ✅ **1.5.4 fechada.**
 
+### 2026-10-18 — Subtarefa 1.5.5 (deploy no Pi + consulta de aceite) · Tarefa 1.5 fechada
+
+- Deploy do aluno (`git pull` + `up -d --build app`): migração `007` em 87 ms; histórico de
+  **15.279 vagas em 1 min 20 s** no Pi (~30× a cópia local numa transação só — cada `UPDATE` faz
+  commit no disco), dentro dos 5 min; 565 marcadas, 16 chaves vazias, 0 chave `NULL`. A coleta
+  das 14:25 trouxe o mesmo conteúdo da das 13:43 (0 vagas novas): a marcação na gravação só roda
+  no Pi a partir do ciclo seguinte.
+- `db/queries/live_duplicates.sql` no formato de especificação. 1ª versão devolvia `249 | 0`:
+  `COUNT(source_id)` conta linhas, não fontes (todo grupo virava "entre fontes"); `n_desc >
+  n_rows` nunca é verdade (a coluna dava 0 com ou sem dedupe); chaves filtradas por `IS NOT NULL`
+  em vez de vazias. Corrigida pelo aluno: **`0 | 0`**; sem o filtro de vivas (rodado pelo mentor),
+  `3 | 292`.
+- ✅ **1.5.5 fechada · Tarefa 1.5 fechada.** Tarefa 1.7 detalhada no ROADMAP (1.7.1 D37, 1.7.2
+  D39, 1.7.3 README + D17).
+
 ---
 
 ## Decisões tomadas
@@ -958,18 +973,21 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-18** — `defer` dentro de um `for` só roda quando a **função** termina, não a cada
   volta: num laço de lotes, o `rows` de cada volta fica aberto até o fim. Feche à mão (inclusive
   antes de cada `return`) ou extraia a volta para uma função própria.
+- **2026-10-18** — `COUNT(col)` conta as linhas em que `col` não é `NULL`; `COUNT(DISTINCT col)`
+  conta os valores diferentes. E uma consulta de aceite que dá 0 só prova algo se a mesma
+  consulta, sem o filtro que conserta, der mais que 0.
 
 ---
 
 ## Retomada rápida
 
-**Tarefa 1.6 fechada em 2026-10-16** (Pi em `~/pi/job-searcher`, código `de94bb3`, coletando a cada
-6h, de pé de novo depois de um `down` do aluno em 16/10 16:40). O `jobs` local é a cópia do Pi de 2026-10-16
+**Tarefas 1.6 e 1.5 fechadas** (Pi em `~/pi/job-searcher`, código `26cccd7` desde 2026-10-18,
+coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-16
 (dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
-parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.5.5 — deploy
-no Pi + consulta de aceite** (regra em `dedup.go`, marcação em `store.go:updateDuplicate`,
-histórico em `store.go:backfillDedupe`, chamado no `run` antes das fontes); depois a 1.7 (D37, D17,
-D39, README). O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
+parado** (`docker compose up -d postgres`, nunca o `up -d` completo). Próximo: **1.7.1 — D37**
+(Remote OK com `[]`); depois 1.7.2 (D39) e 1.7.3 (README + D17). Dedupe: regra em `dedup.go`,
+marcação em `store.go:updateDuplicate`, histórico em `store.go:backfillDedupe` (no `run`, antes das
+fontes), aceite em `db/queries/live_duplicates.sql`. O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,
 `sourceLooksBroken` avisa fonte com 2 runs seguidas com erro ou 0 itens. O compose local já está
 provado: `app` daemon com `unless-stopped`, `analyzer` roda uma vez, `config.yaml` montado `:ro`,
