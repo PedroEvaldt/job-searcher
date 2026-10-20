@@ -16,8 +16,8 @@ Fase 1): **1.7.1 (D37)**, **1.7.2 (D39)** e **1.7.3 (README + D17)** fechadas em
 fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
 
 **Fase 2 aberta em 2026-10-18** (EDA em Python). **Tarefa 2.1 (bancada de EDA) fechada em
-2026-10-19.** **2.2.1 (defeitos de texto) e 2.2.2 (campos descartados e sentinelas) fechadas em
-2026-10-20.** Próximo: **2.2.3 — `docs/eda.md` com os 5 defeitos**. Pi
+2026-10-19.** **Tarefa 2.2 (defeitos do dado) fechada em 2026-10-20**: `docs/eda.md` com 7 defeitos.
+Próximo: **2.3.1 — HTML → parágrafos** (`analyzer/text.py` + `pytest`). Pi
 com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
 
 Última sessão: **2026-10-20**.
@@ -903,6 +903,22 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   valores vão de 0,59 a 120M (período e moeda misturados). `categories` da Himalayas são slugs de
   cargo, não skills; as `tags` da Remotive são skills.
 
+### 2026-10-20 — Subtarefa 2.2.3 (`docs/eda.md`) · Tarefa 2.2 fechada
+
+- O aluno escolheu os 7 candidatos e pediu que o mentor escrevesse o documento ("já analisei
+  tudo"). Cada defeito tem número com denominador, exemplo com `id`, dono e decisão.
+- Medido para o documento: entidades nos títulos por título (`&#x2f;` 45, `&#x28;`/`&#x29;` 32,
+  `&ndash;` 23); salário da Himalayas com valor em 6.617 vagas (5.186 anual, 1.001 hora, 425 mês,
+  5 semana; 25 moedas, USD 83,7%; de 0,59 USD/hora a 168M IDR/ano); D42 na tabela `runs`: 47 runs
+  terminadas da Himalayas, 44 leram as 400, em 37 delas ≥370 eram inéditas (mediana 398).
+- Decisões: consertar no Python o HTML (2.3) e o salário heterogêneo (3a); consertar no Go as
+  entidades do título e o mojibake (D10), os campos descartados e as sentinelas (D33, D32) e o
+  teto de páginas (D42) — todos com dono na Tarefa 2.5, salvo os da 3a. Aceitos: os 4 mojibakes
+  da Himalayas.
+- Achado lateral (preparando a 2.3): 4 descrições do Remote OK (35, 70, 90, 15554) vêm com o HTML
+  escapado duas vezes (`&lt;p&gt;`) e viram `<p>` literal depois do parse. Vai junto do D10.
+- ✅ **2.2.3 fechada · Tarefa 2.2 fechada.** Tarefa 2.3 detalhada no ROADMAP (2.3.1–2.3.3).
+
 ---
 
 ## Decisões tomadas
@@ -990,7 +1006,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D39~~ | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | ✅ pago 2026-10-18 (1.7.2) — `runWithRetries`: 3 novas tentativas, 5 min entre elas, antes de voltar ao tick; `TestCollectorRetry` |
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
 | D41 | `compose.yaml` (`analyzer`) | O `analyzer` espera só o `postgres` ficar saudável, não o `app`. No primeiro `up` de um clone limpo ele pode rodar antes das migrações (`UndefinedTable`, traceback cru — D26) ou antes da 1ª coleta (`0 of 0`). Hoje é contornado no README (`docker compose run --rm analyzer`). Não verificado na prática. | aberto — 🟡, dono: Fase 2, quando o analyzer ganhar lógica real |
-| D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) |
+| D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) — **defeito 7 do `docs/eda.md`** (47 runs: 37 de 44 cheias com ≥370 inéditas); decisão: consertar no Go, Tarefa 2.5 |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -1164,7 +1180,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-19
 (dump em `db_dump/`; atualizar com dump novo + `dropdb`/`createdb`/`pg_restore --no-owner`); **o `app` local fica
 parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
-2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.2.3 — `docs/eda.md` com os 5 defeitos**. Pi com a imagem de
+2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.3.1 — HTML → parágrafos**. Defeitos do dado em `docs/eda.md`. Pi com a imagem de
 `8498ca2` (D37 e D39 em produção) desde 2026-10-18. EDA em `analyzer/eda/`, rodada pelo `iron.nvim`
 (REPL com `--all-groups` + `--env-file`) ou com `uv run --group eda --env-file ../.env ipython`
 dentro de `analyzer/`. Dedupe: regra em `dedup.go`,

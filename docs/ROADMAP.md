@@ -491,7 +491,7 @@ sem a migração `007` nem as marcas de duplicata.
       (`describe`, histograma), empresas que mais publicam, vagas novas por dia (primeiro
       `fetched_at` em `raw_jobs`, já que `posted_at` está vazio).
 
-### 📍 Tarefa 2.2 — Defeitos do dado
+### Tarefa 2.2 — Defeitos do dado ✅ fechada 2026-10-20
 
 **Objetivo:** `docs/eda.md` lista 5 defeitos concretos do dado, cada um com número, exemplo e dono.
 
@@ -504,14 +504,30 @@ extrator da 3a ler o texto.
 - [x] **2.2.2** Campos descartados e sentinelas: no `payload` de `raw_jobs`, que campos de data,
       localização, salário e tags cada fonte traz e quanto vêm preenchidos, contra o que chega em
       `jobs` (D33); sentinelas como `salary_min: 0` (D10).
-- [ ] **2.2.3** `docs/eda.md` com os 5 defeitos (número, exemplo, dono), escolhidos entre os da
-      2.2.1, da 2.2.2 e o teto de páginas da Himalayas (D42).
+- [x] **2.2.3** `docs/eda.md` com os 5 defeitos (número, exemplo, dono), escolhidos entre os da
+      2.2.1, da 2.2.2 e o teto de páginas da Himalayas (D42). (Feita com os 7 candidatos, a pedido
+      do aluno.)
 
-### Tarefa 2.3 — Boilerplate *(resumo)*
+### 📍 Tarefa 2.3 — Boilerplate
 
-HTML → parágrafos de texto (função + `pytest`); medir parágrafos repetidos entre vagas (por
-empresa e no geral) e quanto do texto ocupam; `cut_boilerplate` com o limiar que a medição
-sugerir, testado com casos reais.
+**Objetivo:** uma função do `analyzer` corta das descrições os parágrafos que se repetem entre
+vagas (boilerplate), com o limiar que a medição sugerir.
+
+**Por quê:** o texto que chega ao extrator da 3a e ao Jev (invariante) precisa ser o da vaga, não
+o "sobre a empresa" repetido em centenas de vagas.
+
+**Onde ler:** [`html.parser`](https://docs.python.org/3/library/html.parser.html) ·
+[pytest — parametrize](https://docs.pytest.org/en/stable/how-to/parametrize.html) ·
+[mypy — `--strict`](https://mypy.readthedocs.io/en/stable/command_line.html#cmdoption-mypy-strict)
+
+- [ ] **2.3.1** HTML → parágrafos: `analyzer/text.py` transforma o HTML de uma descrição na lista
+      dos seus parágrafos de texto, sobre `html.parser.HTMLParser` (stdlib); `pytest` no grupo
+      `dev`, table-driven, com casos pequenos e trechos reais das três fontes; `ruff` e
+      `mypy --strict` limpos.
+- [ ] **2.3.2** Parágrafos repetidos: `eda/04_boilerplate.py` aplica a função às vivas e mede
+      quantos parágrafos se repetem, por empresa e no geral, e que fração do texto eles ocupam.
+- [ ] **2.3.3** Corte de boilerplate com o limiar da 2.3.2, testado com casos reais; mede quanto
+      texto sai por fonte.
 
 ### Tarefa 2.4 — Localização e PT-BR *(resumo)*
 
@@ -521,7 +537,8 @@ separado (invariante).
 
 ### Tarefa 2.5 — Fechamento da Fase 2 *(resumo)*
 
-Débitos com dono na Fase 2 (D10, D32, D33, D41) pagos ou reagendados; README da parte Python.
+Débitos com dono na Fase 2 (D10, D32, D33, D41, D42) pagos ou reagendados — as decisões estão
+em `docs/eda.md`; README da parte Python.
 
 ---
 
