@@ -16,11 +16,11 @@ Fase 1): **1.7.1 (D37)**, **1.7.2 (D39)** e **1.7.3 (README + D17)** fechadas em
 fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
 
 **Fase 2 aberta em 2026-10-18** (EDA em Python). **Tarefa 2.1 (bancada de EDA) fechada em
-2026-10-19.** **2.2.1 (defeitos de texto) fechada em 2026-10-20.** Próximo: **2.2.2 — campos
-descartados e sentinelas** (o que os payloads trazem e `jobs` não grava). Pi
+2026-10-19.** **2.2.1 (defeitos de texto) e 2.2.2 (campos descartados e sentinelas) fechadas em
+2026-10-20.** Próximo: **2.2.3 — `docs/eda.md` com os 5 defeitos**. Pi
 com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
 
-Última sessão: **2026-10-19**.
+Última sessão: **2026-10-20**.
 
 ---
 
@@ -880,6 +880,29 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   (Remote OK, 112 `salary_min: 0`), 58% (Remotive, texto livre, 8 `""`). Himalayas mistura
   `salaryPeriod` anual, mensal e por hora.
 
+### 2026-10-20 — Subtarefa 2.2.2 (campos descartados e sentinelas)
+
+- Do aluno: query das vivas com o `payload` da versão mais nova (`jobs.raw_job_id`, conferido: as
+  16.800 apontam para o `max(id)` do `raw_jobs`); `json_normalize` por fonte numa função; o `dict`
+  fonte → colunas e o `for` pelo `dict` (passo 3); descoberta das sentinelas com
+  `value_counts(dropna=False)`; passo 5 com `notna().groupby(<Series de fora>).mean()`.
+- Travou no desenho "uma função para fontes com colunas diferentes": o mentor apontou o padrão
+  table-driven do Go (a tabela guarda o que muda, o laço o que é igual) e que a sentinela depende do
+  **tipo do valor**, não da fonte. Ficou perdido no `for` (copiava as três chamadas dentro do laço);
+  passo 3 quebrado em três pedaços de 5–10 min.
+- A pedido, o mentor fez o passo 4 (`is_informed` com a lista testada antes do `pd.isna`,
+  `fill_rates` com `present`/`informed` lado a lado), a arrumação (`FIELDS`, `SENTINELS`,
+  `source_payloads`) e os comentários. **Pedido do aluno: comentários e prints estéticos são sempre
+  do mentor.**
+- ✅ **2.2.2 fechada.** Informado de verdade: data 100% nas 3 fontes (epoch, ISO com fuso, ISO sem
+  fuso); localização 97,3% Himalayas (432 `[]`), 57,4% Remote OK (58 `""`), 100% Remotive;
+  salário 41,2% Himalayas (`null`, sem sentinela), 17,6% Remote OK (112 `0`), 57,9% Remotive
+  (texto livre); tags 100% / 98,5% / 94,7%. Em `jobs`, as cinco colunas dão 0 nas 3 fontes (D33).
+- Achados novos para a 2.2.3 / 3a: na Himalayas, `salaryPeriod` vem sempre (`annual` mesmo sem
+  valor) e `currency` vem sozinha em 1.235 vagas, então só `minSalary`/`maxSalary` contam; os
+  valores vão de 0,59 a 120M (período e moeda misturados). `categories` da Himalayas são slugs de
+  cargo, não skills; as `tags` da Remotive são skills.
+
 ---
 
 ## Decisões tomadas
@@ -1141,7 +1164,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-19
 (dump em `db_dump/`; atualizar com dump novo + `dropdb`/`createdb`/`pg_restore --no-owner`); **o `app` local fica
 parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
-2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.2.2 — campos descartados e sentinelas**. Pi com a imagem de
+2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.2.3 — `docs/eda.md` com os 5 defeitos**. Pi com a imagem de
 `8498ca2` (D37 e D39 em produção) desde 2026-10-18. EDA em `analyzer/eda/`, rodada pelo `iron.nvim`
 (REPL com `--all-groups` + `--env-file`) ou com `uv run --group eda --env-file ../.env ipython`
 dentro de `analyzer/`. Dedupe: regra em `dedup.go`,

@@ -501,7 +501,7 @@ extrator da 3a ler o texto.
 - [x] **2.2.1** Defeitos de texto: a carga (SQL → `DataFrame`) vira o módulo `eda/db.py`, usado
       pelo `01_overview.py`; `eda/02_text_defects.py` mede por fonte a fração de descrições com
       HTML, de títulos com entidade HTML e de descrições com mojibake (D10), com um exemplo de cada.
-- [ ] **2.2.2** Campos descartados e sentinelas: no `payload` de `raw_jobs`, que campos de data,
+- [x] **2.2.2** Campos descartados e sentinelas: no `payload` de `raw_jobs`, que campos de data,
       localização, salário e tags cada fonte traz e quanto vêm preenchidos, contra o que chega em
       `jobs` (D33); sentinelas como `salary_min: 0` (D10).
 - [ ] **2.2.3** `docs/eda.md` com os 5 defeitos (número, exemplo, dono), escolhidos entre os da
