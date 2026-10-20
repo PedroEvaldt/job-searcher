@@ -15,12 +15,12 @@ histórico automático; consulta de aceite `0 | 0` entre as vagas vivas. Tarefa 
 Fase 1): **1.7.1 (D37)**, **1.7.2 (D39)** e **1.7.3 (README + D17)** fechadas em 2026-10-18. **Fase 1
 fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
 
-**Fase 2 aberta em 2026-10-18** (EDA em Python). Próximo: **2.1.1 — bancada de EDA** (dump fresco
-do Pi no banco local, grupo `eda` no `analyzer`, notebook carregando as vagas vivas). Pendente: o
-Pi tem o código `8498ca2` puxado, mas roda a imagem de `26cccd7` (falta o `up -d --build app`). Próximo: **abertura da Fase 2** — diagnóstico, detalhar a fase no ROADMAP,
-apresentar a 2.1.1.
+**Fase 2 aberta em 2026-10-18** (EDA em Python). **Tarefa 2.1 (bancada de EDA) fechada em
+2026-10-19.** **2.2.1 (defeitos de texto) fechada em 2026-10-20.** Próximo: **2.2.2 — campos
+descartados e sentinelas** (o que os payloads trazem e `jobs` não grava). Pi
+com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
 
-Última sessão: **2026-10-18**.
+Última sessão: **2026-10-19**.
 
 ---
 
@@ -808,6 +808,78 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   da EDA vêm do banco local restaurado do Pi; dependências de EDA num grupo `eda` (fora do `dev` e
   da imagem); notebook só para explorar, o que roda de verdade vai para `.py` com `pytest`.
 
+### 2026-10-19 — Diagnóstico
+
+- Nada bloqueando. O `up -d --build app` no Pi rodou (imagem e container de 2026-10-18 20:00 UTC,
+  `8498ca2`); runs 163–171 limpas nas 3 fontes. Pi: 16.800 vagas, 16.204 vivas.
+
+### 2026-10-19 — Subtarefa 2.1.1 (bancada de EDA)
+
+- Dump do Pi restaurado no `jobs` local (`db_dump/jobs-2026-10-19.dump`): 16.800 vagas, 16.204 vivas.
+- **Método revisto:** o aluno explora num REPL IPython dentro do nvim (`iron.nvim`, células `# %%`),
+  não no Jupyter. Grupo `eda` = `pandas` + `ipython`; `analyzer/eda/01_overview.py` no lugar do
+  notebook; `eda` no `.dockerignore`. `dotenv` tirado do grupo (o `--env-file` do `uv run` carrega o
+  `.env`).
+- O `iron.lua` do aluno (`~/.config/nvim/after/plugin/iron.lua`, fora do repo) abria o REPL sem o
+  `.env` e sem o grupo `eda` (o `pandas` só aparecia por sobra no `.venv`). Ajustado pelo mentor, a
+  pedido: `--all-groups` + `--env-file` (pasta do `pyproject` ou raiz do git). Sem commit no repo do
+  nvim.
+- Furos no caminho: `fetchone` imprimindo a tupla `(16800,)`; `return 1` copiado do `main.py` (no
+  script ninguém lê o retorno: exit 0 e nenhum `DataFrame`) → exceção; query agregada (`COUNT` +
+  `GROUP BY`) no lugar de uma linha por vaga; f-string sem o `f`; `I001` nos imports.
+- Aula, a pedido: `fetchall`, `description`, list comprehension e `DataFrame(columns=)`, com
+  exemplos de outro domínio.
+- ✅ **2.1.1 fechada.** `(16204, 18)`: Himalayas 16.049, Remote OK 136, Remotive 19. Erro de
+  configuração sai com exit 1. `ruff` limpo (só o `EXE002` do NTFS). Sugestão opcional em aberto:
+  `mypy` acusa `pandas-stubs` ausente e `cur.description` opcional.
+- **Pedido do aluno:** em Python, uma mini-aula antes de cada subtarefa: curta, direta, com
+  exemplos genéricos de outro domínio. Virou o bloco **Antes de começar** no `CLAUDE.md` (§1, §4,
+  §8); começa na 2.1.2.
+
+### 2026-10-19 — Subtarefa 2.1.2 (primeiro retrato) · Tarefa 2.1 fechada
+
+- O aluno pediu o cartão "mais objetivo": virou duas tabelas (os `DataFrame`s e as análises, cada
+  uma com a saída esperada). Formato que funcionou.
+- Do aluno: segunda query em `raw_jobs`, primeira coleta com `groupby` por chave composta +
+  `as_index=False`, `describe` por fonte, top 15. Furos: o `merge` usava a tabela de **versões**
+  (16.888 linhas, a pegadinha do cartão) com `validate="one_to_many"`, que deixa a multiplicação
+  passar; a data virou texto (`strftime`) antes do `merge`; `import matplotlib as plt`.
+- A pedido, o mentor fez o histograma, os comentários e a estrutura dos prints (`section`,
+  `display.max_columns`). O aluno corrigiu o `merge` (`first_fetch`, `"one_to_one"`).
+- Achado ao escrever o comentário das vagas por dia: a curva plana (~1,1–1,6 mil/dia) é o teto de
+  20 páginas da Himalayas, não o mercado → **D42**.
+- ✅ **2.1.2 fechada · Tarefa 2.1 fechada.** Tamanho mediano 5.073 / 4.146 / 4.980 (Himalayas /
+  Remote OK / Remotive), máximo 36 mil; Veeva Systems 233; 12 dias somando 16.204.
+- Medição para a 2.2.1 (mentor): HTML em 100% das descrições nas 3 fontes; entidade HTML em 86
+  títulos, todos da Himalayas (`&#x2f;`, `&ndash;`); mojibake (caracteres `\x80`–`\x9f`) em 102 de 136
+  descrições do Remote OK e 4 da Himalayas, as 102 reversíveis com `encode('latin-1')` +
+  `decode('utf-8')`. Tarefa 2.2 detalhada no ROADMAP.
+
+### 2026-10-20 — Subtarefa 2.2.1 (defeitos de texto)
+
+- Diagnóstico: nada bloqueando; Tarefa 2.1 ainda sem commit.
+- Do aluno: `eda/db.py` (`sql_to_dataframe`, SQL → `DataFrame`) usado nas duas queries do
+  `01_overview.py`; máscaras de HTML e de entidade com fração por fonte; regex de entidade cobrindo
+  nomeada, decimal e hexadecimal.
+- Furos no caminho: `re.search` com os argumentos trocados (`PatternError: multiple repeat`); regex
+  de HTML exigindo par abre/fecha sem atributo (0,772 no Remote OK) e depois `<.*>` guloso (match de
+  4.116 de 4.403 caracteres, e casa `<5 years and >2`); máscara de entidade no `assign` do mojibake;
+  regex de mojibake procurando o **apelido** do `repr` (`\\x8a`) e depois montando o escape com
+  classes (`\x[8-9][a-f]`, `incomplete escape`).
+- Aulas, a pedido: mojibake (bytes, tabela errada, as duas assinaturas, reversível) e "o `repr`
+  mostra um apelido" (com o TAB). Travou três vezes no escape; a pedido, o mentor montou
+  `[\x80-\x9f]` e explicou peça por peça (`[a-f]` é `[\x61-\x66]`).
+- A pedido, o mentor fez o passo 4 e a arrumação: `measure_defect` (fração + primeiro exemplo com
+  `id` e fonte), comentários, `ruff --fix` nos imports.
+- ✅ **2.2.1 fechada.** HTML 100% nas 3 fontes; entidade em 86 títulos da Himalayas (`&#x2f;` 47,
+  `&#x28;`/`&#x29;` 32, `&ndash;` 27); mojibake em 102 de 136 do Remote OK (todas reversíveis) e 4 da
+  Himalayas (texto da mesma empresa, com Unicode real misturado: a volta inteira falha).
+- Medição para a 2.2.2 (mentor): em `jobs`, `posted_at`, `remote_scope`, `salary_*` e `currency`
+  estão vazios em 100% das vivas. Nos payloads: data em 100% nas 3 fontes; localização 97%
+  (Himalayas), 57% (Remote OK, 58 `""`), 100% (Remotive); salário 41% (Himalayas, `null`), 18%
+  (Remote OK, 112 `salary_min: 0`), 58% (Remotive, texto livre, 8 `""`). Himalayas mistura
+  `salaryPeriod` anual, mensal e por hora.
+
 ---
 
 ## Decisões tomadas
@@ -895,6 +967,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D39~~ | `main.go` (`collector`) | Ciclo que falha **inteiro** (todas as fontes com erro) só tenta de novo no próximo tick, 6h depois. Na semana dos 7 dias, as 3 quedas de energia derrubaram o ciclo imediato por DNS (o roteador volta depois do Pi): 3 ciclos perdidos de ~33. O `waitForDB` não ajuda — o banco estava de pé; quem falta é a rede. Conserto provável: depois de um ciclo inteiro falho, tentar de novo em poucos minutos (com teto de tentativas) antes de voltar ao ritmo de 6h. | ✅ pago 2026-10-18 (1.7.2) — `runWithRetries`: 3 novas tentativas, 5 min entre elas, antes de voltar ao tick; `TestCollectorRetry` |
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
 | D41 | `compose.yaml` (`analyzer`) | O `analyzer` espera só o `postgres` ficar saudável, não o `app`. No primeiro `up` de um clone limpo ele pode rodar antes das migrações (`UndefinedTable`, traceback cru — D26) ou antes da 1ª coleta (`0 of 0`). Hoje é contornado no README (`docker compose run --rm analyzer`). Não verificado na prática. | aberto — 🟡, dono: Fase 2, quando o analyzer ganhar lógica real |
+| D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -1055,17 +1128,23 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 - **2026-10-18** — um ticker sempre **espera e depois** dispara; para "tenta, e só se falhar
   espera", a espera vem depois da chamada (`Sleep` com o `ctx`). E teste com espera 0 não enxerga
   atraso nenhum: o `TestFirstCycle` só pegou o bug quando passou a usar uma espera de verdade.
+- **2026-10-19** — `return 1` só vira código de saída quando alguém passa o retorno para o
+  `sys.exit`; num script de exploração ninguém lê, e o erro passa calado. Função que não tem como
+  cumprir o que promete levanta exceção. E `fetchone()` devolve a linha inteira, mesmo com uma
+  coluna só.
 
 ---
 
 ## Retomada rápida
 
 **Tarefas 1.6 e 1.5 fechadas** (Pi em `~/pi/job-searcher`, código `26cccd7` desde 2026-10-18,
-coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-16
-(dump em `db_dump/`; atualizar com dump novo + `pg_restore --clean`); **o `app` local fica
+coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-19
+(dump em `db_dump/`; atualizar com dump novo + `dropdb`/`createdb`/`pg_restore --no-owner`); **o `app` local fica
 parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
-2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.1.1 — bancada de EDA**. Pendente no Pi:
-`docker compose up -d --build app` (roda a imagem de `26cccd7`). Dedupe: regra em `dedup.go`,
+2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.2.2 — campos descartados e sentinelas**. Pi com a imagem de
+`8498ca2` (D37 e D39 em produção) desde 2026-10-18. EDA em `analyzer/eda/`, rodada pelo `iron.nvim`
+(REPL com `--all-groups` + `--env-file`) ou com `uv run --group eda --env-file ../.env ipython`
+dentro de `analyzer/`. Dedupe: regra em `dedup.go`,
 marcação em `store.go:updateDuplicate`, histórico em `store.go:backfillDedupe` (no `run`, antes das
 fontes), aceite em `db/queries/live_duplicates.sql`. O mentor tem acesso de leitura ao Pi via `ssh pi` (`~/.ssh/config`). Antes do
 `collector`, a `waitForDB` espera o banco com backoff por até 2 min; ao fim de cada ciclo,

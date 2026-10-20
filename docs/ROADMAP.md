@@ -474,27 +474,38 @@ metade; `posted_at` vazio em **todas** (D33).
 [uv — grupos de dependência](https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-groups) ·
 [pytest](https://docs.pytest.org/en/stable/getting-started.html)
 
-### 📍 Tarefa 2.1 — Bancada de EDA
+### Tarefa 2.1 — Bancada de EDA ✅ fechada 2026-10-19
 
-**Objetivo:** um notebook no `analyzer` carrega as vagas vivas, com dado fresco do Pi, num
-`DataFrame`, e mostra o primeiro retrato delas.
+**Objetivo:** um script de exploração no `analyzer` carrega as vagas vivas, com dado fresco do Pi,
+num `DataFrame`, e mostra o primeiro retrato delas.
 
 **Por quê:** toda a Fase 2 acontece em cima desse `DataFrame`; o banco local é a cópia de 16/10,
 sem a migração `007` nem as marcas de duplicata.
 
-- [ ] **2.1.1** Dado fresco do Pi no banco local (boilerplate do mentor: `pg_dump` pelo `ssh`,
+- [x] **2.1.1** Dado fresco do Pi no banco local (boilerplate do mentor: `pg_dump` pelo `ssh`,
       `dropdb`/`createdb`/`pg_restore`); grupo de dependências `eda` no `analyzer` (`pandas`,
-      `jupyterlab`), fora do `dev` e da imagem; `analyzer/notebooks/01_overview.ipynb` carrega as
-      vagas vivas com o nome da fonte: `shape`, `dtypes`, contagem por fonte.
-- [ ] **2.1.2** Primeiro retrato: tamanho das descrições por fonte (`describe`, histograma),
-      empresas que mais publicam, vagas novas por dia (primeiro `fetched_at` em `raw_jobs`, já
-      que `posted_at` está vazio).
+      `ipython`), fora do `dev` e da imagem; `analyzer/eda/01_overview.py`, rodado com `%run` no
+      IPython, carrega as vagas vivas com o nome da fonte: `shape`, `dtypes`, contagem por fonte.
+      (Revisto em 2026-10-19: o aluno explora num REPL IPython, não no Jupyter.)
+- [x] **2.1.2** Primeiro retrato, no mesmo `01_overview.py`: tamanho das descrições por fonte
+      (`describe`, histograma), empresas que mais publicam, vagas novas por dia (primeiro
+      `fetched_at` em `raw_jobs`, já que `posted_at` está vazio).
 
-### Tarefa 2.2 — Defeitos do dado *(resumo)*
+### 📍 Tarefa 2.2 — Defeitos do dado
 
-Medir e listar 5 defeitos, com número, exemplo e dono, em `docs/eda.md`: texto (HTML, entidades,
-mojibake — D10); campos que os payloads trazem e `jobs` descarta (data, localização, salário,
-tags — D33) e sentinelas (`salary_min: 0`).
+**Objetivo:** `docs/eda.md` lista 5 defeitos concretos do dado, cada um com número, exemplo e dono.
+
+**Por quê:** cada defeito vira uma decisão (consertar no Go, no Python ou aceitar) antes de o
+extrator da 3a ler o texto.
+
+- [x] **2.2.1** Defeitos de texto: a carga (SQL → `DataFrame`) vira o módulo `eda/db.py`, usado
+      pelo `01_overview.py`; `eda/02_text_defects.py` mede por fonte a fração de descrições com
+      HTML, de títulos com entidade HTML e de descrições com mojibake (D10), com um exemplo de cada.
+- [ ] **2.2.2** Campos descartados e sentinelas: no `payload` de `raw_jobs`, que campos de data,
+      localização, salário e tags cada fonte traz e quanto vêm preenchidos, contra o que chega em
+      `jobs` (D33); sentinelas como `salary_min: 0` (D10).
+- [ ] **2.2.3** `docs/eda.md` com os 5 defeitos (número, exemplo, dono), escolhidos entre os da
+      2.2.1, da 2.2.2 e o teto de páginas da Himalayas (D42).
 
 ### Tarefa 2.3 — Boilerplate *(resumo)*
 
