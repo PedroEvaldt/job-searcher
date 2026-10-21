@@ -520,14 +520,14 @@ o "sobre a empresa" repetido em centenas de vagas.
 [pytest — parametrize](https://docs.pytest.org/en/stable/how-to/parametrize.html) ·
 [mypy — `--strict`](https://mypy.readthedocs.io/en/stable/command_line.html#cmdoption-mypy-strict)
 
-- [ ] **2.3.1** HTML → parágrafos: `analyzer/text.py` transforma o HTML de uma descrição na lista
+- [x] **2.3.1** HTML → parágrafos: `analyzer/text.py` transforma o HTML de uma descrição na lista
       dos seus parágrafos de texto, sobre `html.parser.HTMLParser` (stdlib); `pytest` no grupo
       `dev`, table-driven, com casos pequenos e trechos reais das três fontes; `ruff` e
       `mypy --strict` limpos.
-- [ ] **2.3.2** Parágrafos repetidos: `eda/04_boilerplate.py` aplica a função às vivas e mede
+- [x] **2.3.2** Parágrafos repetidos: `eda/04_boilerplate.py` aplica a função às vivas e mede
       quantos parágrafos se repetem, por empresa e no geral, e que fração do texto eles ocupam.
 - [ ] **2.3.3** Corte de boilerplate com o limiar da 2.3.2, testado com casos reais; mede quanto
-      texto sai por fonte.
+      texto sai por fonte. Paga o D43 (caracteres invisíveis) antes.
 
 ### Tarefa 2.4 — Localização e PT-BR *(resumo)*
 

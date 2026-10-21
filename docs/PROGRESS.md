@@ -17,10 +17,11 @@ fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
 
 **Fase 2 aberta em 2026-10-18** (EDA em Python). **Tarefa 2.1 (bancada de EDA) fechada em
 2026-10-19.** **Tarefa 2.2 (defeitos do dado) fechada em 2026-10-20**: `docs/eda.md` com 7 defeitos.
-Próximo: **2.3.1 — HTML → parágrafos** (`analyzer/text.py` + `pytest`). Pi
+**2.3.1 (HTML → parágrafos) fechada em 2026-10-20.** **2.3.2 (parágrafos repetidos) fechada em
+2026-10-21.** Próximo: **2.3.3 — corte de boilerplate** (`analyzer/boilerplate.py`, paga o D43). Pi
 com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
 
-Última sessão: **2026-10-20**.
+Última sessão: **2026-10-21**.
 
 ---
 
@@ -919,6 +920,55 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   escapado duas vezes (`&lt;p&gt;`) e viram `<p>` literal depois do parse. Vai junto do D10.
 - ✅ **2.2.3 fechada · Tarefa 2.2 fechada.** Tarefa 2.3 detalhada no ROADMAP (2.3.1–2.3.3).
 
+### 2026-10-20 — Subtarefa 2.3.1 (HTML → parágrafos)
+
+- Do aluno: subclasse de `HTMLParser` com `super().__init__()`, o `set` das tags de bloco, o
+  "Enter" chamado só nas tags de bloco, o `close()` + último parágrafo, `pytest` com
+  `parametrize`, o teste em `tests/`, `list[str]`.
+- Travou duas vezes: no modelo "cada evento de texto é um parágrafo" (2 testes passavam por sorte)
+  e no método com nome errado (`starttag`, que o parser nunca chama). Destravou com a analogia da
+  carta (só o Enter muda de linha) e o passo quebrado em 4 pedaços.
+- A pedido, o mentor fez: juntar antes de normalizar (`foo<b>bar</b>`), os 3 casos reais
+  (Remote OK 5, Remotive 100, Himalayas 120, conferidos como prefixo exato da descrição no banco),
+  `pytest.param` com `id` curto, os nomes (`html_to_paragraphs`, `_ParagraphCollector`,
+  `_end_paragraph`, `BLOCK_TAGS`), o `close()` sobrescrito para fechar o último parágrafo, os
+  comentários e o `[tool.pytest.ini_options]` que faltava.
+- Mutações (mentor): sem o `h3` nas tags de bloco os casos reais passavam (o `<h3>` da 120 fica
+  entre `</p>` e `<ul>`) → entrou `Intro<h3>Benefits</h3>Remote`; sem o último parágrafo no
+  `close()`, 2 falham; com parágrafo vazio liberado, os 9 falham.
+- ✅ **2.3.1 fechada.** `9 passed`, `mypy --strict` e `ruff` limpos (só `EXE002`). Nas 16.204
+  vivas: 666.647 parágrafos, nenhuma vaga sem parágrafo, mediana 38 (Himalayas), 30 (Remote OK),
+  29 (Remotive).
+- Decisão: a `eda/` importa o `text.py` por um preâmbulo de `sys.path`, não instalando o
+  `analyzer` como pacote. Testado: com `hatchling` editável funciona, mas no `docker run` o `uv run`
+  reconstrói o projeto a cada partida do contêiner — risco desnecessário no Pi agora.
+- Medição para a 2.3.2 (mentor): 450.067 parágrafos distintos; parágrafos em ≥2 vagas são 33,1%
+  dos caracteres (≥5: 17,3%; ≥10: 11,2%; ≥50: 3,5%); 26,9% repetidos dentro de uma empresa só,
+  6,3% entre empresas; `Originally posted on Himalayas` em todas as 16.049 da Himalayas; cortar
+  ≥2 deixaria 962 vagas vazias, ≥10 deixaria 141, ≥50 nenhuma.
+
+### 2026-10-21 — Subtarefa 2.3.2 (parágrafos repetidos)
+
+- Do aluno: o `JOIN` com `sources`, `explode` com `ignore_index`, `jobs`/`companies` com
+  `groupby().transform("nunique")` (e não `size`), A com `.loc[máscara, coluna]`, C com `&` e
+  parênteses, D com `drop_duplicates` antes do `nlargest`, E com `groupby("job_id").any()` + `~`
+  e o `<` estrito.
+- Tropeços: `groupby("paragraph")` dentro da A (saía uma fração por texto em vez de um número) e
+  `>` no lugar de `≥` (k = 2 dava 0.240 em vez de 0.331); a B com as fontes escritas à mão (o
+  mentor refez com `where` + `groupby`, a pedido); um `.sum()` atribuído a uma coluna (o mesmo
+  total em todas as linhas); `{k}` que sobrou do laço da A nos prints da C. A C só ficou clara com a
+  vaga 3232 da Dell desmontada em C1/C2.
+- Mentor (a pedido e pela preferência de prints/comentários): imports, `THRESHOLDS`, prints com
+  `section()`, comentários com os achados, colunas da D escolhidas em vez de descartadas.
+- ✅ **2.3.2 fechada.** Script roda do zero; `ruff` só `EXE002`. A: 0.331 · 0.173 · 0.112 · 0.035 ·
+  0.025. B: Himalayas 0.333 · Remote OK 0.095 · Remotive 0.263. C: 0.269 numa empresa só · 0.063
+  entre empresas. D: rodapé da Himalayas e títulos de seção. E: 962 · 274 · 141 · 0 · 0.
+- Achados laterais: **D43** (parágrafos só de caracteres invisíveis) e **D44** (a mesma vaga
+  publicada várias vezes com a cidade no título). Medição do mentor para a política do corte
+  (a decisão está em "Decisões tomadas"): com o corte por vagas, quem fica quase vazio são
+  famílias de vagas (Speechify por cidade, LanguageLine por idioma, Talkspace por estado, EWOR por
+  área), e o que sobra é só o que muda entre elas (salário, idioma, licença).
+
 ---
 
 ## Decisões tomadas
@@ -947,6 +997,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | 2026-10-16 | Duplicata = mesma empresa + título normalizados **e** (fonte diferente **ou** descrição idêntica) | Entre fontes a descrição nunca bate (HTML × texto), então a chave basta (2 grupos/semana, os dois a mesma vaga). Dentro da mesma fonte, descrição diferente pode ser outra vaga para quem procura remoto: a Bjak publica a mesma "Engineering Manager" híbrida e remota global, e só o bloco Location muda. Fundir esconderia a remota atrás da híbrida. **Custo aceito:** variações cosméticas da mesma vaga (106 grupos diferem em < 200 caracteres) continuam aparecendo repetidas. |
 | 2026-10-17 | Normalização (`ToJob`) e dedupe exata ficam no Go; o Python não vira a camada de transformação do `raw_jobs` (proposta do aluno, revista e mantida "por enquanto") | O formato de cada fonte fica num lugar só: o Go já lê o payload para o `ExternalID`, e um `ToJob` em Python criaria dois parsers por fonte sem teste que pegue a divergência. Um processo basta para a vaga ficar pronta (o coletor provou 7 dias sozinho), e o reprocessamento sem recoleta já vem do `raw_jobs`. **Reabrir se:** a Fase 2 achar duplicatas que só a análise de texto pega (descrições que diferem só no boilerplate); essa camada seria do Python, por cima da do Go. |
 | 2026-10-08 | `sleep` do client exportado (`client.Sleep`) em vez de copiado no `main` | Uma espera que respeita o `ctx`, num lugar só. **Custo aceito:** o pacote `client` (HTTP) passa a exportar um utilitário que não é de HTTP. Se aparecer um terceiro uso, mudar para um pacote próprio. |
+| 2026-10-21 | Corte de boilerplate: um parágrafo é boilerplate quando aparece em **≥ 10 descrições distintas** (cópias idênticas contam uma vez); se o corte tirar todos os parágrafos de uma vaga, ela fica inteira | Medido nas vivas, com o D43 pago: k = 10 tira 10,2% do texto (Himalayas 10,2%, Remote OK 1,5%, Remotive 1,7%), 2 vagas caem no "nunca vazia". k = 5 tiraria 16,0%, mas 362 vagas ficariam com < 10% do texto; k = 50 só tira rodapé e títulos (3,2%). Contar descrições distintas protege as cópias: as 34 vagas da Speechify têm 7 descrições, e o texto da vaga fica. **Custo aceito:** famílias com ≥ 10 descrições quase iguais perdem o modelo comum (175 vagas com < 10% do texto) até o D44. Proposta do mentor; o limiar é uma constante, mudar é uma linha. |
 | 2026-10-18 | ATS (Greenhouse, Lever, Ashby) e Arbeitnow em backlog, sem fase | Saíram da Fase 1 sem registro (o SPEC ainda os punha nela). A Fase 1 fechou com três boards; a EDA da Fase 2 diz se elas cobrem o que interessa antes de gastar tempo com fonte nova. |
 
 ---
@@ -1007,6 +1058,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
 | D41 | `compose.yaml` (`analyzer`) | O `analyzer` espera só o `postgres` ficar saudável, não o `app`. No primeiro `up` de um clone limpo ele pode rodar antes das migrações (`UndefinedTable`, traceback cru — D26) ou antes da 1ª coleta (`0 of 0`). Hoje é contornado no README (`docker compose run --rm analyzer`). Não verificado na prática. | aberto — 🟡, dono: Fase 2, quando o analyzer ganhar lógica real |
 | D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) — **defeito 7 do `docs/eda.md`** (47 runs: 37 de 44 cheias com ≥370 inéditas); decisão: consertar no Go, Tarefa 2.5 |
+| D43 | `analyzer/text.py` (`_end_paragraph`) | `str.split()` não trata como espaço os caracteres invisíveis U+200B (zero-width space), U+FEFF (BOM), U+200C e U+200D. Parágrafos feitos só deles passam como não vazios: 554 linhas em 387 vagas vivas (U+200B 296, U+FEFF 187). Visto em 2026-10-21 no passo 4 da 2.3.2. | aberto — 🟡, dono: 2.3.3 (uma vaga cujo único parágrafo restante é invisível não conta como vazia na análise E nem no corte) — lista medida: U+200B, U+200C, U+200D, U+200E, U+2060, U+FEFF, U+00AD (todos da categoria Unicode `Cf`); 579 linhas só deles |
+| D44 | dedupe (`store.go`, regra de 2026-10-16) | A mesma vaga publicada várias vezes com a cidade, o estado ou o idioma no título escapa da dedupe, porque o título muda. 609 vivas em 208 grupos têm a descrição byte a byte igual à de outra viva (401 cópias a mais); a maior é a Speechify, com `Team Lead, Android Core Product - <cidade>` 24 vezes. Fora as idênticas, há famílias em que só muda o salário ou o idioma (LanguageLine, Talkspace). Efeitos: o digest mostra a mesma vaga repetida, e o corte de boilerplate tira o modelo comum de famílias com ≥ 10 descrições (175 vivas ficam com < 10% do texto). Medido em 2026-10-21. | aberto — 🟡, dono: Tarefa 2.5 decide (é o gatilho "reabrir se" da decisão de 2026-10-17) |
 
 ### 🟢 Nits — mencionados uma vez
 
@@ -1180,7 +1233,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-19
 (dump em `db_dump/`; atualizar com dump novo + `dropdb`/`createdb`/`pg_restore --no-owner`); **o `app` local fica
 parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
-2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.3.1 — HTML → parágrafos**. Defeitos do dado em `docs/eda.md`. Pi com a imagem de
+2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.3.3 — corte de boilerplate** (política
+decidida em 2026-10-21, ver "Decisões tomadas"). Medição em `eda/04_boilerplate.py`. Defeitos do dado em `docs/eda.md`; HTML → parágrafos em
+`analyzer/text.py` (`html_to_paragraphs`, `uv run pytest` em `analyzer/`). Pi com a imagem de
 `8498ca2` (D37 e D39 em produção) desde 2026-10-18. EDA em `analyzer/eda/`, rodada pelo `iron.nvim`
 (REPL com `--all-groups` + `--env-file`) ou com `uv run --group eda --env-file ../.env ipython`
 dentro de `analyzer/`. Dedupe: regra em `dedup.go`,
