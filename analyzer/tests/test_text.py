@@ -105,6 +105,10 @@ HIMALAYAS_JOB_120_PARAGRAPHS = [
         ("<p>foo<strong>bar</strong></p>", ["foobar"]),
         ("<p>R<sup>2</sup> score</p>", ["R2 score"]),
         ("Intro<h3>Benefits</h3>Remote", ["Intro", "Benefits", "Remote"]),
+        # Invisible characters (D43): a paragraph of only them is empty, and a soft
+        # hyphen inside a word goes away
+        ("<p>\u200b</p><p>Remote</p>", ["Remote"]),
+        ("<p>Engi\u00adneer</p>", ["Engineer"]),
         # Short ids: the default one would print the whole description on failure
         pytest.param(REMOTEOK_JOB_5, REMOTEOK_JOB_5_PARAGRAPHS, id="remoteok-5"),
         pytest.param(REMOTIVE_JOB_100, REMOTIVE_JOB_100_PARAGRAPHS, id="remotive-100"),

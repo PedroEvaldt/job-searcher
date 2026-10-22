@@ -7,6 +7,11 @@ from db import sql_to_dataframe
 
 # text.py lives in analyzer/, one level above eda/ (works with cwd in either one)
 sys.path.insert(0, str(Path.cwd().parent if Path.cwd().name == "eda" else Path.cwd()))
+from boilerplate import (
+    BOILERPLATE_MIN_DESCRIPTIONS,
+    cut_boilerplate,
+    paragraphs_counter,
+)
 from text import html_to_paragraphs
 
 pd.set_option("display.width", 120)
@@ -72,7 +77,7 @@ repeated_share_by_source = chars_by_source["repeated_chars"] / chars_by_source["
 section("share of chars in paragraphs found in 2+ jobs, by source")
 print(repeated_share_by_source.round(3).to_string())
 
-# Himalayas (0.333) holds 99% of the chars, so it sets the overall share. Remote OK
+# Himalayas (0.334) holds 99% of the chars, so it sets the overall share. Remote OK
 # repeats little (0.095); Remotive's 0.263 comes from only 19 jobs.
 
 # %%
@@ -88,7 +93,7 @@ section("share of chars in paragraphs found in 2+ jobs, by who repeats them")
 print(f"one company only: {one_company_chars / total_chars:.3f}")
 print(f"across companies: {across_companies_chars / total_chars:.3f}")
 
-# Of the 0.331 repeated, 0.269 stays inside one company (its "about us", EEO and team
+# Of the 0.332 repeated, 0.269 stays inside one company (its "about us", EEO and team
 # intros, pasted in each of its jobs) and only 0.063 crosses companies (headings and
 # "Originally posted on Himalayas").
 
@@ -120,3 +125,35 @@ for k in THRESHOLDS:
 # Even k = 10 empties 141 jobs: a company that posts the same job many times (Speechify,
 # one copy per city) has every paragraph repeated. The cut in 2.3.3 must never leave a
 # job empty.
+
+# %%
+# F: the cut of 2.3.3 applied to every live job, with the default threshold
+# Counted once over every live description; each job is then cut against it
+counter = paragraphs_counter(jobs["description"])
+jobs["paragraphs_cut"] = jobs["paragraphs"].apply(lambda p: cut_boilerplate(p, counter))
+jobs["chars_before"] = jobs["paragraphs"].apply(lambda p: sum(len(w) for w in p))
+jobs["chars_after"] = jobs["paragraphs_cut"].apply(lambda p: sum(len(w) for w in p))
+
+chars_by_source = jobs.groupby("source_name")[["chars_before", "chars_after"]].sum()
+cut_share_by_source = (
+    chars_by_source["chars_before"] - chars_by_source["chars_after"]
+) / chars_by_source["chars_before"]
+total_before = jobs["chars_before"].sum()
+cut_share = (total_before - jobs["chars_after"].sum()) / total_before
+
+# Jobs where every paragraph is boilerplate: the cut gives them back whole. Counted from
+# the counts, not by comparing before and after: a job with no boilerplate also comes
+# back unchanged
+kept_whole = jobs["paragraphs"].apply(
+    lambda p: all(counter[w] >= BOILERPLATE_MIN_DESCRIPTIONS for w in p)
+)
+
+section(
+    f"share of chars cut with k = {BOILERPLATE_MIN_DESCRIPTIONS} distinct descriptions"
+)
+print(cut_share_by_source.round(3).to_string())
+print(f"total        {cut_share:.3f}")
+print(f"jobs kept whole (every paragraph is boilerplate): {kept_whole.sum()}")
+
+# The cut takes a tenth of the text, nearly all of it from Himalayas (headings, company
+# texts and the footer). Remote OK and Remotive lose under 2%.

@@ -17,8 +17,9 @@ fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
 
 **Fase 2 aberta em 2026-10-18** (EDA em Python). **Tarefa 2.1 (bancada de EDA) fechada em
 2026-10-19.** **Tarefa 2.2 (defeitos do dado) fechada em 2026-10-20**: `docs/eda.md` com 7 defeitos.
-**2.3.1 (HTML → parágrafos) fechada em 2026-10-20.** **2.3.2 (parágrafos repetidos) fechada em
-2026-10-21.** Próximo: **2.3.3 — corte de boilerplate** (`analyzer/boilerplate.py`, paga o D43). Pi
+**Tarefa 2.3 (boilerplate) fechada em 2026-10-21**: `analyzer/text.py` (HTML → parágrafos) e
+`analyzer/boilerplate.py` (contagem + corte, k = 10 descrições distintas), 20 testes. Próximo:
+**2.4.1 — localização** (`eda/05_location.py`). Pi
 com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
 
 Última sessão: **2026-10-21**.
@@ -969,6 +970,32 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
   famílias de vagas (Speechify por cidade, LanguageLine por idioma, Talkspace por estado, EWOR por
   área), e o que sobra é só o que muda entre elas (salário, idioma, licença).
 
+### 2026-10-21 — Subtarefa 2.3.3 (corte de boilerplate) · Tarefa 2.3 fechada
+
+- Do aluno: o `translate` no `_end_paragraph` (D43), `paragraphs_counter` com `set` por descrição,
+  os testes da contagem (depois de trocar o caso 2, que testava a regra errada), o corte com list
+  comprehension e `.get(p, 0)`, o "nunca vazia", os 5 casos do corte, a seção F até a fração por
+  fonte.
+- Tropeços: `from ../boilerplate import` (import não é caminho); o corte na direção invertida
+  (percorria a contagem inteira e fazia `remove` na vaga: `ValueError` e um só `remove` por texto
+  repetido) — ❌, refeito; `dict[str]int`; `jobs = jobs.groupby(...)` sem `.sum()`; a fração por
+  fonte atribuída como coluna da `jobs` (índices diferentes → tudo `NaN`). Pediu a ideia da função
+  "sem analogia": o fluxo HTML → parágrafos → corte → 3a/4b destravou.
+- A pedido, o mentor fez: a tabela `REMOVE_INVISIBLE`, os 2 casos do D43, a regra 1 da contagem
+  (`set(htmls)`) com `Counter.update`, o nome `cut_boilerplate` e a constante
+  `BOILERPLATE_MIN_DESCRIPTIONS`, o caso real da Dell (`tests/testdata/dell_3232.html` e
+  `dell_3234.html`), o total e as vagas inteiras da F, comentários e prints.
+- Mutações (mentor): sem o `translate`, só os 2 casos do D43 falham; sem o `set` por descrição, o
+  caso 2 da contagem falha; `<` → `<=`, sem o "nunca vazia" e `.get` → colchetes derrubam um caso
+  cada; sem o `k=2`, o caso da Dell falha.
+- ✅ **2.3.3 fechada · Tarefa 2.3 fechada.** `20 passed`, `mypy --strict` e `ruff` limpos (só
+  `EXE002`). Corte nas vivas com k = 10: 0.102 do texto (Himalayas 0.102, Remote OK 0.015,
+  Remotive 0.017); 2 vagas voltam inteiras. **D43 pago.**
+- Medição para a 2.4 (mentor): Himalayas traz só países (250 nomes, nenhuma região); `Brazil` em
+  324 vagas, lista vazia em 432. Com a regra do cartão da 2.4.1, só 338 das 16.204 vivas (2,1%)
+  aceitam quem mora no Brasil, 501 são dúvida e 15.365 rejeitam. Idioma por palavras frequentes:
+  ~173 em português, ~269 em espanhol.
+
 ---
 
 ## Decisões tomadas
@@ -1058,7 +1085,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D40 | `store.go` (marcação de duplicata, 1.5.3) | A marcação reavalia só a vaga **que está sendo gravada**. Se a **original** for editada e deixar de casar com as cópias (ex.: h1 muda a descrição; h2 e h3, da mesma fonte, continuam com a antiga), as cópias seguem apontando para ela e somem do digest sem ser mais duplicata. A cópia editada já se conserta sozinha: volta a `NULL` quando nenhuma candidata casa. | aberto — 🟡; alavanca manual pronta desde a 1.5.4: `UPDATE jobs SET company_key = NULL` faz o próximo ciclo reavaliar todas as vagas em ordem de `id`. Conserto automático não existe |
 | D41 | `compose.yaml` (`analyzer`) | O `analyzer` espera só o `postgres` ficar saudável, não o `app`. No primeiro `up` de um clone limpo ele pode rodar antes das migrações (`UndefinedTable`, traceback cru — D26) ou antes da 1ª coleta (`0 of 0`). Hoje é contornado no README (`docker compose run --rm analyzer`). Não verificado na prática. | aberto — 🟡, dono: Fase 2, quando o analyzer ganhar lógica real |
 | D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) — **defeito 7 do `docs/eda.md`** (47 runs: 37 de 44 cheias com ≥370 inéditas); decisão: consertar no Go, Tarefa 2.5 |
-| D43 | `analyzer/text.py` (`_end_paragraph`) | `str.split()` não trata como espaço os caracteres invisíveis U+200B (zero-width space), U+FEFF (BOM), U+200C e U+200D. Parágrafos feitos só deles passam como não vazios: 554 linhas em 387 vagas vivas (U+200B 296, U+FEFF 187). Visto em 2026-10-21 no passo 4 da 2.3.2. | aberto — 🟡, dono: 2.3.3 (uma vaga cujo único parágrafo restante é invisível não conta como vazia na análise E nem no corte) — lista medida: U+200B, U+200C, U+200D, U+200E, U+2060, U+FEFF, U+00AD (todos da categoria Unicode `Cf`); 579 linhas só deles |
+| D43 | `analyzer/text.py` (`_end_paragraph`) | `str.split()` não trata como espaço os caracteres invisíveis U+200B (zero-width space), U+FEFF (BOM), U+200C e U+200D. Parágrafos feitos só deles passam como não vazios: 554 linhas em 387 vagas vivas (U+200B 296, U+FEFF 187). Visto em 2026-10-21 no passo 4 da 2.3.2. | ✅ pago em 2026-10-21 (2.3.3): `REMOVE_INVISIBLE` no `text.py`, apagados antes de normalizar; 579 parágrafos a menos (666.068) — lista medida: U+200B, U+200C, U+200D, U+200E, U+2060, U+FEFF, U+00AD (todos da categoria Unicode `Cf`); 579 linhas só deles |
 | D44 | dedupe (`store.go`, regra de 2026-10-16) | A mesma vaga publicada várias vezes com a cidade, o estado ou o idioma no título escapa da dedupe, porque o título muda. 609 vivas em 208 grupos têm a descrição byte a byte igual à de outra viva (401 cópias a mais); a maior é a Speechify, com `Team Lead, Android Core Product - <cidade>` 24 vezes. Fora as idênticas, há famílias em que só muda o salário ou o idioma (LanguageLine, Talkspace). Efeitos: o digest mostra a mesma vaga repetida, e o corte de boilerplate tira o modelo comum de famílias com ≥ 10 descrições (175 vivas ficam com < 10% do texto). Medido em 2026-10-21. | aberto — 🟡, dono: Tarefa 2.5 decide (é o gatilho "reabrir se" da decisão de 2026-10-17) |
 
 ### 🟢 Nits — mencionados uma vez
@@ -1233,8 +1260,9 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 coletando a cada 6h, com dedupe). O `jobs` local é a cópia do Pi de 2026-10-19
 (dump em `db_dump/`; atualizar com dump novo + `dropdb`/`createdb`/`pg_restore --no-owner`); **o `app` local fica
 parado** (`docker compose up -d postgres`, nunca o `up -d` completo). **Fase 1 fechada em
-2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.3.3 — corte de boilerplate** (política
-decidida em 2026-10-21, ver "Decisões tomadas"). Medição em `eda/04_boilerplate.py`. Defeitos do dado em `docs/eda.md`; HTML → parágrafos em
+2026-10-18; Fase 2 aberta no mesmo dia.** Próximo: **2.4.1 — localização** (`eda/05_location.py`). Corte de
+boilerplate pronto em `analyzer/boilerplate.py` (política em "Decisões tomadas", 2026-10-21); medição
+em `eda/04_boilerplate.py`. Defeitos do dado em `docs/eda.md`; HTML → parágrafos em
 `analyzer/text.py` (`html_to_paragraphs`, `uv run pytest` em `analyzer/`). Pi com a imagem de
 `8498ca2` (D37 e D39 em produção) desde 2026-10-18. EDA em `analyzer/eda/`, rodada pelo `iron.nvim`
 (REPL com `--all-groups` + `--env-file`) ou com `uv run --group eda --env-file ../.env ipython`

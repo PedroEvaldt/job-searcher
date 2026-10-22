@@ -22,6 +22,23 @@ BLOCK_TAGS = {
     "hr",
 }
 
+# Invisible characters found in the descriptions (Unicode category Cf). str.split() does
+# not treat them as spaces, so a paragraph made only of them looked non-empty (D43).
+# A translate table that deletes them.
+REMOVE_INVISIBLE = str.maketrans(
+    "",
+    "",
+    (
+        "\u200b"  # zero-width space
+        "\u200c"  # zero-width non-joiner
+        "\u200d"  # zero-width joiner
+        "\u200e"  # left-to-right mark
+        "\u2060"  # word joiner
+        "\ufeff"  # byte order mark
+        "\u00ad"  # soft hyphen
+    ),
+)
+
 
 class _ParagraphCollector(HTMLParser):
     """Collects the text between block tags, one paragraph at a time."""
@@ -50,7 +67,7 @@ class _ParagraphCollector(HTMLParser):
 
     def _end_paragraph(self) -> None:
         # Join first, then normalize: an inline tag can split a word ("foo<b>bar</b>")
-        text = " ".join("".join(self._pieces).split())
+        text = " ".join("".join(self._pieces).translate(REMOVE_INVISIBLE).split())
         if text:
             self.paragraphs.append(text)
         self._pieces = []

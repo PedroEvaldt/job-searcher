@@ -508,7 +508,7 @@ extrator da 3a ler o texto.
       2.2.1, da 2.2.2 e o teto de páginas da Himalayas (D42). (Feita com os 7 candidatos, a pedido
       do aluno.)
 
-### 📍 Tarefa 2.3 — Boilerplate
+### Tarefa 2.3 — Boilerplate ✅ fechada 2026-10-21
 
 **Objetivo:** uma função do `analyzer` corta das descrições os parágrafos que se repetem entre
 vagas (boilerplate), com o limiar que a medição sugerir.
@@ -526,14 +526,26 @@ o "sobre a empresa" repetido em centenas de vagas.
       `mypy --strict` limpos.
 - [x] **2.3.2** Parágrafos repetidos: `eda/04_boilerplate.py` aplica a função às vivas e mede
       quantos parágrafos se repetem, por empresa e no geral, e que fração do texto eles ocupam.
-- [ ] **2.3.3** Corte de boilerplate com o limiar da 2.3.2, testado com casos reais; mede quanto
+- [x] **2.3.3** Corte de boilerplate com o limiar da 2.3.2, testado com casos reais; mede quanto
       texto sai por fonte. Paga o D43 (caracteres invisíveis) antes.
 
-### Tarefa 2.4 — Localização e PT-BR *(resumo)*
+### 📍 Tarefa 2.4 — Localização e PT-BR
 
-O que cada fonte diz sobre localização, em categorias, e quantas vagas servem a quem mora no
-Brasil → política aceita / rejeita / dúvida. Quantas vagas estão em português → política de lote
-separado (invariante).
+**Objetivo:** `docs/eda.md` traz duas políticas medidas: quais vagas servem a quem mora no Brasil
+(aceita / rejeita / dúvida) e quais estão em português (lote separado, invariante).
+
+**Por quê:** o ranking da 3a e o digest da 5 só fazem sentido sobre vagas que você pode aceitar, e
+a Fase 4b precisa saber quantas vagas vão para o lote PT-BR.
+
+**Onde ler:** [pandas — `crosstab`](https://pandas.pydata.org/docs/reference/api/pandas.crosstab.html) ·
+[`re` — expressões regulares](https://docs.python.org/3/library/re.html)
+
+- [ ] **2.4.1** Localização: `eda/05_location.py` classifica cada vaga viva pelo campo de
+      localização da sua fonte (lista de países na Himalayas, texto livre no Remote OK e na
+      Remotive) em aceita / rejeita / dúvida para quem mora no Brasil, e conta por fonte.
+- [ ] **2.4.2** Idioma: `eda/06_language.py` estima o idioma de cada descrição por palavras
+      frequentes de cada língua (à mão, sem biblioteca) e conta as vagas em português por fonte.
+- [ ] **2.4.3** Políticas no `docs/eda.md`: as duas, com número, exemplo e decisão.
 
 ### Tarefa 2.5 — Fechamento da Fase 2 *(resumo)*
 
