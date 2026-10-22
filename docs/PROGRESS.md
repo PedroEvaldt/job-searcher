@@ -18,11 +18,16 @@ fechada em 2026-10-18.** Auditoria de fim de fase feita (sem 🔴).
 **Fase 2 aberta em 2026-10-18** (EDA em Python). **Tarefa 2.1 (bancada de EDA) fechada em
 2026-10-19.** **Tarefa 2.2 (defeitos do dado) fechada em 2026-10-20**: `docs/eda.md` com 7 defeitos.
 **Tarefa 2.3 (boilerplate) fechada em 2026-10-21**: `analyzer/text.py` (HTML → parágrafos) e
-`analyzer/boilerplate.py` (contagem + corte, k = 10 descrições distintas), 20 testes. Próximo:
-**2.4.1 — localização** (`eda/05_location.py`). Pi
+`analyzer/boilerplate.py` (contagem + corte, k = 10 descrições distintas), 20 testes.
+**Tarefa 2.4 fechada em 2026-10-22** — 2.4.1 (localização, `eda/05_location.py`), 2.4.2 (idioma,
+`eda/06_language.py`) e 2.4.3 (seção `# Policies` no `docs/eda.md`), as três escritas pelo mentor a
+pedido (insistência, §0). Dado do Pi re-copiado para o banco local **na 5433** (`.env` mudado de
+5432 → 5433 a pedido): **20.817 vagas, 20.029 vivas** (antes 15.279/14.714). Achado-chave: PT é
+2,8% no total mas **18% dentro do `accept`** → lote não-inglês se mantém; limitações viraram
+**D45**. Próximo: **2.5 — fechamento da Fase 2**. Pi
 com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
 
-Última sessão: **2026-10-21**.
+Última sessão: **2026-10-22**.
 
 ---
 
@@ -1087,6 +1092,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) — **defeito 7 do `docs/eda.md`** (47 runs: 37 de 44 cheias com ≥370 inéditas); decisão: consertar no Go, Tarefa 2.5 |
 | D43 | `analyzer/text.py` (`_end_paragraph`) | `str.split()` não trata como espaço os caracteres invisíveis U+200B (zero-width space), U+FEFF (BOM), U+200C e U+200D. Parágrafos feitos só deles passam como não vazios: 554 linhas em 387 vagas vivas (U+200B 296, U+FEFF 187). Visto em 2026-10-21 no passo 4 da 2.3.2. | ✅ pago em 2026-10-21 (2.3.3): `REMOVE_INVISIBLE` no `text.py`, apagados antes de normalizar; 579 parágrafos a menos (666.068) — lista medida: U+200B, U+200C, U+200D, U+200E, U+2060, U+FEFF, U+00AD (todos da categoria Unicode `Cf`); 579 linhas só deles |
 | D44 | dedupe (`store.go`, regra de 2026-10-16) | A mesma vaga publicada várias vezes com a cidade, o estado ou o idioma no título escapa da dedupe, porque o título muda. 609 vivas em 208 grupos têm a descrição byte a byte igual à de outra viva (401 cópias a mais); a maior é a Speechify, com `Team Lead, Android Core Product - <cidade>` 24 vezes. Fora as idênticas, há famílias em que só muda o salário ou o idioma (LanguageLine, Talkspace). Efeitos: o digest mostra a mesma vaga repetida, e o corte de boilerplate tira o modelo comum de famílias com ≥ 10 descrições (175 vivas ficam com < 10% do texto). Medido em 2026-10-21. | aberto — 🟡, dono: Tarefa 2.5 decide (é o gatilho "reabrir se" da decisão de 2026-10-17) |
+| D45 | `analyzer/eda/06_language.py` (detector de idioma) | O detector por palavras de função confunde **português e espanhol** (e pega francês): ele mede "não-inglês", não PT-BR. Entre as vagas do balde `accept` da 2.4.1, 214 são "pt", mas desambiguando (`não/você/também` × `más/con/usted`) ~metade é espanhol (92 PT, 100 ES, 22 empate). Efeito nº 2 — **falso-negativo localização × idioma:** ~20 vagas em PT-BR puro caem em `reject` porque o `locationRestrictions` da Himalayas está errado (ex.: `[United States]` numa vaga claramente brasileira); nesses casos a língua é sinal de elegibilidade mais confiável que o país mal preenchido. Medido em 2026-10-22 (2.4.2). | aberto — 🟡, futuro (candidato à Fase 4b, quando o tratamento downstream diferir por língua): (a) detector PT-BR vs ES/PT-PT mais fino; (b) usar PT-BR como sinal fraco de elegibilidade quando a localização está vazia/suspeita |
 
 ### 🟢 Nits — mencionados uma vez
 

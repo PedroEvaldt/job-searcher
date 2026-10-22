@@ -173,3 +173,79 @@ ORDER BY r.id;
 
 **Decision:** fix in Go. Either raise the cap, or keep paging until a page brings only known jobs,
 inside the source's time budget and rate limit.
+
+---
+
+# Policies
+
+Which jobs the ranking and the digest work on, and which are set aside. Numbers here come from a
+fresher copy (Pi dump of 2026-10-22, with the duplicate marks applied): 20,817 jobs, **20,029 live**
+(Himalayas 19,870, Remote OK 140, Remotive 19). They are larger than the defects above because the
+Pi kept collecting; the shape holds.
+
+To reproduce, from `analyzer/` with only `postgres` up:
+
+```bash
+uv run --group eda --env-file ../.env python eda/05_location.py   # location
+uv run --group eda --env-file ../.env python eda/06_language.py   # language
+```
+
+## A. Location — can someone living in Brazil take this job?
+
+**What:** remote does not mean open to everyone — many jobs restrict who may apply, by country or by
+timezone. The eligibility fields never reach `jobs` (defect 4, D33); they live in the `raw_jobs`
+payload, named and shaped differently per source. The rule reads them and buckets each live job as
+**accept** / **reject** / **unknown** for a candidate in Brazil (UTC−3):
+
+- **Himalayas** — accept if `locationRestrictions` lists Brazil **or** `timezoneRestrictions`
+  includes the −3 offset; both empty → unknown.
+- **Remotive** — accept if `candidate_required_location` (comma-split into whole tokens) contains
+  one of `worldwide, anywhere, americas, latam, latin america, south america, brazil, brasil`.
+  Whole-token match on purpose: `northern america` (excludes Brazil) must not match `americas`.
+- **Remote OK** — `location` is the city the job was posted *from*, not candidate eligibility, so it
+  cannot answer the question: every Remote OK job is **unknown**.
+
+**Number:** 20,029 live → **1,173 accept · 18,716 reject · 140 unknown** (100% covered). By source:
+Himalayas 1,162 / 18,708 / 0; Remotive 11 / 8 / 0; Remote OK 0 / 0 / 140. On Himalayas the timezone
+signal **subsumes** the country one: every job that lists Brazil as a country (406) also includes
+−3, and 756 more include −3 without naming Brazil, so the timezone alone catches all 1,162.
+
+**Example:** accept — job 100 (Remotive), `candidate_required_location: "Worldwide"`. Reject — the
+bulk of Himalayas, `locationRestrictions: ["United States"]` with `timezoneRestrictions:
+[-10,-9,-8,-7,-6,-5,14]` (no −3). Unknown — job 3 (Remote OK), `location: ""`.
+
+**Decision:** the ranking (3a) and the digest (5) operate on the **accept** bucket only. 94% of live
+jobs exclude a Brazil resident; keeping them would make the digest mostly unreachable jobs. Open
+edge: the rule is strict on −3, so the 698 jobs with `[-8,-7,-6,-5,-4,-3.5]` (a North-American
+Atlantic window with no −3) are rejected — the most debatable boundary. Widening to the Brazilian
+window (−2 to −5) is a one-line change; the measurement supports deciding later.
+
+## B. Language — which jobs are not in English
+
+**What:** the matching pipeline (embeddings, Jev questions) is English, so a non-English description
+scored by it gives garbage; those jobs are handled in a separate batch (SPEC §11).
+`eda/06_language.py` guesses each live description's language by counting frequent function words of
+Portuguese vs English (by hand, no library; empty text and ties → unknown).
+
+**Number:** over all live jobs, only **552 of 20,029 (2.8%)** are non-English — a number that would
+suggest dropping the batch. But over the **accept** bucket, the jobs that actually matter, it is
+**214 of 1,173 (18%)**: jobs open to Brazil skew to regional employers posting in Portuguese or
+Spanish.
+
+**Example:** job 66 (Remote OK), `Sobre a Stone: Somos muito mais do que uma empresa de
+maquininhas…` (PT). Job 207 (Himalayas), `GetMyInvoices recopila automáticamente facturas de más
+de…` (ES — labelled "pt", see below).
+
+**Decision:** **keep** the separate batch. The decision is driven by the 18% inside `accept`, not by
+the 2.8% overall; dropping it would have been wrong. Two caveats, both deferred to **D45**:
+
+- The detector conflates Portuguese and Spanish (shared function words) and also catches French, so
+  the batch is really **non-English**, not PT-BR — reframe the SPEC §11 batch accordingly. Of the
+  214 accept/non-English, disambiguating by distinctive words gives ~92 PT, ~100 ES, 22 tie.
+- ~20 genuine Brazilian-Portuguese jobs are marked **reject** by the location rule (e.g. a clearly
+  Brazilian posting tagged `locationRestrictions: ["United States"]`): a location false-negative
+  where PT-BR is a stronger eligibility signal than the mis-filled country. A finer PT-BR vs ES
+  detector and using language as a weak eligibility hint are both deferred to D45.
+
+Mojibake (defect 3, D10) corrupts accents in some descriptions (`A Stone Ã© um`), weakening the
+accented PT markers; the function-word counts still separate the languages.

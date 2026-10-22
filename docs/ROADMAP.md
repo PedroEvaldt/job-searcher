@@ -529,7 +529,7 @@ o "sobre a empresa" repetido em centenas de vagas.
 - [x] **2.3.3** Corte de boilerplate com o limiar da 2.3.2, testado com casos reais; mede quanto
       texto sai por fonte. Paga o D43 (caracteres invisíveis) antes.
 
-### 📍 Tarefa 2.4 — Localização e PT-BR
+### Tarefa 2.4 — Localização e PT-BR ✅ fechada 2026-10-22
 
 **Objetivo:** `docs/eda.md` traz duas políticas medidas: quais vagas servem a quem mora no Brasil
 (aceita / rejeita / dúvida) e quais estão em português (lote separado, invariante).
@@ -540,12 +540,25 @@ a Fase 4b precisa saber quantas vagas vão para o lote PT-BR.
 **Onde ler:** [pandas — `crosstab`](https://pandas.pydata.org/docs/reference/api/pandas.crosstab.html) ·
 [`re` — expressões regulares](https://docs.python.org/3/library/re.html)
 
-- [ ] **2.4.1** Localização: `eda/05_location.py` classifica cada vaga viva pelo campo de
+- [x] **2.4.1** Localização: `eda/05_location.py` classifica cada vaga viva pelo campo de
       localização da sua fonte (lista de países na Himalayas, texto livre no Remote OK e na
       Remotive) em aceita / rejeita / dúvida para quem mora no Brasil, e conta por fonte.
-- [ ] **2.4.2** Idioma: `eda/06_language.py` estima o idioma de cada descrição por palavras
+      ✅ 2026-10-22 — escrita pelo mentor, a pedido do aluno (insistência, §0). Uma função por
+      fonte num dict; Himalayas usa país **ou** fuso `-3`, Remotive casa tokens inteiros contra
+      um set que inclui o Brasil, Remote OK vira `unknown` em bloco (campo é cidade de quem
+      postou). Dado: 20.029 vivas → 1.173 aceita / 18.716 rejeita / 140 dúvida (100% cobertas).
+      Achado: na Himalayas o sinal de fuso **subsume** o de país (país ⊂ fuso: 406 ⊂ 1.162).
+- [x] **2.4.2** Idioma: `eda/06_language.py` estima o idioma de cada descrição por palavras
       frequentes de cada língua (à mão, sem biblioteca) e conta as vagas em português por fonte.
-- [ ] **2.4.3** Políticas no `docs/eda.md`: as duas, com número, exemplo e decisão.
+      ✅ 2026-10-22 — escrita pelo mentor, a pedido (insistência, §0). Contagem PT/EN por set de
+      palavras de função. Achado que virou a hipótese: PT é 2,8% no total mas **18% dentro do
+      `accept`** (214/1.173) → o lote separado se mantém. Limitações viram **D45**: o detector
+      confunde PT/ES (das 214, ~92 PT / ~100 ES) e ~20 vagas PT-BR caem em `reject` por
+      `locationRestrictions` errado (falso-negativo localização × idioma).
+- [x] **2.4.3** Políticas no `docs/eda.md`: as duas, com número, exemplo e decisão.
+      ✅ 2026-10-22 — escrita pelo mentor, a pedido. Seção `# Policies` no `docs/eda.md`
+      (localização + idioma), com os números do dump de 22/10 (20.029 vivas), exemplos, decisão
+      e referências a D33/D10/D45. **Tarefa 2.4 fechada.**
 
 ### Tarefa 2.5 — Fechamento da Fase 2 *(resumo)*
 
