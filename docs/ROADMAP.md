@@ -452,7 +452,7 @@ primeira coleta.
 
 ---
 
-## 📍 Fase 2 — Olhar o dado
+## Fase 2 — Olhar o dado ✅ fechada 2026-10-22
 
 **Objetivo de aprendizado:** explorar dado real com pandas antes de qualquer modelo; transformar
 observação em número e número em decisão (o que cortar, o que filtrar); escrever a primeira função
@@ -560,16 +560,20 @@ a Fase 4b precisa saber quantas vagas vão para o lote PT-BR.
       (localização + idioma), com os números do dump de 22/10 (20.029 vivas), exemplos, decisão
       e referências a D33/D10/D45. **Tarefa 2.4 fechada.**
 
-### Tarefa 2.5 — Fechamento da Fase 2 *(resumo)*
+### Tarefa 2.5 — Fechamento da Fase 2 ✅ fechada 2026-10-22
 
-Débitos com dono na Fase 2 (D10, D32, D33, D41, D42) pagos ou reagendados — as decisões estão
-em `docs/eda.md`; README da parte Python.
+Decisão tomada em conjunto (2026-10-22): **todos os débitos reagendados**, consumer-driven —
+nada pago especulativamente, porque a EDA em Python gerou trabalho de Go sem consumidor ainda.
+D10/D32/D33 → **3a** (extração); D42 → **backlog** (revisitar se a cobertura limitar a 3a);
+D41 → **3a/5** (quando o analyzer virar serviço real); D44 → **5** (digest); D45 → **4b**.
+README da parte Python escrito (`analyzer/README.md`, que também preenche o `readme` do
+`pyproject`). Donos atualizados no catálogo do `PROGRESS.md` e no `docs/eda.md`. **Fase 2 fechada.**
 
 ---
 
 ## Fases seguintes (resumo)
 
-**Fase 3a — Extração no código.** `cv.md`, skills por dicionário/regex, anos exigidos, salário, idade da vaga, ranking TF-IDF.
+**📍 Fase 3a — Extração no código.** `cv.md`, skills por dicionário/regex, anos exigidos, salário, idade da vaga, ranking TF-IDF. Herda da 2.5: D10/D32/D33 (normalização + colunas) e D41.
 
 **Fase 3b — Rotulagem e avaliação.** `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele.
 

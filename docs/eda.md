@@ -16,12 +16,12 @@ Defect 7 comes from the `runs` table; the query is in its section.
 | #   | Defect                       | Number                                        | Owner          | Decision      |
 | --- | ---------------------------- | --------------------------------------------- | -------------- | ------------- |
 | 1   | HTML in every description    | 16,204 of 16,204 (100%)                       | Python · 2.3   | fix in Python |
-| 2   | HTML entities in titles      | 86 of 16,049 Himalayas titles (0.5%)          | Go · D10 · 2.5 | fix in Go     |
-| 3   | Mojibake                     | 102 of 136 Remote OK descriptions (75%)       | Go · D10 · 2.5 | fix in Go     |
+| 2   | HTML entities in titles      | 86 of 16,049 Himalayas titles (0.5%)          | Go · D10 · 3a  | fix in Go     |
+| 3   | Mojibake                     | 102 of 136 Remote OK descriptions (75%)       | Go · D10 · 3a  | fix in Go     |
 | 4   | Fields the collector drops   | 5 `jobs` columns, 0 of 16,204 filled          | Go · D33, D32  | fix in Go     |
 | 5   | Sentinels for "not informed" | `salary_min: 0` in 112 of 136 Remote OK (82%) | Go · D33, D10  | fix in Go     |
 | 6   | Salary in many units         | 4 periods, 25 currencies, 0.59 to 168M        | Python · 3a    | fix in Python |
-| 7   | Himalayas page cap           | 37 of 44 full runs with ≥370 of 400 new       | Go · D42 · 2.5 | fix in Go     |
+| 7   | Himalayas page cap           | 37 of 44 full runs with ≥370 of 400 new       | Go · D42 · backlog | fix in Go |
 
 ---
 
@@ -47,7 +47,8 @@ boilerplate cut works on. The analyzer turns it into paragraphs of plain text.
 
 **Example:** job 5612 (Himalayas): `Full Stack Developer - .NET&#x2f;Angular - Full Remote Employee`.
 
-**Owner:** Go, normalization; D10 (recorded for Remote OK, applies to every source); Task 2.5.
+**Owner:** Go, normalization; D10 (recorded for Remote OK, applies to every source).
+Rescheduled 2026-10-22 to Phase 3a (fixed in the same pass that cleans the extractor's text).
 
 **Decision:** fix in Go: unescape the title when normalizing. Inside the description, entities
 are valid HTML and go away in the HTML → text step (defect 1).
@@ -63,7 +64,7 @@ Remotive.
 **Example:** job 1 (Remote OK): `FÃ¼r unsere â\x80\x8bTierhalterbesitzer:innen`, which should read
 `Für unsere Tierhalterbesitzer:innen` (with a zero-width space before the `T`).
 
-**Owner:** Go, normalization; D10; Task 2.5.
+**Owner:** Go, normalization; D10. Rescheduled 2026-10-22 to Phase 3a.
 
 **Decision:** fix in Go for Remote OK. All 102 come back whole with `encode("latin-1")` +
 `decode("utf-8")`, so the normalizer can reverse it when C1 characters are present and keep the
@@ -169,7 +170,8 @@ WHERE s.name = 'himalayas' AND r.finished_at IS NOT NULL
 ORDER BY r.id;
 ```
 
-**Owner:** Go, D42 (`main.go:28`, `himalayasMaxPages = 20`); Task 2.5.
+**Owner:** Go, D42 (`main.go:28`, `himalayasMaxPages = 20`). Rescheduled 2026-10-22 to the
+backlog (revisit if coverage limits Phase 3a).
 
 **Decision:** fix in Go. Either raise the cap, or keep paging until a page brings only known jobs,
 inside the source's time budget and rate limit.
