@@ -26,9 +26,53 @@ pedido (insistência, §0). Dado do Pi re-copiado para o banco local **na 5433**
 2,8% no total mas **18% dentro do `accept`** → lote não-inglês se mantém; limitações viraram
 **D45**. **Tarefa 2.5 e Fase 2 fechadas em 2026-10-22**: decisão em conjunto — **todos os débitos
 reagendados**, consumer-driven (D10/D32/D33 → 3a, D42 → backlog, D41 → 3a/5, D44 → 5, D45 → 4b;
-donos atualizados no catálogo); README da parte Python escrito (`analyzer/README.md`). Próximo:
-**Fase 3a — extração no código** (`cv.md`, skills, salário, idade, ranking TF-IDF). Pi
+donos atualizados no catálogo); README da parte Python escrito (`analyzer/README.md`). Pi
 com a imagem de `8498ca2` desde 2026-10-18 20:00 UTC (D37 e D39 em produção).
+
+**Fase 3a aberta em 2026-10-22** (extração no código; roadmap detalhado no `ROADMAP.md`:
+3a.1 extrator de skills → 3a.2 nas vagas → 3a.3 normalização Go D32/D33/D10 → 3a.4 salário/anos/
+idade → 3a.5 TF-IDF → 3a.6 fechamento). **Tarefa 3a.1 fechada em 2026-10-23.** `cv.md` na raiz
+(dado do aluno, escrito pelo mentor a pedido; ainda **não gitignorado** — decisão do aluno de
+versionar por ora) e `analyzer/skills.py`: `ALIASES` (forma escrita → canônico; universo =
+`set(ALIASES.values())`) + `skills_extractor(text, skills) -> dict[str, float]` (dicionário/regex
+com `(?<!\w)…(?!\w)`, soma contagem de menções no canônico). Testes em
+`tests/test_skills_extractor.py` (7 casos). A lógica central foi do aluno; `cv.md`, `ALIASES` e a
+migração dos testes a pedido. **Pendências levadas à 3a.2:** confiança é contagem crua (não
+normalizada, infla com texto longo); fechar um comentário documentando o esquema de confiança.
+**Subtarefa 3a.2.1 fechada em 2026-10-23:** `eda/07_skills.py` roda o pipeline
+(`text.py`→`boilerplate.py`→`skills.py`) sobre as 20.029 vivas e imprime presença por skill (Go
+2665, Python 2272, …, C++ 282). Achado que reprioriza a 3a.3: **D10 não afeta a extração de
+skills** (Remote OK é 0,7% das vagas; mojibake/entidades estragam não-ASCII, skills são ASCII) →
+o motor da 3a.3 vira o **D33** (salário/`posted_at` sem coluna preenchida), não a limpeza de
+texto. **Subtarefa 3a.2.2 fechada em 2026-10-23:** `main.py` extrai e grava `job_skills` (cursor, `%s`,
+`executemany`, `ON CONFLICT (job_id, skill) DO UPDATE`), chamado pelo `main` num `with conn:`;
+erro de banco → exit 1. 13.296 pares / 6.434 vagas; idempotente no caminho feliz (rodar 2× mantém
+a contagem). `skills_per_job` levantado pro `main.py` (sem pandas em produção; segue duplicado no
+`eda/07_skills.py` — pressão pra extrair pra módulo próprio). `ALIASES` expandido a pedido para
+103 formas (~70 skills canônicas). **Dívidas conhecidas da 3a.2.x:** (1) `DO UPDATE` não remove
+skill que sumiu quando a descrição muda; (2) confiança = contagem crua (→ pesar na 3a.5);
+(3) matcher sem longest-match (C/R fora; `Shell` casa em "Bash shell"). **Subtarefa 3a.2.3 e
+Tarefa 3a.2 fechadas em 2026-10-23:** migração `008` (`skills_extracted_at` como marcador de fila,
+separado do `scored_at`); laço claim→processa→marca→commit por lote com `with conn.transaction()`;
+drenou as 20.029 vivas (4m46), re-run no-op (16s). **Gotcha do psycopg (vale pra Fase 5):** leitura
+antes do laço com `autocommit=False` abre transação implícita → `with conn.transaction()` vira
+savepoint, travas `FOR UPDATE` presas até o fim; `conn.autocommit = True` resolve (commits por lote
+reais). A extração de skills da Fase 3 está, portanto, completa e idempotente, com concorrência.
+**Fase 3a.3 aberta 2026-10-23. Subtarefa 3a.3.1 fechada:** `insertJob` grava `posted_at` a partir
+do `Date` (ponteiro-na-fronteira, zero-time → `NULL`); `TestNilPostedAt` (código do aluno, teste
+reescrito pelo mentor). Forward-only — as 20k existentes seguem com `posted_at` NULL até a
+varredura. **Subtarefa 3a.3.2 fechada 2026-10-23:** `normalizeRawJobs` — varredura idempotente,
+última versão por identidade (`ROW_NUMBER`) com cursor no `id`, **lê lote → fecha `rows` →
+processa** (pgx dá `conn busy` se `insertJob` roda dentro do `rows.Next()`), re-parseia com a fonte
+real via `newSource`. Flag `-renormalize` (one-shot). `TestNormalizeRawJobs` com Remote OK real —
+lição: a `jobSource` grava formato de `sources.Job` que o reprocessamento via `newSource` não lê (o
+Himalayas `time.Unix(0,0)=1970` apareceu). Varredura/flag do aluno; conn-busy + teste pelo mentor.
+Suíte verde. Próximo: **3a.3.3 (salário)** — e ele abre uma decisão de desenho: o dado é
+**heterogêneo** (Remote OK numérico `salary_min/max` sem moeda/período; Remotive texto livre
+`salary`; Himalayas `minSalary/maxSalary` + `salaryPeriod` + `currency`), e `jobs` **não tem coluna
+de período** (defeito 6 pede normalização de unidade na 3a.4/Python → provável migração). Sentinela
+`salary_min: 0` → NULL (defeito 5). Banco local na 5433 (20.817/20.029 vivas); `skills_extracted_at`
+populado (migração `008`).
 
 Última sessão: **2026-10-22**.
 

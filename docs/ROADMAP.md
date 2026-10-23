@@ -571,9 +571,145 @@ README da parte Python escrito (`analyzer/README.md`, que também preenche o `re
 
 ---
 
-## Fases seguintes (resumo)
+## Fase 3a — Extração no código 📍 (aberta 2026-10-22)
 
-**📍 Fase 3a — Extração no código.** `cv.md`, skills por dicionário/regex, anos exigidos, salário, idade da vaga, ranking TF-IDF. Herda da 2.5: D10/D32/D33 (normalização + colunas) e D41.
+**Objetivo de aprendizado:** escrever extração de verdade em Python (regex, dicionário, parsing
+de texto estruturado), fazer Go e Python dividirem a responsabilidade de "dado limpo" (Go
+normaliza e preenche colunas; Python extrai significado), e produzir o primeiro ranking —
+TF-IDF — que casa currículo × vaga. É a fase que transforma texto em números que o digest da
+Fase 5 vai usar.
+
+**Pronto quando:** o extrator lê o `cv.md`, acha as skills dele, e elas batem com uma lista
+conferida à mão (critério da fase); o `analyzer` extrai skills, salário, anos exigidos e idade
+das vagas vivas e grava (`job_skills`, colunas de `jobs`); e um ranking TF-IDF ordena as vagas
+contra o `cv.md` e grava em `scores` com `model_version`, com as skills do currículo aparecendo
+no topo.
+
+**Herda da 2.5 (débitos, consumer-driven):** D10 (entidades HTML cruas + mojibake no texto),
+D32 (normalização deixou de ser idempotente sobre `raw_jobs` → `raw_job` órfão + reprocessamento
+perdido), D33 (`posted_at`/salário/`location`/`tags` mapeados mas não gravados). Os três são o
+conteúdo da Tarefa 3a.3, não um imprevisto.
+
+**Ponto de partida:** `jobs` já tem as colunas `salary_min`/`salary_max`/`currency`/`posted_at`
+(vazias — D33); `job_skills (job_id, skill, confidence)` e `scores (job_id, model_version,
+score)` prontas e sem uso. A Fase 2 deixou `analyzer/text.py` (HTML → parágrafos) e
+`analyzer/boilerplate.py` (corte de repetição) — o pipeline de texto que o extrator consome.
+
+**Onde ler:** [`re` — expressões regulares](https://docs.python.org/3/library/re.html) ·
+[SELECT … FOR UPDATE / SKIP LOCKED](https://www.postgresql.org/docs/16/sql-select.html#SQL-FOR-UPDATE-SHARE) ·
+[scikit-learn — TfidfVectorizer](https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfVectorizer.html)
+
+### Tarefa 3a.1 — `cv.md` e o extrator de skills (Python, sem banco)
+
+**Objetivo:** o caminho mais fino da fase — um extrator que lê um texto e devolve as skills de um
+dicionário que aparecem nele, provado primeiro contra o `cv.md`. Sem banco, sem Go: chegar ao
+verde e ganhar tração.
+
+**Critério de aceite:** rodar o extrator sobre o `cv.md` imprime a lista de skills encontradas, e
+ela bate com o que você lê no arquivo a olho; `pytest`, `ruff` e `mypy --strict` limpos.
+
+**Conceitos novos:** fronteira de palavra em regex (`\b`), `re.escape`, `re.IGNORECASE`, ler
+arquivo com `pathlib`, o dicionário como estrutura de dados.
+
+**Onde ler:** [`re` — syntax](https://docs.python.org/3/library/re.html#regular-expression-syntax) ·
+[`pathlib.Path.read_text`](https://docs.python.org/3/library/pathlib.html#pathlib.Path.read_text)
+
+- [x] **3a.1.1** `cv.md` (seu currículo real, em markdown) + um dicionário semente de skills + a
+      função que acha no texto as skills do dicionário, respeitando fronteira de palavra; `pytest`
+      com casos reais (incluindo os nomes difíceis: `Go`, `C++`, `R`). Roda sobre o `cv.md` e
+      imprime. ✅ 2026-10-22 — `analyzer/skills_extractor.py` (função + `SKILLS` + `__main__` que
+      roda sobre o `cv.md`), 8 testes. Abordagem do aluno (`re.escape` + fronteira + `IGNORECASE`);
+      dicionário/impressão, `__main__` e o conserto da pegadinha `C++` feitos pelo mentor a
+      pedido/insistência. Pegadinha: `\bC++\b` não casa `C++` (o `\b` final exige transição
+      palavra↔não-palavra, e `+` já é não-palavra) → trocado por `(?<!\w)…(?!\w)`, que só exige o
+      vizinho externo fora de palavra. Guarda `Go`/`Google` no teste contra regressão.
+- [x] **3a.1.2** Sinônimos e confiança: skills com aliases (`JS`/`JavaScript`, `Postgres`/
+      `PostgreSQL`) mapeiam para um nome canônico; a função devolve também uma confiança por skill.
+      ✅ 2026-10-23 — `skills.py`: `ALIASES` (forma escrita → canônico, universo =
+      `set(ALIASES.values())`, sem lista paralela), `skills_extractor(text, skills) -> dict[str,
+      float]` soma a contagem no canônico via `.items()`. 7 testes. `ALIASES` e migração dos testes
+      feitos pelo mentor a pedido; o aluno resolveu o lookup case-insensitive somando no valor `v`
+      (melhor que normalizar caixa) e a iteração `.keys()` → `.items()`. Pendência levada à 3a.2:
+      confiança é contagem crua, não normalizada. **Tarefa 3a.1 fechada.**
+
+### Tarefa 3a.2 — O extrator nas vagas (entra o banco)
+
+O mesmo extrator roda sobre as vagas vivas: lê `jobs`, passa a descrição pelo pipeline de texto da
+Fase 2 (`text.py` + `boilerplate.py`), extrai as skills e grava em `job_skills`. Entra a fila de
+trabalho por índice parcial (`scored_at IS NULL`) e a resposta do Postgres para duas instâncias
+(`FOR UPDATE SKIP LOCKED`, SPEC §3).
+
+- [x] **3a.2.1** O pipeline sobre texto de vaga real: carregar as vagas vivas, passar a descrição
+      por `text.py` → `boilerplate.py` → `skills_extractor`, e imprimir a distribuição de skills
+      pelas vagas. Sem gravar ainda — prova que o extrator sobrevive ao HTML sujo de verdade (D10),
+      não só ao `cv.md` limpo. ✅ 2026-10-23 — `eda/07_skills.py` (dois-passos: coleta + `counter`
+      do corpus, depois corta e extrai; presença por skill com `Counter.update(found.keys())`).
+      Distribuição sobre 20.029 vivas: Go 2665, Python 2272, SQL 1923, CI/CD 1524, …, C++ 282.
+      **Achado:** D10 **não deforma** a extração de skills (Remote OK é 137/20.029, e mojibake/
+      entidades estragam não-ASCII, não os tokens ASCII das skills) → o que puxa a 3a.3 passa a ser
+      o D33, não a limpeza de texto. Limpeza (nomes/prints/anotações) feita pelo mentor a pedido.
+- [x] **3a.2.2** Gravar em `job_skills` `(job_id, skill, confidence)`, idempotente, para as vagas
+      pendentes. ✅ 2026-10-23 — `main.py`: `skills_per_job(rows)` (sem pandas em produção) +
+      `insert_job_skills(conn)` (cursor, `%s`, `executemany`, `ON CONFLICT (job_id, skill) DO
+      UPDATE`), chamado pelo `main` dentro de um `with conn:`; erro de banco sobe e vira exit 1.
+      13.296 pares em 6.434 vagas; rodar 2× mantém a contagem. Caminho: aluno; `ALIASES` expandido
+      (12 → 103 formas: linguagens, frontend, frameworks, bancos, cloud/devops, dados/ML, tools) a
+      pedido. **Limites conhecidos:** `ON CONFLICT DO UPDATE` não remove skill que sumiu quando a
+      descrição muda (idempotente só no caminho feliz); confiança é contagem crua; matcher não faz
+      longest-match (C/R de fora; `Shell` casa em "Bash shell"). Normalização → 3a.5.
+- [x] **3a.2.3** Concorrência: `SELECT … FOR UPDATE SKIP LOCKED` para duas instâncias do analyzer
+      não processarem a mesma vaga (SPEC §3). ✅ 2026-10-23 — migração `008` (`skills_extracted_at`,
+      marcador de fila próprio, separado do `scored_at` do score); laço claim→processa→marca→commit
+      por lote (`with conn.transaction()`), Fase A (counter do corpus) uma vez antes. Drenou 20.029
+      vivas (4m46), re-run no-op (16s). Pegadinha resolvida pelo mentor a pedido: leitura da Fase A
+      com `autocommit=False` abria transação implícita → cada `with conn.transaction()` virava
+      savepoint (travas presas até o fim); `conn.autocommit = True` torna os commits por lote reais.
+      Typos/params (`timestamptz`, `(SKILLS_LIMIT,)`, `(job_id,)`, import de `Counter`) a pedido.
+      **Tarefa 3a.2 fechada.**
+
+### Tarefa 3a.3 — Normalização idempotente no Go (D32 · D33)
+
+Varredura de `raw_jobs` → `jobs` que se auto-cura e reprocessa o histórico (D32), preenche
+`posted_at` e salário a partir do payload (D33). Reprocessar não exige recoletar (SPEC §4.1).
+D10 saiu da mira: a 3a.2.1 mostrou que entidades/mojibake não afetam a extração de skills (texto
+não-ASCII vs tokens ASCII); volta se o Jev (4b) precisar do texto limpo.
+
+- [x] **3a.3.1** `insertJob` grava `posted_at` a partir do `Date` que as fontes já mapeiam
+      (forward-only). Zero-value de `time.Time` (fonte sem data) → `NULL`, não ano 0001.
+      ✅ 2026-10-23 — `insertJob` com `posted_at` no INSERT e no `DO UPDATE`; `var date *time.Time;
+      if !job.Date.IsZero() { date = &job.Date }` (ponteiro-na-fronteira, `Job.Date` segue
+      `time.Time`). `TestNilPostedAt` (2 casos, `*time.Time` no `Scan`, pega mutação); suíte verde.
+      Código do aluno; teste reescrito pelo mentor a pedido.
+- [x] **3a.3.2** Varredura idempotente `raw_jobs` → `jobs` (D32): reprocessa o histórico (backfill
+      de `posted_at` nas 20k existentes), se auto-cura (órfão deixa de ser permanente), SPEC §4.1.
+      ✅ 2026-10-23 — `normalizeRawJobs` (store.go): última versão por identidade (`ROW_NUMBER`
+      partition) paginada por cursor no `id`; **lê o lote → fecha `rows` → processa** (pgx só deixa
+      uma query ativa por conn — `insertJob` no meio do `rows.Next()` dava `conn busy`); re-roda o
+      `ToJob` da fonte real via `newSource`. Flag `-renormalize` no `main.go` (one-shot, abre a
+      própria conn, `return`). `TestNormalizeRawJobs` (Remote OK real — `jobSource` grava formato de
+      `sources.Job` que o reprocessamento via `newSource` não lê; 1970 do Himalayas confirmado).
+      Varredura/flag do aluno; conn-busy + teste reescritos pelo mentor a pedido.
+- [ ] **3a.3.3** Salário (D33): `sources.Job` ganha os campos, cada fonte extrai do payload, e
+      `insertJob` grava `salary_min/max/currency` — sentinela `salary_min: 0` vira `NULL` (defeito 5
+      do `eda.md`). A varredura da 3a.3.2 backfilla. Normalização de unidade fica pra 3a.4 (Python).
+
+### Tarefa 3a.4 — Extração estruturada em Python (salário, anos, idade)
+
+Salário em muitas unidades (4 períodos, 25 moedas — defeito 6 do `eda.md`) normalizado para uma
+base comparável; anos de experiência exigidos; idade da vaga a partir de `posted_at`.
+
+### Tarefa 3a.5 — Ranking TF-IDF (`cv.md` × vagas)
+
+TF-IDF sobre o corpus de descrições + o `cv.md`, cosseno currículo × vaga, gravado em `scores`
+com `model_version`. As vagas que compartilham as skills do currículo sobem no topo.
+
+### Tarefa 3a.6 — Fechamento da Fase 3a
+
+Débitos abertos na fase, README da parte de extração atualizado.
+
+---
+
+## Fases seguintes (resumo)
 
 **Fase 3b — Rotulagem e avaliação.** `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele.
 
