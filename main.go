@@ -46,6 +46,8 @@ const (
 	cycleRetries = 3
 	// cycleRetryWait is how long the collector waits before each of those tries.
 	cycleRetryWait = 5 * time.Minute
+
+	renormalizeBatchSize = 500
 )
 
 // Source is what the collector needs from a job source: fetch the raw items, read
@@ -93,6 +95,7 @@ func main() {
 	}
 
 	once := flag.Bool("once", false, "run one time only")
+	renormalize := flag.Bool("renormalize", false, "renormalize jobs database")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -107,6 +110,20 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info("shutting down")
+		return
+	}
+	if *renormalize {
+		conn, err := openConn(ctx, dbURL)
+		if err != nil {
+			logger.Error("failed to connect to renormalize", "error", err)
+			os.Exit(1)
+		}
+		renormalizedJobs, err := normalizeRawJobs(ctx, conn, renormalizeBatchSize)
+		if err != nil {
+			logger.Error("failed to renormalize jobs", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("renormalized jobs successfully", "total", renormalizedJobs)
 		return
 	}
 

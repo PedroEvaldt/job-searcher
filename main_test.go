@@ -1004,6 +1004,63 @@ func TestMarkDuplicates(t *testing.T) {
 	checkDuplicateMarks(t, conn)
 }
 
+func TestNilPostedAt(t *testing.T) {
+	_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	conn := newConn(t)
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
+
+	himalayasID, err := getSourceID(ctx, conn, "himalayas")
+	if err != nil {
+		t.Fatalf("failed to get himalayas id: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		externalID string
+		date       time.Time
+	}{
+		{"normal date", "d1", time.Now()},
+		{"zero date", "d2", time.Time{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item, err := json.Marshal(sources.Job{
+				ExternalID:  tt.externalID,
+				Company:     "CapsLock",
+				Title:       "Social Media Video Editor & Designer",
+				Description: "Edit short videos.",
+				Date:        tt.date,
+			})
+			if err != nil {
+				t.Fatalf("failed to encode job: %v", err)
+			}
+			items := []json.RawMessage{item}
+			if failed := collectAndStoreData(ctx, conn, logger, items, jobSource{}, himalayasID); failed != 0 {
+				t.Fatalf("expected 0 failed items; got %d", failed)
+			}
+
+			var postedAt *time.Time
+			err = conn.QueryRow(ctx,
+				"SELECT posted_at FROM jobs WHERE external_id = $1", tt.externalID,
+			).Scan(&postedAt)
+			if err != nil {
+				t.Fatalf("failed to query posted_at: %v", err)
+			}
+
+			if tt.date.IsZero() && postedAt != nil {
+				t.Errorf("zero date: expected NULL posted_at; got %v", *postedAt)
+			}
+			if !tt.date.IsZero() && postedAt == nil {
+				t.Errorf("real date: expected posted_at set; got NULL")
+			}
+		})
+	}
+}
+
 // TestBackfillDedupe turns the scenario into jobs written before dedupe keys existed
 // and checks that the backfill rebuilds the same marks, then finds nothing left to do.
 func TestBackfillDedupe(t *testing.T) {
@@ -1035,5 +1092,85 @@ func TestBackfillDedupe(t *testing.T) {
 	}
 	if backfilled != 0 {
 		t.Errorf("expected 0 backfilled jobs on the second pass; got %d", backfilled)
+	}
+}
+
+func TestNormalizeRawJobs(t *testing.T) {
+	_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	conn := newConn(t)
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
+
+	// normalizeRawJobs re-parses each payload with the real source (newSource), so the
+	// raw payloads must be in that source's format. Remote OK reads an RFC3339 "date";
+	// an absent date is a zero time.Time, which becomes NULL.
+	remoteokID, err := getSourceID(ctx, conn, "remoteok")
+	if err != nil {
+		t.Fatalf("failed to get remoteok id: %v", err)
+	}
+	src, err := newSource("remoteok", nil)
+	if err != nil {
+		t.Fatalf("failed to build remoteok source: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		externalID string
+		hasDate    bool
+	}{
+		{"with date", "d1", true},
+		{"without date", "d2", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := map[string]any{
+				"id":          tt.externalID,
+				"position":    "Social Media Video Editor",
+				"company":     "CapsLock",
+				"url":         "https://example.com/" + tt.externalID,
+				"description": "Edit short videos.",
+			}
+			if tt.hasDate {
+				payload["date"] = "2024-01-02T03:04:05Z"
+			}
+			item, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatalf("failed to encode item: %v", err)
+			}
+			if failed := collectAndStoreData(ctx, conn, logger, []json.RawMessage{item}, src, remoteokID); failed != 0 {
+				t.Fatalf("expected 0 failed items; got %d", failed)
+			}
+
+			// Simulate pre-3a.3.1 history: posted_at lost, and the job already scored.
+			_, err = db.Exec("UPDATE jobs SET posted_at = NULL, scored_at = now() WHERE external_id = $1;", tt.externalID)
+			if err != nil {
+				t.Fatalf("failed to reset job: %v", err)
+			}
+
+			if _, err := normalizeRawJobs(ctx, conn, 5); err != nil {
+				t.Fatalf("failed to normalize jobs: %v", err)
+			}
+
+			var (
+				nullPostedAt bool
+				nullScoredAt bool
+			)
+			err = db.QueryRow("SELECT posted_at IS NULL, scored_at IS NULL FROM jobs WHERE external_id = $1;", tt.externalID).Scan(&nullPostedAt, &nullScoredAt)
+			if err != nil {
+				t.Fatalf("failed to query job: %v", err)
+			}
+			if tt.hasDate && nullPostedAt {
+				t.Errorf("expected posted_at set; got NULL")
+			}
+			if !tt.hasDate && !nullPostedAt {
+				t.Errorf("expected posted_at NULL; got a time")
+			}
+			if nullScoredAt {
+				t.Errorf("expected scored_at preserved; got NULL")
+			}
+		})
 	}
 }

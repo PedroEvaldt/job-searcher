@@ -117,8 +117,8 @@ func insertRawJob(ctx context.Context, conn querier, logger *slog.Logger, item j
 func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, externalID string, job sources.Job) (int, error) {
 	companyKey, titleKey := normalize(job.Company, job.Title)
 	const query = `
-		INSERT INTO jobs (raw_job_id, source_id, external_id, title, company, url, description, company_key, title_key)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO jobs (raw_job_id, source_id, external_id, title, company, url, description, posted_at, company_key, title_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT ON CONSTRAINT uq_source_id_external_id
 		DO UPDATE SET
 			title = EXCLUDED.title,
@@ -126,6 +126,7 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 			url = EXCLUDED.url,
 			description = EXCLUDED.description,
 			raw_job_id = EXCLUDED.raw_job_id,
+			posted_at = EXCLUDED.posted_at,
 			company_key = EXCLUDED.company_key,
 			title_key = EXCLUDED.title_key,
 			scored_at = CASE
@@ -133,7 +134,11 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 				ELSE NULL
 			END RETURNING id;`
 	var jobID int
-	err := conn.QueryRow(ctx, query, rawJobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description, companyKey, titleKey).Scan(&jobID)
+	var date *time.Time
+	if !job.Date.IsZero() {
+		date = &job.Date
+	}
+	err := conn.QueryRow(ctx, query, rawJobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description, date, companyKey, titleKey).Scan(&jobID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert job: %w", err)
 	}
@@ -278,4 +283,74 @@ func backfillDedupe(ctx context.Context, conn querier, batchSize int) (int, erro
 		}
 	}
 	return backfilled, nil
+}
+
+func normalizeRawJobs(ctx context.Context, conn querier, batchSize int) (int, error) {
+	var lastSeenID int
+	backfilledTotal := 0
+	for {
+		rows, err := conn.Query(ctx, `
+			WITH ranked as (
+				SELECT id, source_id, external_id, payload, 
+				ROW_NUMBER() OVER (
+					PARTITION BY source_id, external_id
+					ORDER BY fetched_at DESC
+				) as rn
+			FROM raw_jobs
+			) 
+			SELECT r.id, r.source_id, r.external_id, r.payload, s.name 
+			FROM ranked r JOIN sources s ON s.id = r.source_id
+			WHERE r.rn = 1 AND r.id > $1
+			ORDER BY r.id
+			LIMIT $2;
+		`, lastSeenID, batchSize)
+		if err != nil {
+			return backfilledTotal, fmt.Errorf("failed to query newest raw_jobs: %w", err)
+		}
+
+		// Read the whole batch first and close rows: pgx allows one active query per
+		// connection, so insertJob cannot run while rows still holds it (conn busy).
+		type rawRow struct {
+			rawJobID   int
+			sourceID   int
+			externalID string
+			sourceName string
+			payload    json.RawMessage
+		}
+		var batch []rawRow
+		for rows.Next() {
+			var r rawRow
+			if err := rows.Scan(&r.rawJobID, &r.sourceID, &r.externalID, &r.payload, &r.sourceName); err != nil {
+				rows.Close()
+				return backfilledTotal, fmt.Errorf("failed to read row: %w", err)
+			}
+			batch = append(batch, r)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return backfilledTotal, fmt.Errorf("failed to read batch: %w", err)
+		}
+		rows.Close()
+
+		if len(batch) == 0 {
+			break
+		}
+
+		for _, r := range batch {
+			source, err := newSource(r.sourceName, nil)
+			if err != nil {
+				return backfilledTotal, fmt.Errorf("failed to get source from name: %w", err)
+			}
+			job, err := source.ToJob(r.payload)
+			if err != nil {
+				return backfilledTotal, fmt.Errorf("failed to convert source to job: %w", err)
+			}
+			if _, err := insertJob(ctx, conn, r.rawJobID, r.sourceID, r.externalID, job); err != nil {
+				return backfilledTotal, fmt.Errorf("failed to insert job: %w", err)
+			}
+			lastSeenID = r.rawJobID
+			backfilledTotal++
+		}
+	}
+	return backfilledTotal, nil
 }
