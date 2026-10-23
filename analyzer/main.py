@@ -1,7 +1,18 @@
 import os
 import sys
+from collections import Counter
 
 import psycopg
+
+from boilerplate import (
+    BOILERPLATE_MIN_DESCRIPTIONS,
+    cut_boilerplate,
+    paragraphs_counter,
+)
+from skills import ALIASES, skills_extractor
+from text import html_to_paragraphs
+
+SKILLS_LIMIT: int = 100
 
 
 def main() -> int:
@@ -12,12 +23,23 @@ def main() -> int:
         return 1
     try:
         conn = psycopg.connect(database_url)
-    except psycopg.OperationalError as e:
+    except psycopg.Error as e:
         detail = " ".join(str(e).split())
         print(f"failed to connect to the database: {detail}", file=sys.stderr)
         return 1
 
+    # Each batch commits on its own (see the loop). Without autocommit, the Phase A read
+    # opens an implicit transaction and every with-transaction() becomes a savepoint, so
+    # the FOR UPDATE locks would be held until the very end.
+    conn.autocommit = True
     with conn, conn.cursor() as cur:
+        try:
+            insert_job_skills(conn)
+        except psycopg.OperationalError as e:
+            detail = " ".join(str(e).split())
+            print(f"failed to insert skills: {detail}", file=sys.stderr)
+            return 1
+
         cur.execute(
             """
             SELECT COUNT(*) AS total,
@@ -30,6 +52,60 @@ def main() -> int:
     total, unscored = row
     print(f"jobs: {unscored} of {total} not scored yet")
     return 0
+
+
+def insert_job_skills(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
+        # Build the boilerplate statistic once over the whole corpus, then cut per job
+        descriptions = [
+            d[0]
+            for d in cur.execute(
+                "SELECT description FROM jobs WHERE duplicate_of IS NULL;"
+            ).fetchall()
+        ]
+        counter = paragraphs_counter(descriptions)
+
+        while True:
+            with conn.transaction():
+                jobs = cur.execute(
+                    "SELECT id, description FROM jobs WHERE duplicate_of IS NULL AND skills_extracted_at IS NULL ORDER BY id LIMIT %s FOR UPDATE SKIP LOCKED;",
+                    (SKILLS_LIMIT,),
+                ).fetchall()
+
+                if len(jobs) == 0:
+                    break
+
+                skills = skills_per_job(jobs, counter)
+
+                for job_id, skills_dict in skills.items():
+                    cur.executemany(
+                        "INSERT INTO job_skills (job_id, skill, confidence) VALUES(%s, %s, %s) ON CONFLICT (job_id, skill) DO UPDATE set confidence=EXCLUDED.confidence;",
+                        [
+                            (job_id, skill, confidence)
+                            for skill, confidence in skills_dict.items()
+                        ],
+                    )
+                    cur.execute(
+                        "UPDATE jobs SET skills_extracted_at = now() WHERE id = %s",
+                        (job_id,),
+                    )
+
+
+def skills_per_job(
+    jobs: list[tuple[int, str]], counter: Counter[str]
+) -> dict[int, dict[str, float]]:
+    """Canonical skills found in every live job, after cutting shared boilerplate."""
+    paragraphs: dict[int, list[str]] = {}
+    descriptions: list[str] = []
+    for job_id, description in jobs:
+        paragraphs[job_id] = html_to_paragraphs(description)
+        descriptions.append(description)
+
+    skills: dict[int, dict[str, float]] = {}
+    for job_id, job_paragraphs in paragraphs.items():
+        kept = cut_boilerplate(job_paragraphs, counter, BOILERPLATE_MIN_DESCRIPTIONS)
+        skills[job_id] = skills_extractor("\n".join(kept), ALIASES)
+    return skills
 
 
 if __name__ == "__main__":
