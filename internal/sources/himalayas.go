@@ -63,14 +63,18 @@ func (r Himalayas) ExternalID(item json.RawMessage) (string, error) {
 
 func (Himalayas) ToJob(raw json.RawMessage) (Job, error) {
 	var v struct {
-		GUID        string   `json:"guid"`
-		URL         string   `json:"applicationLink"`
-		Title       string   `json:"title"`
-		CompanyName string   `json:"companyName"`
-		Description string   `json:"description"`
-		Location    []string `json:"locationRestrictions"`
-		Categories  []string `json:"categories"`
-		PubDate     int64    `json:"pubDate"`
+		GUID         string   `json:"guid"`
+		URL          string   `json:"applicationLink"`
+		Title        string   `json:"title"`
+		CompanyName  string   `json:"companyName"`
+		Description  string   `json:"description"`
+		SalaryPeriod string   `json:"salaryPeriod"`
+		Currency     string   `json:"currency"`
+		Location     []string `json:"locationRestrictions"`
+		Categories   []string `json:"categories"`
+		MaxSalary    float64  `json:"maxSalary"`
+		MinSalary    float64  `json:"minSalary"`
+		PubDate      int64    `json:"pubDate"`
 	}
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Job{}, fmt.Errorf("himalayas: map job: %w", err)
@@ -78,13 +82,17 @@ func (Himalayas) ToJob(raw json.RawMessage) (Job, error) {
 	date := time.Unix(v.PubDate, 0).UTC()
 	location := strings.Join(v.Location, ",")
 	return Job{
-		ExternalID:  v.GUID,
-		Title:       v.Title,
-		Company:     v.CompanyName,
-		URL:         v.URL,
-		Description: v.Description,
-		Location:    location,
-		Tags:        v.Categories,
-		Date:        date,
+		ExternalID:   v.GUID,
+		Title:        v.Title,
+		Company:      v.CompanyName,
+		URL:          v.URL,
+		Description:  v.Description,
+		SalaryMin:    nonZero(v.MinSalary),
+		SalaryMax:    nonZero(v.MaxSalary),
+		SalaryPeriod: nonEmpty(v.SalaryPeriod),
+		Currency:     nonEmpty(v.Currency),
+		Location:     location,
+		Tags:         v.Categories,
+		Date:         date,
 	}, nil
 }

@@ -117,8 +117,8 @@ func insertRawJob(ctx context.Context, conn querier, logger *slog.Logger, item j
 func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, externalID string, job sources.Job) (int, error) {
 	companyKey, titleKey := normalize(job.Company, job.Title)
 	const query = `
-		INSERT INTO jobs (raw_job_id, source_id, external_id, title, company, url, description, posted_at, company_key, title_key)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO jobs (raw_job_id, source_id, external_id, title, company, url, description, salary_min, salary_max, currency, salary_period, posted_at, company_key, title_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT ON CONSTRAINT uq_source_id_external_id
 		DO UPDATE SET
 			title = EXCLUDED.title,
@@ -126,6 +126,10 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 			url = EXCLUDED.url,
 			description = EXCLUDED.description,
 			raw_job_id = EXCLUDED.raw_job_id,
+			salary_min = EXCLUDED.salary_min,
+			salary_max = EXCLUDED.salary_max,
+			currency = EXCLUDED.currency,
+			salary_period = EXCLUDED.salary_period,
 			posted_at = EXCLUDED.posted_at,
 			company_key = EXCLUDED.company_key,
 			title_key = EXCLUDED.title_key,
@@ -138,7 +142,7 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 	if !job.Date.IsZero() {
 		date = &job.Date
 	}
-	err := conn.QueryRow(ctx, query, rawJobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description, date, companyKey, titleKey).Scan(&jobID)
+	err := conn.QueryRow(ctx, query, rawJobID, sourceID, externalID, job.Title, job.Company, job.URL, job.Description, job.SalaryMin, job.SalaryMax, job.Currency, job.SalaryPeriod, date, companyKey, titleKey).Scan(&jobID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert job: %w", err)
 	}

@@ -50,6 +50,8 @@ func (RemoteOK) ToJob(raw json.RawMessage) (Job, error) {
 		Company     string    `json:"company"`
 		URL         string    `json:"url"`
 		Description string    `json:"description"`
+		SalaryMin   float64   `json:"salary_min"`
+		SalaryMax   float64   `json:"salary_max"`
 		Location    string    `json:"location"`
 		Tags        []string  `json:"tags"`
 		Date        time.Time `json:"date"` // Remote OK sends RFC3339
@@ -63,6 +65,8 @@ func (RemoteOK) ToJob(raw json.RawMessage) (Job, error) {
 		Company:     v.Company,
 		URL:         v.URL,
 		Description: v.Description,
+		SalaryMin:   nonZero(v.SalaryMin),
+		SalaryMax:   nonZero(v.SalaryMax),
 		Location:    v.Location,
 		Tags:        v.Tags,
 		Date:        v.Date,

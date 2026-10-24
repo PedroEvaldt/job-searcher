@@ -2,6 +2,7 @@ package sources
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,6 +48,43 @@ func TestRemoteOK(t *testing.T) {
 				if len(jsonMsg) != tt.itemsExpected {
 					t.Errorf("expected %d items; got %d", tt.itemsExpected, len(jsonMsg))
 				}
+			}
+		})
+	}
+}
+
+// TestRemoteOKSalary checks that ToJob maps salary into a nullable, decimal-capable
+// value: the 0 sentinel (and an absent field) become nil (stored as NULL), a real
+// amount is kept, and a fractional amount is not truncated.
+func TestRemoteOKSalary(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantNil bool
+		wantVal float64
+	}{
+		{"a real salary is kept", `{"id":"1","salary_min":50000}`, false, 50000},
+		{"a fractional salary is not truncated", `{"id":"2","salary_min":0.59}`, false, 0.59},
+		{"the 0 sentinel becomes NULL", `{"id":"3","salary_min":0}`, true, 0},
+		{"an absent salary is NULL", `{"id":"4"}`, true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job, err := RemoteOK{}.ToJob(json.RawMessage(tt.raw))
+			if err != nil {
+				t.Fatalf("ToJob failed: %v", err)
+			}
+			if tt.wantNil {
+				if job.SalaryMin != nil {
+					t.Errorf("expected nil salary_min; got %v", *job.SalaryMin)
+				}
+				return
+			}
+			if job.SalaryMin == nil {
+				t.Fatalf("expected salary_min %v; got nil", tt.wantVal)
+			}
+			if *job.SalaryMin != tt.wantVal {
+				t.Errorf("expected salary_min %v; got %v", tt.wantVal, *job.SalaryMin)
 			}
 		})
 	}
