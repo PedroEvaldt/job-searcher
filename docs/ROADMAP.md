@@ -689,9 +689,15 @@ não-ASCII vs tokens ASCII); volta se o Jev (4b) precisar do texto limpo.
       própria conn, `return`). `TestNormalizeRawJobs` (Remote OK real — `jobSource` grava formato de
       `sources.Job` que o reprocessamento via `newSource` não lê; 1970 do Himalayas confirmado).
       Varredura/flag do aluno; conn-busy + teste reescritos pelo mentor a pedido.
-- [ ] **3a.3.3** Salário (D33): `sources.Job` ganha os campos, cada fonte extrai do payload, e
+- [x] **3a.3.3** Salário (D33): `sources.Job` ganha os campos, cada fonte extrai do payload, e
       `insertJob` grava `salary_min/max/currency` — sentinela `salary_min: 0` vira `NULL` (defeito 5
       do `eda.md`). A varredura da 3a.3.2 backfilla. Normalização de unidade fica pra 3a.4 (Python).
+      ✅ 2026-10-23 — `SalaryMin`/`SalaryMax` → `*float64`, `Currency`/`SalaryPeriod` → `*string`;
+      helpers `nonZero`/`nonEmpty` mapeiam `0`/`""` → `nil` (→ `NULL`). Remote OK (min/max) e
+      Himalayas (min/max/currency/period) extraem; Remotive deixa salário `NULL` (texto livre →
+      Python/3a.4). Migração `009` (`salary_period`). `TestRemoteOKSalary` (sentinela + decimal
+      `0.59` não truncado). Estrutura do aluno; tipos/sentinela/teste pelo mentor a pedido.
+      **Tarefa 3a.3 fechada.**
 
 ### Tarefa 3a.4 — Extração estruturada em Python (salário, anos, idade)
 

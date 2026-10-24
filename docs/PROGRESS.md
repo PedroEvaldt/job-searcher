@@ -67,12 +67,17 @@ processa** (pgx dá `conn busy` se `insertJob` roda dentro do `rows.Next()`), re
 real via `newSource`. Flag `-renormalize` (one-shot). `TestNormalizeRawJobs` com Remote OK real —
 lição: a `jobSource` grava formato de `sources.Job` que o reprocessamento via `newSource` não lê (o
 Himalayas `time.Unix(0,0)=1970` apareceu). Varredura/flag do aluno; conn-busy + teste pelo mentor.
-Suíte verde. Próximo: **3a.3.3 (salário)** — e ele abre uma decisão de desenho: o dado é
-**heterogêneo** (Remote OK numérico `salary_min/max` sem moeda/período; Remotive texto livre
-`salary`; Himalayas `minSalary/maxSalary` + `salaryPeriod` + `currency`), e `jobs` **não tem coluna
-de período** (defeito 6 pede normalização de unidade na 3a.4/Python → provável migração). Sentinela
-`salary_min: 0` → NULL (defeito 5). Banco local na 5433 (20.817/20.029 vivas); `skills_extracted_at`
-populado (migração `008`).
+Suíte verde. **Subtarefa 3a.3.3 e Tarefa 3a.3 fechadas 2026-10-23:** salário extraído pra colunas
+nuláveis — `SalaryMin`/`SalaryMax` → `*float64`, `Currency`/`SalaryPeriod` → `*string`, helpers
+`nonZero`/`nonEmpty` (`0`/`""` → `nil` → `NULL`, defeito 5). Remote OK (min/max) e Himalayas
+(min/max/currency/period) extraem; Remotive deixa salário `NULL` (texto livre → Python/3a.4,
+defeito 6). Migração `009` (`salary_period` — nome do arquivo diz "duration", conteúdo é "period";
+cosmético). `TestRemoteOKSalary` (sentinela + decimal `0.59`). Estrutura do aluno; tipos/teste pelo
+mentor. **Normalização Go (D32/D33) da Fase 3a completa.** Próximo: **Fase 3a.4** (Python: idade da
+vaga a partir de `posted_at`, normalização de salário por período/moeda, anos de experiência).
+**Pendências:** aplicar `009` no banco local (`make gup`) antes de rodar `-renormalize` lá; o
+backfill de salário nas 20k ainda não foi rodado em dado real. Banco local na 5433 (20.817/20.029
+vivas); `skills_extracted_at` populado (`008`).
 
 Última sessão: **2026-10-22**.
 
