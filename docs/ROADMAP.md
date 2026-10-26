@@ -784,9 +784,15 @@ A CLI do usuário ganha vida: um segundo `package main` em `cmd/radar/`, que con
 Postgres e, no fim da tarefa, roda a tela de rotulagem. Começa pelo caminho mais fino —
 conectar e contar — pra provar a estrutura de dois binários antes de qualquer interação.
 
-- [ ] **3b.1.1** `cmd/radar/` nasce: binário que conecta no Postgres (lendo `DATABASE_URL`) e
+- [x] **3b.1.1** `cmd/radar/` nasce: binário que conecta no Postgres (lendo `DATABASE_URL`) e
       imprime uma contagem real (vagas rotuladas × por rotular). Sem interação ainda. Duplicar as
       poucas linhas de conexão é aceito (SPEC §7: extrai pra `internal/` quando doer).
+      ✅ 2026-10-26 — `cmd/radar/main.go` (`package main`): `pgx.Connect` + `Ping`, `signal.NotifyContext`,
+      contagem `LEFT JOIN labels … WHERE duplicate_of IS NULL` com `FILTER`. Rodado contra o banco:
+      `LABELED 0 / 16204`, bate com o `psql`. Furos corrigidos no caminho (`/check` 2×): `package cmd`
+      não vira binário (gerava `ar archive`), `print`→`fmt.Printf`, query com `j.labeled_at`
+      inexistente + `JOIN` interno, `DATABASE_URL` no log. `go vet` limpo. Dois `package main` no
+      módulo (raiz + `cmd/radar`), collector intocado.
 - [ ] **3b.1.2** `radar label`: mostra uma vaga por vez (título, empresa, descrição limpa) e
       captura o rótulo (`would_apply` + opcionais), gravando em `labels`. **Nunca** mostra score.
 - [ ] **3b.1.3** Robustez da sessão de rotulagem: retomar de onde parou, pular vaga, sair limpo;

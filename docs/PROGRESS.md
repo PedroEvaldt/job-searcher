@@ -100,10 +100,16 @@ verificação que atravessa a fase: o mentor não reproduz runtime nesta máquin
 banco da 5433 na migração 7 / intermitente) — testcontainers Go e observações de banco ficaram no
 relato do aluno.
 
-**Próximo: Fase 3b — Rotulagem e avaliação.** `radar label` (~100 vagas), conjunto de teste
-congelado, TF-IDF medido nele. É a fase que nasce o segundo binário Go (`radar`) e, com ele, a
-pressão pra extrair `internal/store` e `internal/config` (SPEC §7). Banco local na 5433 (20.029
-vivas); `scores` com `tfidf-v1` gravado.
+**Fase 3b aberta em 2026-10-26** (rotulagem e avaliação; roadmap detalhado no `ROADMAP.md`:
+3b.1 binário `radar` → 3b.2 rotular + congelar split → 3b.3 TF-IDF no conjunto congelado → 3b.4
+fechamento). **Subtarefa 3b.1.1 fechada em 2026-10-26:** `cmd/radar/main.go` (`package main`) — o
+segundo binário Go nasce; `pgx.Connect`+`Ping`, contagem `LEFT JOIN labels … WHERE duplicate_of IS
+NULL`, rodou contra o banco (`LABELED 0 / 16204`, confere com o `psql`). Conexão ainda duplicada de
+propósito (SPEC §7: `internal/store`/`internal/config` só quando a duplicação doer). Lição que
+pegou: o que faz um pacote virar executável é o `package main`, não a pasta `cmd/radar/`.
+**Próximo: 3b.1.2** (`radar label` — tela de rotulagem, grava em `labels`, nunca mostra score).
+Banco local na 5433; `scores` com `tfidf-v1` gravado. **Pendência de ambiente:** `go test ./...`
+(collector) precisa de Docker pro testcontainer; o mentor não roda aqui (socket negado).
 
 Última sessão: **2026-10-26**.
 
