@@ -1174,3 +1174,58 @@ func TestNormalizeRawJobs(t *testing.T) {
 		})
 	}
 }
+
+func TestNilSkillsExtractedAt(t *testing.T) {
+	_, err := db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
+	if err != nil {
+		t.Fatalf("failed to clean tables: %v", err)
+	}
+	conn := newConn(t)
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
+
+	himalayasID, err := getSourceID(ctx, conn, "himalayas")
+	if err != nil {
+		t.Fatalf("failed to get himalayas id: %v", err)
+	}
+
+	item1, err := json.Marshal(sources.Job{
+		ExternalID:  "d1",
+		Company:     "CapsLock",
+		Title:       "Social Media Video Editor & Designer",
+		Description: "first description",
+	})
+	if err != nil {
+		t.Fatalf("failed to encode job: %v", err)
+	}
+	items := []json.RawMessage{item1}
+	if failed := collectAndStoreData(ctx, conn, logger, items, jobSource{}, himalayasID); failed != 0 {
+		t.Fatalf("expected 0 failed items; got %d", failed)
+	}
+	_, err = conn.Exec(ctx, "UPDATE jobs SET skills_extracted_at = now() WHERE external_id = 'd1'")
+	if err != nil {
+		t.Fatalf("failed to simulad analyzer: %v", err)
+	}
+	item2, err := json.Marshal(sources.Job{
+		ExternalID:  "d1",
+		Company:     "CapsLock",
+		Title:       "Social Media Video Editor & Designer",
+		Description: "second description",
+	})
+	if err != nil {
+		t.Fatalf("failed to encode job: %v", err)
+	}
+	items = []json.RawMessage{item2}
+	if failed := collectAndStoreData(ctx, conn, logger, items, jobSource{}, himalayasID); failed != 0 {
+		t.Fatalf("expected 0 failed items; got %d", failed)
+	}
+
+	var got string
+	err = conn.QueryRow(ctx, "SELECT external_id FROM jobs WHERE skills_extracted_at IS NULL;").Scan(&got)
+	if err != nil {
+		t.Fatalf("failed to extract from skills_extracted_at NULL: %v", err)
+	}
+	if got != "d1" {
+		t.Errorf("expected d1 as external_id; got %v", got)
+	}
+}

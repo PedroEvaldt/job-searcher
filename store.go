@@ -133,6 +133,10 @@ func insertJob(ctx context.Context, conn querier, rawJobID, sourceID int, extern
 			posted_at = EXCLUDED.posted_at,
 			company_key = EXCLUDED.company_key,
 			title_key = EXCLUDED.title_key,
+			skills_extracted_at = CASE
+				WHEN EXCLUDED.raw_job_id = jobs.raw_job_id THEN jobs.skills_extracted_at
+				ELSE NULL
+			END,
 			scored_at = CASE
 				WHEN EXCLUDED.raw_job_id = jobs.raw_job_id THEN jobs.scored_at
 				ELSE NULL

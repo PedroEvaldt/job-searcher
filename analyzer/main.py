@@ -81,6 +81,7 @@ def insert_job_skills(conn: psycopg.Connection) -> None:
                 skills = skills_per_job(jobs, counter)
 
                 for job_id, skills_dict in skills.items():
+                    cur.execute("DELETE FROM job_skills WHERE job_id = %s", (job_id,))
                     cur.executemany(
                         "INSERT INTO job_skills (job_id, skill, confidence) VALUES(%s, %s, %s) ON CONFLICT (job_id, skill) DO UPDATE set confidence=EXCLUDED.confidence;",
                         [
