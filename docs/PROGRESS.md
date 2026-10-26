@@ -73,11 +73,17 @@ nuláveis — `SalaryMin`/`SalaryMax` → `*float64`, `Currency`/`SalaryPeriod` 
 (min/max/currency/period) extraem; Remotive deixa salário `NULL` (texto livre → Python/3a.4,
 defeito 6). Migração `009` (`salary_period` — nome do arquivo diz "duration", conteúdo é "period";
 cosmético). `TestRemoteOKSalary` (sentinela + decimal `0.59`). Estrutura do aluno; tipos/teste pelo
-mentor. **Normalização Go (D32/D33) da Fase 3a completa.** Próximo: **Fase 3a.4** (Python: idade da
-vaga a partir de `posted_at`, normalização de salário por período/moeda, anos de experiência).
-**Pendências:** aplicar `009` no banco local (`make gup`) antes de rodar `-renormalize` lá; o
-backfill de salário nas 20k ainda não foi rodado em dado real. Banco local na 5433 (20.817/20.029
-vivas); `skills_extracted_at` populado (`008`).
+mentor. **Normalização Go (D32/D33) da Fase 3a completa.**
+
+**Tarefa 3a.4 fechada 2026-10-25** (extração estruturada em Python): 3a.4.1 idade (`eda/08_date.py`,
+subtração vetorizada; 100% das vivas com `posted_at`, sem sentinela 1970 no dado); 3a.4.2 salário
+(`salary.py`: `normalize_salary` → USD anual, `TO_ANNUAL`/`TO_USD` 26 moedas, sentinela → `None`, 10
+testes); 3a.4.3 anos (`experience.py`: `extract_years` por regex, 6 testes). `ruff`/`mypy --strict`/
+43 testes verdes. **Lição que pegou:** `ruff`+`mypy` acharam um bug de refactor no `main.py`
+(`skills_per_job` com nomes indefinidos) invisível aos testes → estática antes do `/check`.
+**Tudo da 3a.4 uncommitted.** Próximo: **Tarefa 3a.5** (ranking TF-IDF: `cv.md` × vagas → cosseno →
+`scores`, com as skills do CV no topo) — capstone da 3a; depois **3a.6** (fechamento). Banco local
+na 5433 (20.029 vivas); `posted_at` 100%, salário 7.999, `skills_extracted_at` populados.
 
 Última sessão: **2026-10-22**.
 

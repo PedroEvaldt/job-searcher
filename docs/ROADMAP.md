@@ -704,10 +704,44 @@ não-ASCII vs tokens ASCII); volta se o Jev (4b) precisar do texto limpo.
 Salário em muitas unidades (4 períodos, 25 moedas — defeito 6 do `eda.md`) normalizado para uma
 base comparável; anos de experiência exigidos; idade da vaga a partir de `posted_at`.
 
+- [x] **3a.4.1** Idade da vaga: rodar o backfill do Go (`-renormalize`) pra popular `posted_at`/
+      salário no banco local, depois medir em Python a idade das vivas (`now - posted_at`, em dias),
+      tratando `posted_at` ausente. ✅ 2026-10-24 — backfill rodado (`009` aplicada; `posted_at` em
+      **100%** das 20.029 vivas, salário em 7.999). `eda/08_date.py`: subtração vetorizada de coluna
+      (`NaT` se propaga), `.dt.days`, histograma. **Achado:** nenhuma data < 2000 → a sentinela 1970
+      do Himalayas **não ocorre** neste dado (pubDate sempre válido); débito do patch em
+      `himalayas.go` cai. Idades ~2–85 dias.
+- [x] **3a.4.2** Salário normalizado: converter `salary_min/max` + `currency` + `salary_period`
+      para uma base comparável (defeito 6), consumindo o que o Go gravou na 3a.3.3.
+      ✅ 2026-10-24 — `analyzer/salary.py`: `normalize_salary(salary, currency, period) -> float |
+      None`; `TO_ANNUAL` (hourly=2080) e `TO_USD` (26 moedas, snapshot estático). `None`
+      moeda/período → assume USD/anual (Remote OK); valor ausente **ou** moeda/período desconhecido
+      → `None` (não chuta). 10 testes (`test_salary.py`), `ruff`/`mypy --strict` limpos. Função do
+      aluno (hourly/tipos/None corrigidos a pedido); `TO_USD` e os testes pelo mentor. Falta só a
+      distribuição no `eda/09_salary.py` (opcional).
+- [x] **3a.4.3** Anos de experiência exigidos: estimar da descrição (regex), por fonte.
+      ✅ 2026-10-25 — `analyzer/experience.py`: `extract_years(text) -> int | None`, regex construída
+      por partes (`(\d+)\+?(?:-\d+)?\s+(years|yrs)\s+(?:of\s+)?experience`; range → mínimo via
+      `group(1)`). Recebe texto já limpo (quem chama roda `html_to_paragraphs`). 6 testes
+      (`test_experience.py`). Regex do aluno (após iterar nos casos reais). Pelo caminho, `ruff`/
+      `mypy` pegaram um bug de refactor no `main.py` (`skills_per_job` usando nomes indefinidos) que
+      os 43 testes não pegaram — lição: estática antes do `/check`. **Tarefa 3a.4 fechada.**
+
 ### Tarefa 3a.5 — Ranking TF-IDF (`cv.md` × vagas)
 
 TF-IDF sobre o corpus de descrições + o `cv.md`, cosseno currículo × vaga, gravado em `scores`
 com `model_version`. As vagas que compartilham as skills do currículo sobem no topo.
+
+- [x] **3a.5.1** TF-IDF (sklearn) sobre o corpus (descrições limpas + `cv.md`), cosseno `cv` ×
+      cada vaga, imprime o top-N. Sem gravar — validar que as vagas do topo compartilham as skills
+      do currículo (critério da fase). ✅ 2026-10-26 — `eda/11_similarity.py`: pipeline de limpeza +
+      `TfidfVectorizer(stop_words="english").fit_transform([cv, *jobs])`, cosseno `m[0]` × `m[1:]`.
+      Top-15 todos DevOps/Platform/SRE/Backend-Python (max sim 0.207); bottom-5 em 0.0 (motorista,
+      logística DE, texto ZH). **Critério da Fase 3a atendido:** as skills do CV sobem ao topo.
+      Estrutura do aluno; caminho do `cv.md` (ancorado em `__file__`) e prints profissionais pelo
+      mentor a pedido. Max sim baixa (~0.2) é normal pro TF-IDF — importa a ordem, não a magnitude.
+- [ ] **3a.5.2** Persistir em `scores` `(job_id, model_version, score)`, idempotente, com um
+      `model_version` (ex. `tfidf-v1`); marca `scored_at`.
 
 ### Tarefa 3a.6 — Fechamento da Fase 3a
 
