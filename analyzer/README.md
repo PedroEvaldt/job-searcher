@@ -1,9 +1,9 @@
 # analyzer
 
 The Python side of [job-radar](../README.md). It reads the Postgres that the Go `collector`
-fills and, from Phase 3a on, will score each job against the résumé. Today it holds the
-exploratory data analysis (EDA) of the collected jobs and the first production helpers
-(`text.py`, `boilerplate.py`).
+fills, extracts meaning from each job, and ranks it against the résumé. As of Phase 3a it
+extracts skills, normalizes salary and required experience, derives job age, and produces a
+first TF-IDF ranking of every job against the CV.
 
 Go and Python never share memory or files — only the Postgres schema. See the root README
 for the whole picture.
@@ -11,13 +11,16 @@ for the whole picture.
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/)
-- A running Postgres with the collected data. In the compose stack it is published on
+- A running Postgres with the collected data, migrated to the latest schema (the Go
+  `collector` applies the migrations). In the compose stack it is published on
   `localhost:5433`; point `DATABASE_URL` at it.
+- `cv.md` at the repo root — your résumé in Markdown. The scorer reads it as the document to
+  match every job against.
 
 ## Setup
 
 ```bash
-uv sync          # runtime deps only (psycopg)
+uv sync          # runtime deps only (psycopg, scikit-learn)
 ```
 
 Dependencies live in groups, so neither the image nor the tests pull what they do not need:
@@ -37,8 +40,38 @@ Dependencies live in groups, so neither the image nor the tests pull what they d
 uv run --env-file ../.env python main.py
 ```
 
-Today it prints how many jobs are still waiting to be scored (`scored_at IS NULL`). Real
-scoring arrives in Phase 3a.
+One pass over the database, in order:
+
+1. **Skills** — for every live job still unextracted (`skills_extracted_at IS NULL`), it runs
+   the text pipeline (`text.py` → `boilerplate.py`) and the dictionary matcher (`skills.py`),
+   then writes the canonical skills to `job_skills (job_id, skill, confidence)`. Jobs are
+   claimed in batches with `FOR UPDATE SKIP LOCKED` so two instances never process the same
+   one, and a job's old rows are deleted before reinsert, so a skill dropped from the text
+   disappears. A job whose text changed is pushed back here automatically (the collector
+   resets `skills_extracted_at` on a content change, the same way it resets `scored_at`).
+2. **Score** — it builds one TF-IDF vocabulary over the CV and every live job (the CV is
+   document 0), takes the cosine of the CV against each job, and upserts into
+   `scores (job_id, model_version, score)` under `model_version = 'tfidf-v1'`, marking
+   `scored_at`. Idempotent: a second run selects nothing.
+3. Prints how many jobs are still unscored.
+
+So the analyzer fills `job_skills`, `scores`, and — via the Go side — the `jobs` columns
+`posted_at`, `salary_min`, `salary_max`, `currency`, `salary_period`.
+
+## Production helpers
+
+Each has type hints and tests (`tests/`):
+
+- `text.py` — turns a description's HTML into a list of plain-text paragraphs.
+- `boilerplate.py` — counts paragraphs across descriptions and cuts the shared boilerplate.
+- `skills.py` — `skills_extractor(text, aliases)`: finds the dictionary's skills in a text,
+  maps aliases to a canonical name, and returns a confidence per skill.
+- `salary.py` — `normalize_salary(...)`: converts an amount + currency + period to annual USD
+  for comparison; returns `None` when the input is missing or the unit is unknown.
+- `experience.py` — `extract_years(text)`: estimates the required years of experience by
+  regex on the cleaned description.
+
+The scoring pipeline itself (skills + TF-IDF) lives in `main.py`.
 
 ## The EDA bench
 
@@ -50,32 +83,31 @@ runs straight through:
 uv run --group eda --env-file ../.env python eda/01_overview.py
 ```
 
-| Script                 | What it shows                                                  |
-| ---------------------- | -------------------------------------------------------------- |
-| `db.py`                | `sql_to_dataframe(sql)` — the shared SQL → DataFrame loader     |
-| `01_overview.py`       | shape, dtypes, jobs per source, description sizes, jobs per day |
-| `02_text_defects.py`   | HTML, HTML entities and mojibake per source (defects 1–3)       |
-| `03_payload_fields.py` | fields the collector drops; sentinels (defects 4–6)            |
-| `04_boilerplate.py`    | paragraphs repeated across jobs, and how much text they take    |
-| `05_location.py`       | each live job as accept/reject/unknown for a Brazil resident    |
-| `06_language.py`       | language guess per description; the non-English share           |
+| Script                 | What it shows                                                   |
+| ---------------------- | --------------------------------------------------------------- |
+| `db.py`                | `sql_to_dataframe(sql)` — the shared SQL → DataFrame loader      |
+| `01_overview.py`       | shape, dtypes, jobs per source, description sizes, jobs per day  |
+| `02_text_defects.py`   | HTML, HTML entities and mojibake per source (defects 1–3)        |
+| `03_payload_fields.py` | fields the collector drops; sentinels (defects 4–6)             |
+| `04_boilerplate.py`    | paragraphs repeated across jobs, and how much text they take     |
+| `05_location.py`       | each live job as accept/reject/unknown for a Brazil resident     |
+| `06_language.py`       | language guess per description; the non-English share            |
+| `07_skills.py`         | skill presence across the live jobs, after the text pipeline     |
+| `08_date.py`           | job age (`now − posted_at`) distribution                         |
+| `09_salary.py`         | salary coverage per source and the normalized annual-USD spread  |
+| `10_experience.py`     | required years of experience extracted from descriptions         |
+| `11_similarity.py`     | TF-IDF cosine of the CV against every job; the top/bottom ranking |
 
 The findings are written up in [`../docs/eda.md`](../docs/eda.md).
-
-## Production helpers
-
-- `text.py` — turns a description's HTML into a list of plain-text paragraphs.
-- `boilerplate.py` — counts paragraphs across descriptions and cuts the boilerplate.
-
-These have type hints and tests; the `eda/` scripts are throwaway exploration and do not.
 
 ## Checks
 
 ```bash
 uv run --group dev pytest                                     # tests (tests/)
 uv run ruff check .                                           # lint
-uv run --group dev mypy --strict text.py boilerplate.py tests/
+uv run --group dev mypy --strict main.py text.py boilerplate.py skills.py salary.py experience.py tests/
 ```
 
 `mypy --strict` covers the production modules. The `eda/` scripts import pandas and
-matplotlib, which ship no type stubs, so they are not kept under strict typing.
+matplotlib, which ship no type stubs, so they are not kept under strict typing; scikit-learn
+ships none either, so it is ignored for the production modules in `pyproject.toml`.

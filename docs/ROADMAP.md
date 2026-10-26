@@ -571,7 +571,7 @@ README da parte Python escrito (`analyzer/README.md`, que também preenche o `re
 
 ---
 
-## Fase 3a — Extração no código 📍 (aberta 2026-10-22)
+## Fase 3a — Extração no código ✅ (fechada 2026-10-26)
 
 **Objetivo de aprendizado:** escrever extração de verdade em Python (regex, dicionário, parsing
 de texto estruturado), fazer Go e Python dividirem a responsabilidade de "dado limpo" (Go
@@ -748,9 +748,16 @@ com `model_version`. As vagas que compartilham as skills do currículo sobem no 
       dependência de produção → override de `mypy` no `pyproject.toml` (boilerplate do mentor).
       **Tarefa 3a.5 fechada.**
 
-### Tarefa 3a.6 — Fechamento da Fase 3a
+### Tarefa 3a.6 — Fechamento da Fase 3a ✅ (fechada 2026-10-26)
 
 Débitos abertos na fase, README da parte de extração atualizado.
+
+- [x] Auditoria de débitos (2026-10-26): D32 pago; D33 parcial (salário/`posted_at` pagos,
+      `Location`/`Tags` → Fase 5); D10 → Fase 4b; **D46 pago** (skills refeitas quando o texto
+      muda — reset do marcador no Go + delete-reinsert no Python, `TestNilSkillsExtractedAt`);
+      D47 (confiança crua) e D48 (longest-match) → Fase 4c.
+- [x] README atualizado: `analyzer/README.md` (fluxo do `main.py`, helpers, EDA `07`–`11`) e
+      `README.md` da raiz (descrição do analyzer + status das Fases 2 e 3a).
 
 ---
 

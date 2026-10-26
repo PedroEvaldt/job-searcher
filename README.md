@@ -20,8 +20,9 @@ Himalayas ─┘   every collect_every
   2. gives dedupe keys to jobs written before they existed (a no-op once done);
   3. fetches every enabled source in `config.yaml`, one after the other;
   4. warns about any source that has failed or returned nothing for 2 cycles in a row.
-- **analyzer** (Python): reads from the same database. Today it only reports how many
-  jobs are still waiting to be scored.
+- **analyzer** (Python): reads from the same database, extracts skills, salary and required
+  experience from each job, and ranks every job against your résumé with TF-IDF. See
+  [`analyzer/README.md`](analyzer/README.md).
 
 The two sides never talk to each other directly; the database schema is the contract.
 
@@ -108,9 +109,10 @@ What you should see:
    `version=7`), then collects each source:
    `source collected source=remoteok fetched=... failed=0`, then `remotive`, then
    `himalayas` (the slowest, about half a minute).
-3. `analyzer` prints how many jobs are waiting for a score, and exits. It does not wait
-   for the collector: on the very first start it may run before anything was collected,
-   or even before the tables exist. Run it again with `docker compose run --rm analyzer`.
+3. `analyzer` extracts skills, scores every live job against the CV, and exits, printing
+   how many jobs are still unscored. It does not wait for the collector: on the very first
+   start it may run before anything was collected, or even before the tables exist. Run it
+   again with `docker compose run --rm analyzer`.
 4. `app` keeps running and collects again every `collect_every`.
 
 To stop, press `Ctrl+C` (or `docker compose stop` from another terminal). Your data
@@ -238,10 +240,14 @@ uv run mypy --strict main.py
 - ✅ **Phase 1:** three sources behind a common interface, retries and rate limiting,
   deduplication, and running unattended: 7 days on a Raspberry Pi, through 3 power cuts,
   with no intervention.
-- 🔜 **Phase 2:** exploring the collected data in Python.
+- ✅ **Phase 2:** exploring the collected data in Python: EDA bench, measured data defects,
+  a boilerplate cutter, and location/language policies (see [`docs/eda.md`](docs/eda.md)).
+- ✅ **Phase 3a:** extraction in code — skills (`job_skills`), salary, required years and job
+  age (`jobs` columns), and a first TF-IDF ranking of every job against the résumé
+  (`scores`, `model_version='tfidf-v1'`).
 
-Later phases add skill extraction, ranking against your résumé, a weekly Discord digest,
-and a Kubernetes deployment.
+Later phases add labelling and a frozen test set, embeddings, a weekly Discord digest, and a
+Kubernetes deployment.
 
 ## License
 

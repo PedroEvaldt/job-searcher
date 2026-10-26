@@ -89,8 +89,21 @@ override de `mypy` no `pyproject.toml`. Furos do `/check` corrigidos pelo aluno 
 `enumerate` invertido, `float()` do `np.float32`, typos no SQL/`model_version`, `scored_at` ausente,
 params do `executemany`). **Pendência de verificação:** runtime (idempotência + top-10) reportado
 pelo aluno; o mentor não reproduziu — banco local desta máquina na migração **7** (sem `008`/`009`),
-`insert_job_skills` quebra em `skills_extracted_at`. **Próximo: Tarefa 3a.6** (fechamento da Fase 3a:
-débitos abertos da fase + README da extração). Banco local na 5433 (20.029 vivas).
+`insert_job_skills` quebra em `skills_extracted_at`.
+
+**Tarefa 3a.6 e Fase 3a fechadas em 2026-10-26.** Auditoria de débitos: D32 pago, D33 parcial
+(salário/`posted_at` pagos; `Location`/`Tags` → Fase 5), D10 → Fase 4b, **D46 pago** (skills
+refeitas quando o texto muda: `insertJob` reseta `skills_extracted_at` como faz com o `scored_at` +
+`insert_job_skills` apaga antes de reinserir; `TestNilSkillsExtractedAt`), D47 (confiança crua) e
+D48 (longest-match) → Fase 4c. README atualizado (`analyzer/README.md` + raiz). Sem 🔴. Pendência de
+verificação que atravessa a fase: o mentor não reproduz runtime nesta máquina (Docker sem socket;
+banco da 5433 na migração 7 / intermitente) — testcontainers Go e observações de banco ficaram no
+relato do aluno.
+
+**Próximo: Fase 3b — Rotulagem e avaliação.** `radar label` (~100 vagas), conjunto de teste
+congelado, TF-IDF medido nele. É a fase que nasce o segundo binário Go (`radar`) e, com ele, a
+pressão pra extrair `internal/store` e `internal/config` (SPEC §7). Banco local na 5433 (20.029
+vivas); `scores` com `tfidf-v1` gravado.
 
 Última sessão: **2026-10-26**.
 
