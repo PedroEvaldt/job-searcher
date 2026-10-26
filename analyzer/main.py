@@ -5,7 +5,6 @@ from collections import Counter
 import psycopg
 
 from boilerplate import (
-    BOILERPLATE_MIN_DESCRIPTIONS,
     cut_boilerplate,
     paragraphs_counter,
 )
@@ -103,7 +102,7 @@ def skills_per_job(
 
     skills: dict[int, dict[str, float]] = {}
     for job_id, job_paragraphs in paragraphs.items():
-        kept = cut_boilerplate(job_paragraphs, counter, BOILERPLATE_MIN_DESCRIPTIONS)
+        kept = cut_boilerplate(job_paragraphs, counter)
         skills[job_id] = skills_extractor("\n".join(kept), ALIASES)
     return skills
 
