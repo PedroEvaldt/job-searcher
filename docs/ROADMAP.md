@@ -740,8 +740,13 @@ com `model_version`. As vagas que compartilham as skills do currículo sobem no 
       logística DE, texto ZH). **Critério da Fase 3a atendido:** as skills do CV sobem ao topo.
       Estrutura do aluno; caminho do `cv.md` (ancorado em `__file__`) e prints profissionais pelo
       mentor a pedido. Max sim baixa (~0.2) é normal pro TF-IDF — importa a ordem, não a magnitude.
-- [ ] **3a.5.2** Persistir em `scores` `(job_id, model_version, score)`, idempotente, com um
-      `model_version` (ex. `tfidf-v1`); marca `scored_at`.
+- [x] **3a.5.2** Persistir em `scores` `(job_id, model_version, score)`, idempotente, com um
+      `model_version` (ex. `tfidf-v1`); marca `scored_at`. ✅ 2026-10-26 — `insert_scores`/`scorer`
+      no `main.py`: corpus inteiro vetorizado de uma vez (CV = doc 0), cosseno, `executemany` +
+      `ON CONFLICT (job_id, model_version) DO UPDATE`, `model_version='tfidf-v1'`, `scored_at=now()`.
+      Idempotente (2ª rodada seleciona zero; corpus degrada pra 1 doc sem estourar). `sklearn` virou
+      dependência de produção → override de `mypy` no `pyproject.toml` (boilerplate do mentor).
+      **Tarefa 3a.5 fechada.**
 
 ### Tarefa 3a.6 — Fechamento da Fase 3a
 

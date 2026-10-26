@@ -81,11 +81,18 @@ subtração vetorizada; 100% das vivas com `posted_at`, sem sentinela 1970 no da
 testes); 3a.4.3 anos (`experience.py`: `extract_years` por regex, 6 testes). `ruff`/`mypy --strict`/
 43 testes verdes. **Lição que pegou:** `ruff`+`mypy` acharam um bug de refactor no `main.py`
 (`skills_per_job` com nomes indefinidos) invisível aos testes → estática antes do `/check`.
-**Tudo da 3a.4 uncommitted.** Próximo: **Tarefa 3a.5** (ranking TF-IDF: `cv.md` × vagas → cosseno →
-`scores`, com as skills do CV no topo) — capstone da 3a; depois **3a.6** (fechamento). Banco local
-na 5433 (20.029 vivas); `posted_at` 100%, salário 7.999, `skills_extracted_at` populados.
+**Tarefa 3a.5 fechada 2026-10-26** (ranking TF-IDF — capstone da 3a): 3a.5.1 (`eda/11_similarity.py`,
+cosseno `cv` × vagas, top-15 DevOps/Python, max sim ~0.2) e 3a.5.2 (`insert_scores`/`scorer` no
+`main.py`: corpus inteiro vetorizado de uma vez, CV = doc 0, `executemany` + `ON CONFLICT DO UPDATE`,
+`model_version='tfidf-v1'`, `scored_at=now()`; idempotente). `sklearn` virou dep de produção →
+override de `mypy` no `pyproject.toml`. Furos do `/check` corrigidos pelo aluno (cursor fechado,
+`enumerate` invertido, `float()` do `np.float32`, typos no SQL/`model_version`, `scored_at` ausente,
+params do `executemany`). **Pendência de verificação:** runtime (idempotência + top-10) reportado
+pelo aluno; o mentor não reproduziu — banco local desta máquina na migração **7** (sem `008`/`009`),
+`insert_job_skills` quebra em `skills_extracted_at`. **Próximo: Tarefa 3a.6** (fechamento da Fase 3a:
+débitos abertos da fase + README da extração). Banco local na 5433 (20.029 vivas).
 
-Última sessão: **2026-10-22**.
+Última sessão: **2026-10-26**.
 
 ---
 
