@@ -1,8 +1,11 @@
 import os
 import sys
 from collections import Counter
+from pathlib import Path
 
 import psycopg
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 from boilerplate import (
     cut_boilerplate,
@@ -34,6 +37,7 @@ def main() -> int:
     with conn, conn.cursor() as cur:
         try:
             insert_job_skills(conn)
+            insert_scores(conn)
         except psycopg.OperationalError as e:
             detail = " ".join(str(e).split())
             print(f"failed to insert skills: {detail}", file=sys.stderr)
@@ -42,7 +46,7 @@ def main() -> int:
         cur.execute(
             """
             SELECT COUNT(*) AS total,
-                   COUNT(*) FILTER (WHERE scored_at IS NULL) AS unscored
+                   COUNT(*) FILTER (WHERE scored_at IS NULL AND duplicate_of IS NULL) AS unscored
             FROM jobs;
             """
         )
@@ -105,6 +109,61 @@ def skills_per_job(
         kept = cut_boilerplate(job_paragraphs, counter)
         skills[job_id] = skills_extractor("\n".join(kept), ALIASES)
     return skills
+
+
+def insert_scores(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
+        # Build the boilerplate statistic once over the whole corpus, then cut per job
+        descriptions = [
+            d[0]
+            for d in cur.execute(
+                "SELECT description FROM jobs WHERE duplicate_of IS NULL;"
+            ).fetchall()
+        ]
+        counter = paragraphs_counter(descriptions)
+
+        with conn.transaction():
+            jobs = cur.execute(
+                "SELECT id, description FROM jobs WHERE duplicate_of IS NULL AND scored_at IS NULL ORDER BY id;",
+            ).fetchall()
+
+            jobs_scores = scorer(jobs, counter)
+
+            cur.executemany(
+                "INSERT INTO scores (job_id, model_version, score, computed_at) VALUES(%s, %s, %s, now()) ON CONFLICT (job_id, model_version) DO UPDATE set score=EXCLUDED.score, computed_at=EXCLUDED.computed_at;",
+                [
+                    (
+                        job_id,
+                        "tfidf-v1",
+                        score,
+                    )
+                    for job_id, score in jobs_scores.items()
+                ],
+            )
+            cur.executemany(
+                "UPDATE jobs SET scored_at = now() WHERE id = %s;",
+                [(job_id,) for job_id in jobs_scores],
+            )
+
+
+def scorer(jobs: list[tuple[int, str]], counter: Counter[str]) -> dict[int, float]:
+    paragraphs: dict[int, list[str]] = {}
+    descriptions: dict[int, str] = {}
+    scores: dict[int, float] = {}
+    for job_id, description in jobs:
+        paragraphs[job_id] = html_to_paragraphs(description)
+    for job_id, job_paragraphs in paragraphs.items():
+        kept = cut_boilerplate(job_paragraphs, counter)
+        descriptions[job_id] = "\n".join(kept)
+
+    cv_path = Path(__file__).parents[1] / "cv.md"
+    cv_text = cv_path.read_text(encoding="utf-8")
+    corpus = [cv_text, *descriptions.values()]
+    matrix = TfidfVectorizer(stop_words="english").fit_transform(corpus)
+    grades = cosine_similarity(matrix[0], matrix[1:])[0]
+    for i, job_id in enumerate(descriptions):
+        scores[job_id] = float(grades[i])
+    return scores
 
 
 if __name__ == "__main__":

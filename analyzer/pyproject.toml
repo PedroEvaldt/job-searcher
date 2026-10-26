@@ -25,3 +25,9 @@ eda = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+# scikit-learn ships no type stubs or py.typed marker, so --strict flags its imports
+# as untyped. Silence it for that package only; our own code stays strictly typed.
+[[tool.mypy.overrides]]
+module = "sklearn.*"
+ignore_missing_imports = true
