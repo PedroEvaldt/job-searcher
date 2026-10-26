@@ -761,9 +761,55 @@ Débitos abertos na fase, README da parte de extração atualizado.
 
 ---
 
-## Fases seguintes (resumo)
+## Fase 3b — Rotulagem e avaliação 📍 (aberta 2026-10-26)
 
-**Fase 3b — Rotulagem e avaliação.** `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele.
+**Objetivo de aprendizado:** nasce o segundo binário Go (`radar`, a CLI do usuário), e com ele
+a verdade de ter o rótulo humano como referência. Você rotula ~100 vagas à mão, congela um
+conjunto de teste que nunca mais entra em treino, e mede o TF-IDF da 3a nesse conjunto — a
+primeira baseline honesta do projeto.
+
+**Pronto quando:** `radar label` existe e grava em `labels` sem nunca mostrar score de modelo;
+~100 vagas rotuladas; um split de teste congelado e versionado; e o TF-IDF medido nele, com
+`model_version` e tamanho do conjunto reportados.
+
+**Invariantes que entram em jogo (§2.1):** o `radar label` nunca mostra score enquanto você
+rotula; o conjunto congelado nunca entra em treino/ajuste; todo número vem com o `model_version`.
+
+**Estrutura Go (SPEC §7):** é aqui que `cmd/` nasce e, por pressão (não antes), `internal/store`
+e `internal/config` são extraídos. O collector segue rodando o tempo todo.
+
+### Tarefa 3b.1 — O binário `radar` nasce
+
+A CLI do usuário ganha vida: um segundo `package main` em `cmd/radar/`, que conecta no mesmo
+Postgres e, no fim da tarefa, roda a tela de rotulagem. Começa pelo caminho mais fino —
+conectar e contar — pra provar a estrutura de dois binários antes de qualquer interação.
+
+- [ ] **3b.1.1** `cmd/radar/` nasce: binário que conecta no Postgres (lendo `DATABASE_URL`) e
+      imprime uma contagem real (vagas rotuladas × por rotular). Sem interação ainda. Duplicar as
+      poucas linhas de conexão é aceito (SPEC §7: extrai pra `internal/` quando doer).
+- [ ] **3b.1.2** `radar label`: mostra uma vaga por vez (título, empresa, descrição limpa) e
+      captura o rótulo (`would_apply` + opcionais), gravando em `labels`. **Nunca** mostra score.
+- [ ] **3b.1.3** Robustez da sessão de rotulagem: retomar de onde parou, pular vaga, sair limpo;
+      não re-mostrar vaga já rotulada.
+
+### Tarefa 3b.2 — Rotular ~100 e congelar o split
+
+- [ ] **3b.2.1** Rotular ~100 vagas de verdade (sessão sua, não código).
+- [ ] **3b.2.2** Congelar o conjunto de teste: split versionado (`random_state` fixo) que nunca
+      entra em treino nem ajuste; registrar como foi feito.
+
+### Tarefa 3b.3 — Medir o TF-IDF no conjunto congelado
+
+- [ ] **3b.3.1** Rodar o ranking TF-IDF da 3a só no conjunto congelado e reportar a métrica com
+      `model_version` e tamanho — a primeira baseline honesta.
+
+### Tarefa 3b.4 — Fechamento da Fase 3b
+
+- [ ] Débitos abertos na fase + README/docs da rotulagem.
+
+---
+
+## Fases seguintes (resumo)
 
 **Fase 4a — Embeddings.** sentence-transformers + pgvector contra a baseline, no conjunto congelado.
 
