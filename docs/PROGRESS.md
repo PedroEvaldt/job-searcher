@@ -107,9 +107,17 @@ segundo binário Go nasce; `pgx.Connect`+`Ping`, contagem `LEFT JOIN labels … 
 NULL`, rodou contra o banco (`LABELED 0 / 16204`, confere com o `psql`). Conexão ainda duplicada de
 propósito (SPEC §7: `internal/store`/`internal/config` só quando a duplicação doer). Lição que
 pegou: o que faz um pacote virar executável é o `package main`, não a pasta `cmd/radar/`.
-**Próximo: 3b.1.2** (`radar label` — tela de rotulagem, grava em `labels`, nunca mostra score).
-Banco local na 5433; `scores` com `tfidf-v1` gravado. **Pendência de ambiente:** `go test ./...`
-(collector) precisa de Docker pro testcontainer; o mentor não roda aqui (socket negado).
+**Subtarefa 3b.1.2 fechada em 2026-10-27:** `radar label` (`cmd/radar/main.go`) mostra uma vaga por
+vez e grava em `labels` (`would_apply` + opcionais), sem nunca exibir score (invariante §2.1). Uma
+vaga por vez com `QueryRow` (evita o `conn busy` da 3a.3.2). Verificado contra o banco (2 rótulos de
+teste, `seniority`≠`note`, vazios → `NULL`, `status` subiu, apagados depois). **Nota de processo:** o
+aluno editou o §0 do `CLAUDE.md` pra permitir que o mentor escreva o código na insistência (hoje em
+conflito com o §8, a alinhar); os três furos finais (aliasing `seniority`/`note` no mesmo `&v`, trim
+no armazenamento, `ErrNoRows` como fim normal) foram escritos pelo mentor sob essa regra. Nit aberto:
+Ctrl+D (`io.EOF`) loga como erro em vez de sair quieto. **Próximo: 3b.1.3** (robustez da sessão:
+retomar, pular, sair limpo) ou direto pra **3b.2** (rotular ~100 + congelar o split).
+Banco local na 5433; `scores` com `tfidf-v1`. **Pendência de ambiente:** `go test ./...` (collector)
+precisa de Docker pro testcontainer; o mentor não roda aqui (socket negado).
 
 Última sessão: **2026-10-26**.
 

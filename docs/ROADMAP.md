@@ -793,8 +793,15 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
       não vira binário (gerava `ar archive`), `print`→`fmt.Printf`, query com `j.labeled_at`
       inexistente + `JOIN` interno, `DATABASE_URL` no log. `go vet` limpo. Dois `package main` no
       módulo (raiz + `cmd/radar`), collector intocado.
-- [ ] **3b.1.2** `radar label`: mostra uma vaga por vez (título, empresa, descrição limpa) e
+- [x] **3b.1.2** `radar label`: mostra uma vaga por vez (título, empresa, descrição limpa) e
       captura o rótulo (`would_apply` + opcionais), gravando em `labels`. **Nunca** mostra score.
+      ✅ 2026-10-27 — `label()` no `cmd/radar/main.go`: `QueryRow` uma vaga por vez (sem `conn busy`),
+      prompt via `bufio.Reader`, `INSERT` em `labels`, `scored_at`/score nunca exibidos. Verificado
+      contra o banco (2 rótulos de teste, campos corretos, `status` subiu, rótulos apagados depois).
+      Roteamento `status`/`label` e esqueleto pelo aluno; os três furos finais (aliasing
+      `seniority`/`note`, trim no armazenamento, `ErrNoRows` como fim) escritos pelo mentor após o
+      aluno mudar o §0 do `CLAUDE.md` pra permitir na insistência. Nit aberto: Ctrl+D (`io.EOF`) loga
+      como erro em vez de sair quieto.
 - [ ] **3b.1.3** Robustez da sessão de rotulagem: retomar de onde parou, pular vaga, sair limpo;
       não re-mostrar vaga já rotulada.
 
