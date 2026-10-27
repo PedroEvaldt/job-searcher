@@ -148,6 +148,15 @@ treino = tudo que não está nele. Pendências do `/check` corrigidas pelo mento
 saída, `with` na conexão). Nota de ambiente: `ruff` acusa `EXE002` em todo `.py` por causa do mount FUSE
 (mostra tudo `0755`); o git grava `100644`, então some no checkout limpo.
 
+**2026-10-27 — 3b.3.1 fechada: baseline TF-IDF medida no conjunto congelado.**
+`analyzer/evaluate_baseline.py` lê os ids do `frozen.json`, busca o `score` de `tfidf-v1` numa query só
+(`job_id = ANY(%s)`), e reporta `roc_auc_score` com a versão e o tamanho: **`tfidf-v1 ROC AUC=0.5000
+n=37 pos=5`**. Conferido na mão (positivos nos ranks 1/7/24/29/34 → 80/160 = 0.5 exato): não é bug nem
+empate, é achado honesto — o cosseno com o currículo **não rankeia** as vagas que o aluno aplicaria acima
+das que não, neste conjunto. É o número que justifica embeddings (4a) e o Jev (4b). Polimento feito pelo
+mentor a pedido (constante `MODEL_VERSION`, query única, checagem explícita de score faltando no lugar de
+`assert`, métrica arredondada, `__name__` guard). ruff/mypy limpos.
+
 Última sessão: **2026-10-27**.
 
 ---

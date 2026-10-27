@@ -814,8 +814,9 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
 
 ### Tarefa 3b.3 — Medir o TF-IDF no conjunto congelado
 
-- [ ] **3b.3.1** Rodar o ranking TF-IDF da 3a só no conjunto congelado e reportar a métrica com
-      `model_version` e tamanho — a primeira baseline honesta.
+- [x] **3b.3.1** Rodar o ranking TF-IDF da 3a só no conjunto congelado e reportar a métrica com
+      `model_version` e tamanho — a primeira baseline honesta. — `analyzer/evaluate_baseline.py`:
+      `tfidf-v1 ROC AUC=0.5000 n=37 pos=5` (sem poder de ranking no conjunto congelado).
 
 ### Tarefa 3b.4 — Fechamento da Fase 3b
 
