@@ -119,7 +119,18 @@ retomar, pular, sair limpo) ou direto pra **3b.2** (rotular ~100 + congelar o sp
 Banco local na 5433; `scores` com `tfidf-v1`. **Pendência de ambiente:** `go test ./...` (collector)
 precisa de Docker pro testcontainer; o mentor não roda aqui (socket negado).
 
-Última sessão: **2026-10-26**.
+**2026-10-27 — campos auxiliares de `labels` preenchidos pelo mentor (NÃO é gabarito humano).** A pedido
+insistente do aluno (após ele editar o §0 do `CLAUDE.md`), o mentor leu título+descrição das 51 vagas
+rotuladas e preencheu `hires_latam`/`seniority` **só quando o texto era explícito**: `seniority` por
+palavra de nível no título (senior/sr/principal/vp/director/head/lead; junior/student/"no experience");
+`hires_latam` por LATAM/global explícito (→true) ou exigência de país dura (→false). Resultado:
+`hires_latam` 19/51, `seniority` 24/51; resto `NULL`. **Importante p/ a avaliação:** só `would_apply` é
+gabarito humano; `hires_latam`/`seniority` são **extração de modelo, não reproduzível, sem `model_version`**
+— não devem virar alvo nem entrar como verdade no conjunto congelado (3b.2.2). Os 5 `latam` + 3 `sen` que o
+aluno já tinha marcado à mão foram preservados (guarda `IS NULL`). Caminho certo p/ esses sinais segue sendo
+extração por código (features) ou o Jev (4b), não esta passada manual.
+
+Última sessão: **2026-10-27**.
 
 ---
 
