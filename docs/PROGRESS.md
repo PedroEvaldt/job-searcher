@@ -131,6 +131,13 @@ gabarito humano; `hires_latam`/`seniority` são **extração de modelo, não rep
 aluno já tinha marcado à mão foram preservados (guarda `IS NULL`). Caminho certo p/ esses sinais segue sendo
 extração por código (features) ou o Jev (4b), não esta passada manual.
 
+**2026-10-27 (cont.) — mesma passada estendida às vagas 52–122.** O aluno rotulou mais vagas (`would_apply`,
+total agora **122**) e pediu o mesmo preenchimento auxiliar nas 71 novas. Mesmas regras explícito-only, mesma
+guarda `IS NULL` (preserva o que o aluno pôs à mão). A vaga **88** é só uma imagem base64 sem texto → ficou
+sem `hires_latam`/`seniority`. Totais acumulados nas 122: `note` 122/122, `hires_latam` 61/122, `seniority`
+57/122. Vale o mesmo aviso: só `would_apply` é gabarito; os auxiliares são extração de modelo e não entram no
+conjunto congelado.
+
 Última sessão: **2026-10-27**.
 
 ---
