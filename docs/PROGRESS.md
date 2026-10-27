@@ -138,6 +138,16 @@ sem `hires_latam`/`seniority`. Totais acumulados nas 122: `note` 122/122, `hires
 57/122. Vale o mesmo aviso: só `would_apply` é gabarito; os auxiliares são extração de modelo e não entram no
 conjunto congelado.
 
+**2026-10-27 — 3b.2.2 fechada: conjunto de teste congelado.** `analyzer/freeze_test_set.py` lê os 122
+rótulos (`ORDER BY job_id`), faz `train_test_split` estratificado em `would_apply` com `random_state=7`,
+`test_size=0.3`, e grava o conjunto de teste em `analyzer/frozen.json` (`test-set-v1`). Resultado: **37**
+de 122 no teste (**5** positivos / 32 negativos; treino fica com 11 positivos / 79). `test_set` ordenado por
+`job_id` → diff estável; rodar de novo gera arquivo idêntico. O arquivo commitado **é** o congelamento;
+treino = tudo que não está nele. Pendências do `/check` corrigidas pelo mentor a pedido insistente do aluno
+(materializar as listas uma vez + `stratify` sobre a mesma lista, ordenar o teste, propagar o código de
+saída, `with` na conexão). Nota de ambiente: `ruff` acusa `EXE002` em todo `.py` por causa do mount FUSE
+(mostra tudo `0755`); o git grava `100644`, então some no checkout limpo.
+
 Última sessão: **2026-10-27**.
 
 ---

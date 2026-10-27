@@ -807,9 +807,10 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
 
 ### Tarefa 3b.2 — Rotular ~100 e congelar o split
 
-- [ ] **3b.2.1** Rotular ~100 vagas de verdade (sessão sua, não código).
-- [ ] **3b.2.2** Congelar o conjunto de teste: split versionado (`random_state` fixo) que nunca
-      entra em treino nem ajuste; registrar como foi feito.
+- [x] **3b.2.1** Rotular ~100 vagas de verdade (sessão sua, não código). — 122 rótulos.
+- [x] **3b.2.2** Congelar o conjunto de teste: split versionado (`random_state` fixo) que nunca
+      entra em treino nem ajuste; registrar como foi feito. — `analyzer/freeze_test_set.py` →
+      `analyzer/frozen.json` (test-set-v1, seed 7, 37 de 122).
 
 ### Tarefa 3b.3 — Medir o TF-IDF no conjunto congelado
 
