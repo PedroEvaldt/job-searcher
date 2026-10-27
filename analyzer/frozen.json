@@ -1,0 +1,159 @@
+{
+  "version": "test-set-v1",
+  "random_state": 7,
+  "test_size": 0.3,
+  "n_total": 122,
+  "n_test": 37,
+  "n_test_positive": 5,
+  "n_test_negative": 32,
+  "test_set": [
+    {
+      "job_id": 1,
+      "would_apply": false
+    },
+    {
+      "job_id": 8,
+      "would_apply": false
+    },
+    {
+      "job_id": 9,
+      "would_apply": false
+    },
+    {
+      "job_id": 10,
+      "would_apply": false
+    },
+    {
+      "job_id": 18,
+      "would_apply": false
+    },
+    {
+      "job_id": 22,
+      "would_apply": true
+    },
+    {
+      "job_id": 24,
+      "would_apply": false
+    },
+    {
+      "job_id": 30,
+      "would_apply": false
+    },
+    {
+      "job_id": 31,
+      "would_apply": false
+    },
+    {
+      "job_id": 32,
+      "would_apply": false
+    },
+    {
+      "job_id": 41,
+      "would_apply": true
+    },
+    {
+      "job_id": 42,
+      "would_apply": true
+    },
+    {
+      "job_id": 50,
+      "would_apply": false
+    },
+    {
+      "job_id": 53,
+      "would_apply": false
+    },
+    {
+      "job_id": 55,
+      "would_apply": false
+    },
+    {
+      "job_id": 58,
+      "would_apply": false
+    },
+    {
+      "job_id": 59,
+      "would_apply": false
+    },
+    {
+      "job_id": 66,
+      "would_apply": false
+    },
+    {
+      "job_id": 68,
+      "would_apply": false
+    },
+    {
+      "job_id": 69,
+      "would_apply": false
+    },
+    {
+      "job_id": 72,
+      "would_apply": false
+    },
+    {
+      "job_id": 75,
+      "would_apply": false
+    },
+    {
+      "job_id": 79,
+      "would_apply": false
+    },
+    {
+      "job_id": 81,
+      "would_apply": false
+    },
+    {
+      "job_id": 82,
+      "would_apply": true
+    },
+    {
+      "job_id": 83,
+      "would_apply": false
+    },
+    {
+      "job_id": 86,
+      "would_apply": false
+    },
+    {
+      "job_id": 89,
+      "would_apply": false
+    },
+    {
+      "job_id": 97,
+      "would_apply": false
+    },
+    {
+      "job_id": 100,
+      "would_apply": false
+    },
+    {
+      "job_id": 103,
+      "would_apply": false
+    },
+    {
+      "job_id": 104,
+      "would_apply": false
+    },
+    {
+      "job_id": 105,
+      "would_apply": true
+    },
+    {
+      "job_id": 107,
+      "would_apply": false
+    },
+    {
+      "job_id": 116,
+      "would_apply": false
+    },
+    {
+      "job_id": 117,
+      "would_apply": false
+    },
+    {
+      "job_id": 121,
+      "would_apply": false
+    }
+  ]
+}
