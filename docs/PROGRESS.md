@@ -124,7 +124,8 @@ insistente do aluno (após ele editar o §0 do `CLAUDE.md`), o mentor leu títul
 rotuladas e preencheu `hires_latam`/`seniority` **só quando o texto era explícito**: `seniority` por
 palavra de nível no título (senior/sr/principal/vp/director/head/lead; junior/student/"no experience");
 `hires_latam` por LATAM/global explícito (→true) ou exigência de país dura (→false). Resultado:
-`hires_latam` 19/51, `seniority` 24/51; resto `NULL`. **Importante p/ a avaliação:** só `would_apply` é
+`hires_latam` 19/51, `seniority` 24/51; resto `NULL`. Também preencheu `note` (resumo de 1 frase por
+vaga) nas 49 que estavam vazias; as 2 notas do próprio aluno (vagas 1 e 6) foram preservadas. **Importante p/ a avaliação:** só `would_apply` é
 gabarito humano; `hires_latam`/`seniority` são **extração de modelo, não reproduzível, sem `model_version`**
 — não devem virar alvo nem entrar como verdade no conjunto congelado (3b.2.2). Os 5 `latam` + 3 `sen` que o
 aluno já tinha marcado à mão foram preservados (guarda `IS NULL`). Caminho certo p/ esses sinais segue sendo
