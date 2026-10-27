@@ -59,4 +59,5 @@ def freeze_test_set() -> int:
     return 0
 
 
-sys.exit(freeze_test_set())
+if __name__ == "__main__":
+    sys.exit(freeze_test_set())
