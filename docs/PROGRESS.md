@@ -144,9 +144,17 @@ auxiliar nas novas. Mesmas regras explícito-only, mesma guarda `IS NULL` (0 val
 128 novas receberam: `note` 128/128, `hires_latam` 78/128 (11 `true` LatAm explícito — Brasil CLT/estágio/PT-BR,
 território/residência LatAm, México, "work from anywhere" — e 67 `false` por país/região dura), `seniority`
 51/128 (só por palavra de nível no título). Totais nas 250: `note` 250/250, `hires_latam` 139/250, `seniority`
-108/250 (22 junior, 3 mid-level, 83 senior). Mesmo aviso de sempre: só `would_apply` é gabarito. **Próximo passo
-do aluno:** subir `version` para `test-set-v2` e rodar `freeze_test_set.py` (régua nova, membros totalmente
-diferentes), depois `evaluate_baseline.py` para o novo chão do `tfidf-v1` na v2.
+108/250 (22 junior, 3 mid-level, 83 senior). Mesmo aviso de sempre: só `would_apply` é gabarito.
+
+**2026-10-28 — régua `test-set-v1` re-finalizada em n=75 (antes de qualquer otimização).** O aluno rodou de novo o
+`freeze_test_set.py` sobre os 250 rótulos: `frozen.json` passou a ter n_total=250, **n_test=75** (5 pos / 70 neg),
+split estratificado seed 7. **Decisão deliberada do aluno: manter o nome `test-set-v1`** — nada foi treinado/ajustado
+contra o conjunto ainda (só uma leitura de baseline), então é a mesma régua sendo finalizada com mais rótulos, não
+uma régua nova. O `n=37`/`0.5000` registrado no fechamento da 3b.3.1 vale como **histórico** (era o conjunto daquele
+dia); a distinção entre leituras se mantém pelo `n` que acompanha todo número. Baseline re-medida na régua de n=75
+(ROC AUC na mão, método de ranking): **`tfidf-v1 ROC AUC=0.5086 n=75 pos=5`** (positivos nos ranks 6/16/46/59/60) —
+segue sem poder de ranking, é o chão que a 4a tem que bater. **Fronteira combinada:** a partir do momento em que a 4a
+escolher modelo com base nesse conjunto, ele trava; rótulos novos depois disso exigiriam `test-set-v2`.
 
 **2026-10-27 — 3b.2.2 fechada: conjunto de teste congelado.** `analyzer/freeze_test_set.py` lê os 122
 rótulos (`ORDER BY job_id`), faz `train_test_split` estratificado em `would_apply` com `random_state=7`,

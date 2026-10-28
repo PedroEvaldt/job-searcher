@@ -2,13 +2,21 @@
   "version": "test-set-v1",
   "random_state": 7,
   "test_size": 0.3,
-  "n_total": 122,
-  "n_test": 37,
+  "n_total": 250,
+  "n_test": 75,
   "n_test_positive": 5,
-  "n_test_negative": 32,
+  "n_test_negative": 70,
   "test_set": [
     {
       "job_id": 1,
+      "would_apply": false
+    },
+    {
+      "job_id": 2,
+      "would_apply": false
+    },
+    {
+      "job_id": 5,
       "would_apply": false
     },
     {
@@ -16,31 +24,23 @@
       "would_apply": false
     },
     {
-      "job_id": 9,
+      "job_id": 12,
       "would_apply": false
-    },
-    {
-      "job_id": 10,
-      "would_apply": false
-    },
-    {
-      "job_id": 18,
-      "would_apply": false
-    },
-    {
-      "job_id": 22,
-      "would_apply": true
     },
     {
       "job_id": 24,
       "would_apply": false
     },
     {
-      "job_id": 30,
-      "would_apply": false
+      "job_id": 26,
+      "would_apply": true
     },
     {
-      "job_id": 31,
+      "job_id": 27,
+      "would_apply": true
+    },
+    {
+      "job_id": 30,
       "would_apply": false
     },
     {
@@ -48,15 +48,19 @@
       "would_apply": false
     },
     {
-      "job_id": 41,
-      "would_apply": true
-    },
-    {
       "job_id": 42,
       "would_apply": true
     },
     {
-      "job_id": 50,
+      "job_id": 44,
+      "would_apply": false
+    },
+    {
+      "job_id": 45,
+      "would_apply": false
+    },
+    {
+      "job_id": 49,
       "would_apply": false
     },
     {
@@ -68,14 +72,6 @@
       "would_apply": false
     },
     {
-      "job_id": 58,
-      "would_apply": false
-    },
-    {
-      "job_id": 59,
-      "would_apply": false
-    },
-    {
       "job_id": 66,
       "would_apply": false
     },
@@ -84,20 +80,16 @@
       "would_apply": false
     },
     {
-      "job_id": 69,
-      "would_apply": false
-    },
-    {
-      "job_id": 72,
-      "would_apply": false
-    },
-    {
-      "job_id": 75,
+      "job_id": 73,
       "would_apply": false
     },
     {
       "job_id": 79,
       "would_apply": false
+    },
+    {
+      "job_id": 80,
+      "would_apply": true
     },
     {
       "job_id": 81,
@@ -109,6 +101,10 @@
     },
     {
       "job_id": 83,
+      "would_apply": false
+    },
+    {
+      "job_id": 85,
       "would_apply": false
     },
     {
@@ -124,7 +120,7 @@
       "would_apply": false
     },
     {
-      "job_id": 100,
+      "job_id": 101,
       "would_apply": false
     },
     {
@@ -132,15 +128,11 @@
       "would_apply": false
     },
     {
-      "job_id": 104,
+      "job_id": 107,
       "would_apply": false
     },
     {
-      "job_id": 105,
-      "would_apply": true
-    },
-    {
-      "job_id": 107,
+      "job_id": 108,
       "would_apply": false
     },
     {
@@ -148,11 +140,171 @@
       "would_apply": false
     },
     {
-      "job_id": 117,
+      "job_id": 120,
       "would_apply": false
     },
     {
-      "job_id": 121,
+      "job_id": 128,
+      "would_apply": false
+    },
+    {
+      "job_id": 130,
+      "would_apply": false
+    },
+    {
+      "job_id": 136,
+      "would_apply": false
+    },
+    {
+      "job_id": 141,
+      "would_apply": false
+    },
+    {
+      "job_id": 145,
+      "would_apply": false
+    },
+    {
+      "job_id": 153,
+      "would_apply": false
+    },
+    {
+      "job_id": 154,
+      "would_apply": false
+    },
+    {
+      "job_id": 155,
+      "would_apply": false
+    },
+    {
+      "job_id": 160,
+      "would_apply": false
+    },
+    {
+      "job_id": 162,
+      "would_apply": false
+    },
+    {
+      "job_id": 167,
+      "would_apply": false
+    },
+    {
+      "job_id": 170,
+      "would_apply": false
+    },
+    {
+      "job_id": 171,
+      "would_apply": false
+    },
+    {
+      "job_id": 174,
+      "would_apply": false
+    },
+    {
+      "job_id": 178,
+      "would_apply": false
+    },
+    {
+      "job_id": 182,
+      "would_apply": false
+    },
+    {
+      "job_id": 186,
+      "would_apply": false
+    },
+    {
+      "job_id": 191,
+      "would_apply": false
+    },
+    {
+      "job_id": 194,
+      "would_apply": false
+    },
+    {
+      "job_id": 195,
+      "would_apply": false
+    },
+    {
+      "job_id": 197,
+      "would_apply": false
+    },
+    {
+      "job_id": 200,
+      "would_apply": false
+    },
+    {
+      "job_id": 202,
+      "would_apply": false
+    },
+    {
+      "job_id": 204,
+      "would_apply": false
+    },
+    {
+      "job_id": 207,
+      "would_apply": false
+    },
+    {
+      "job_id": 208,
+      "would_apply": false
+    },
+    {
+      "job_id": 209,
+      "would_apply": false
+    },
+    {
+      "job_id": 210,
+      "would_apply": false
+    },
+    {
+      "job_id": 211,
+      "would_apply": false
+    },
+    {
+      "job_id": 215,
+      "would_apply": false
+    },
+    {
+      "job_id": 219,
+      "would_apply": false
+    },
+    {
+      "job_id": 224,
+      "would_apply": false
+    },
+    {
+      "job_id": 229,
+      "would_apply": false
+    },
+    {
+      "job_id": 230,
+      "would_apply": false
+    },
+    {
+      "job_id": 232,
+      "would_apply": false
+    },
+    {
+      "job_id": 239,
+      "would_apply": false
+    },
+    {
+      "job_id": 240,
+      "would_apply": false
+    },
+    {
+      "job_id": 243,
+      "would_apply": false
+    },
+    {
+      "job_id": 245,
+      "would_apply": false
+    },
+    {
+      "job_id": 246,
+      "would_apply": false
+    },
+    {
+      "job_id": 247,
       "would_apply": false
     }
   ]
