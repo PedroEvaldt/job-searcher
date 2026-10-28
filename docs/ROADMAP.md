@@ -835,9 +835,62 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
 
 ---
 
-## Fases seguintes (resumo)
+## Fase 4a — Embeddings vs baseline 📍 (aberta 2026-10-28)
 
-**Fase 4a — Embeddings.** sentence-transformers + pgvector contra a baseline, no conjunto congelado.
+**Objetivo de aprendizado:** trocar a representação do texto — de TF-IDF (conta palavras) para
+embeddings densos de um modelo pré-treinado (`sentence-transformers`) — e descobrir, no mesmo
+conjunto congelado, se o significado semântico rankeia as vagas melhor que o TF-IDF. Os vetores
+moram no Postgres via `pgvector`.
+
+**Pronto quando:** cada vaga viva tem um embedding no banco (`pgvector`); existe um `model_version`
+novo no `scores` derivado do cosseno CV×vaga; e o `evaluate` reporta o ROC AUC dos dois modelos lado a
+lado no conjunto congelado — você sabe qual ganha e por quanto.
+
+**Invariantes que entram em jogo (§2.1):** o `scores` continua com PK `(job_id, model_version)` e o
+embedding entra com `model_version` **novo** (não sobrescreve `tfidf-v1`); o conjunto congelado só é
+lido na avaliação, nunca para escolher modelo nem ajustar nada; todo número vem com `model_version` e
+tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então não há como vazar rótulo.
+
+**Decisões da fase (recomendação do mentor — confirme ou troque):**
+
+- **Modelo:** `all-MiniLM-L6-v2` (384 dimensões) — pequeno, roda em CPU, o padrão de fato para
+  similaridade semântica de texto curto. A dimensão da coluna `pgvector` sai daqui: trocar de modelo
+  depois = nova migração.
+- **Escopo:** embeddar e pontuar **todas as vagas vivas** (como o `tfidf-v1`), não só as rotuladas —
+  o score vira um ranking de verdade; a avaliação lê só o subconjunto congelado.
+- **Onde roda:** script separado no `analyzer/`, **fora** do `main.py` sempre-ligado — o
+  `sentence-transformers` puxa o `torch` (pesado) e o coletor/Pi não precisam dele. Dep em grupo
+  próprio do `uv`.
+- **Infra (já feita, boilerplate):** a imagem do Postgres no `compose.yaml` virou `pgvector/pgvector:pg16`
+  (mesmo PG 16, volume reaproveitado) para o `CREATE EXTENSION vector` existir.
+
+### Tarefa 4a.1 — pgvector entra no banco
+
+- [ ] **4a.1.1** Migração goose que habilita a extensão `vector` e cria onde guardar o embedding de
+      cada vaga (uma dimensão fixa, a do modelo), com `down` que desfaz. Idempotente.
+
+### Tarefa 4a.2 — Gerar os embeddings
+
+- [ ] **4a.2.1** Script no `analyzer/` que encoda o CV e as vagas vivas com o `sentence-transformers`
+      e grava os vetores no banco. Idempotente: só encoda o que ainda não tem vetor.
+
+### Tarefa 4a.3 — Pontuar com o cosseno
+
+- [ ] **4a.3.1** Calcular o cosseno CV×vaga no `pgvector` (operador `<=>`) e gravar em `scores` com o
+      `model_version` novo. Idempotente.
+
+### Tarefa 4a.4 — Avaliar e comparar
+
+- [ ] **4a.4.1** Generalizar o `evaluate` para medir qualquer `model_version` no conjunto congelado e
+      reportar os dois (TF-IDF × embeddings) lado a lado — qual ganha e por quanto.
+
+### Tarefa 4a.5 — Fechamento da Fase 4a
+
+- [ ] Débitos abertos na fase + README/docs dos embeddings.
+
+---
+
+## Fases seguintes (resumo)
 
 **Fase 4b — Jev como extrator de features.** Question set v1, `jev_answers`, piloto com anotação manual, pesos manuais.
 
