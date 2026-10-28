@@ -198,6 +198,30 @@ esse commit. `.gitignore` passou a ignorar o binário `cmd/radar/radar` e os `.f
 **Próxima fase: 4a — embeddings** (sentence-transformers + pgvector contra a baseline `ROC AUC=0.50` no
 conjunto congelado).
 
+**2026-10-28 — 4a.2 e 4a.3 fechadas.** 4a.2.1: `analyzer/jobradar/embed.py` (`embed(list[str]) -> list[list[float]]`,
+`all-MiniLM-L6-v2` → 384 dims; dep no grupo `embed` do uv, fora do `main.py` sempre-ligado). 4a.2.2:
+`analyzer/scripts/embed_jobs.py` gravou **16204** vagas vivas em `job_embeddings` como `minilm-l6-v2` (anti-join
+dos pendentes + `ON CONFLICT` upsert → idempotente; texto passa pelo `clean_descriptions`). 4a.3.1:
+`analyzer/scripts/score_embeddings.py` embeda o CV e grava o cosseno `1 - (embedding <=> cv)` do pgvector em
+`scores` via `INSERT … SELECT` com `model_version='minilm-l6-v2'` (16204 linhas, upsert idempotente). Junto entrou
+o reparo de mojibake no pipeline (`remove_mojibake` dentro do `html_to_paragraphs`; `clean_descriptions` movida
+pro `boilerplate.py` para matar o ciclo de import). Commits `ab9d05e`, `9a23236` (+ o do score). Novo débito
+**D49** (CV fora do `model_version`). **Próxima: 4a.4** — generalizar o `evaluate` e comparar os dois modelos no
+conjunto congelado.
+
+**2026-10-28 — 4a.4.1 fechada: veredito da Fase 4a.** `evaluate_baseline.py` renomeado para
+`analyzer/scripts/evaluate.py` e generalizado: `extract_model(conn, model_version, ids)` isola a query por
+modelo, o entry lê os `model_version` de `sys.argv[1:]` (default = `["tfidf-v1", "minilm-l6-v2"]`) e mede cada
+um no congelado, com guard de score faltando por modelo. Resultado (n=75, pos=5): **`tfidf-v1` ROC AUC=0.5086 ×
+`minilm-l6-v2` ROC AUC=0.4600** — o embedding **não** bate o baseline (fica abaixo do acaso). Conclusão honesta:
+similaridade de texto crua com o CV (TF-IDF ou MiniLM) não rankeia `would_apply` neste conjunto — é o número que
+justifica a 4b (Jev como extrator de features). Cautela estatística anotada: 5 positivos em 75 → AUC muito
+ruidoso, a diferença 0.51 × 0.46 está dentro do ruído; o que se afirma é "nenhum dos dois mostra sinal", não
+"embedding é pior". mypy/ruff limpos (só o `EXE002` do NTFS). Polimento a pedido insistente (§0): função
+renomeada pra `evaluate`, `fetch_scores` devolve o dict direto, resultados coletados e impressos no fim
+(all-or-nothing no `missing`), colunas alinhadas por largura dinâmica, docstrings. **Falta 4a.5** (fechamento:
+débitos + README/docs) pra encerrar a fase.
+
 Última sessão: **2026-10-28**.
 
 ---
@@ -1267,6 +1291,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D46 | `store.go` (`insertJob`) + `analyzer/main.py` (`insert_job_skills`) | Skills defasam quando a descrição muda, por duas camadas: (1) `insertJob` reseta `scored_at` → `NULL` no `DO UPDATE` mas **não** `skills_extracted_at`, então vaga de texto alterado nunca volta pra fila de skills; (2) mesmo re-extraída, o `INSERT … ON CONFLICT (job_id, skill) DO UPDATE` só adiciona/atualiza — skill que sumiu da descrição fica como linha morta. Visto na 3a.2.2. | ✅ pago 2026-10-26 (3a.6) — texto muda → skills refeitas do zero: (1) `insertJob` reseta `skills_extracted_at` → `NULL` no `DO UPDATE` com o mesmo `CASE` do `scored_at` (vaga volta à fila de skills); (2) `insert_job_skills` apaga `job_skills` do `job_id` antes de reinserir (skill que sumiu some). `TestNilSkillsExtractedAt` (Go, testcontainer); prune conferido por observação no banco. `ON CONFLICT` do insert virou redundante (débito só do caminho feliz fechado) |
 | D47 | `analyzer/skills.py` / `job_skills.confidence` | `confidence` é contagem crua de menções, não normalizada — infla com descrição longa e não é comparável entre vagas. O TF-IDF da 3a.5 não usa `confidence`. | reagendado 2026-10-26 (3a.6) → **Fase 4c** (é lá que `confidence` vira feature de modelo e a normalização passa a importar); 🟡 |
 | D48 | `analyzer/skills.py` (`skills_extractor`) | O matcher não faz longest-match: `C` e `R` ficaram de fora do dicionário porque casariam em todo lugar, e `Shell` casa dentro de "Bash shell". Impacto baixo hoje (poucas skills de letra única; falso-positivo de `Shell` raro). | reagendado 2026-10-26 (3a.6) → **Fase 4c**/backlog, quando a precisão da extração de skills for medida contra rótulos; 🟡 |
+| D49 | `analyzer/scripts/score_embeddings.py` (`model_version='minilm-l6-v2'`) | O `model_version` gravado na `scores` identifica o **modelo de embedding**, não o **CV**. Se o `cv.md` mudar e o script rodar de novo, o `ON CONFLICT` sobrescreve os scores sob o mesmo `model_version` → perde-se o rastro de qual CV gerou cada número (tensão com o invariante §2.1 "todo número vem com o `model_version` que o gerou"). Baixo impacto hoje: single-tenant, CV estável. Visto na 4a.3.1 (2026-10-28). | aberto — 🟡; conserto quando o CV mudar de verdade: embutir uma versão/hash do CV no `model_version` (ex.: `minilm-l6-v2+cv1`), para cada número carregar o CV que o gerou |
 
 ### 🟢 Nits — mencionados uma vez
 

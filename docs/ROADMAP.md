@@ -889,8 +889,9 @@ tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então nã
 
 ### Tarefa 4a.4 — Avaliar e comparar
 
-- [ ] **4a.4.1** Generalizar o `evaluate` para medir qualquer `model_version` no conjunto congelado e
+- [x] **4a.4.1** Generalizar o `evaluate` para medir qualquer `model_version` no conjunto congelado e
       reportar os dois (TF-IDF × embeddings) lado a lado — qual ganha e por quanto.
+      Resultado (n=75, pos=5): `tfidf-v1`=0.5086 × `minilm-l6-v2`=0.4600 — embedding **não** bate o baseline.
 
 ### Tarefa 4a.5 — Fechamento da Fase 4a
 
