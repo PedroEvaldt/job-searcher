@@ -8,6 +8,11 @@
 *.so
 *.dylib
 job-searcher
+# the radar CLI, built in place next to its source
+/cmd/radar/radar
+
+# FUSE leftovers from the SSD mount (deleted-but-still-open files)
+.fuse_hidden*
 
 # Test binary, built with `go test -c`
 *.test
