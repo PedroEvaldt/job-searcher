@@ -877,14 +877,14 @@ tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então nã
 
 ### Tarefa 4a.2 — Gerar os embeddings
 
-- [ ] **4a.2.1** Script no `analyzer/` que carrega o `all-MiniLM-L6-v2` e transforma um texto num vetor
+- [x] **4a.2.1** Script no `analyzer/` que carrega o `all-MiniLM-L6-v2` e transforma um texto num vetor
       de 384 floats (encoder provado isolado, antes de tocar o banco). Dep em grupo próprio do `uv`.
-- [ ] **4a.2.2** Ligar o encoder ao banco: ler as vagas vivas sem embedding, encodar o texto limpo e
+- [x] **4a.2.2** Ligar o encoder ao banco: ler as vagas vivas sem embedding, encodar o texto limpo e
       gravar em `job_embeddings`. Idempotente: rodar de novo não reprocessa nada.
 
 ### Tarefa 4a.3 — Pontuar com o cosseno
 
-- [ ] **4a.3.1** Calcular o cosseno CV×vaga no `pgvector` (operador `<=>`) e gravar em `scores` com o
+- [x] **4a.3.1** Calcular o cosseno CV×vaga no `pgvector` (operador `<=>`) e gravar em `scores` com o
       `model_version` novo. Idempotente.
 
 ### Tarefa 4a.4 — Avaliar e comparar
