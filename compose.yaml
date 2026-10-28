@@ -19,7 +19,9 @@ services:
         max-file: "3"
 
   postgres:
-    image: postgres:16-alpine
+    # pgvector's official image = postgres 16 + the `vector` extension preinstalled.
+    # Same PG 16 major as postgres:16-alpine, so the existing data volume is reused as is.
+    image: pgvector/pgvector:pg16
     container_name: postgres_db
     restart: always
     environment:
