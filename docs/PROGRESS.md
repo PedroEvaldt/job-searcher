@@ -138,6 +138,16 @@ sem `hires_latam`/`seniority`. Totais acumulados nas 122: `note` 122/122, `hires
 57/122. Vale o mesmo aviso: só `would_apply` é gabarito; os auxiliares são extração de modelo e não entram no
 conjunto congelado.
 
+**2026-10-28 — mesma passada estendida às vagas 123–250 (antes de recongelar).** O aluno rotulou mais 128 vagas
+(`would_apply`, total agora **250**) para engrossar o conjunto antes de começar a 4a, e pediu o preenchimento
+auxiliar nas novas. Mesmas regras explícito-only, mesma guarda `IS NULL` (0 valores humanos sobrescritos). As
+128 novas receberam: `note` 128/128, `hires_latam` 78/128 (11 `true` LatAm explícito — Brasil CLT/estágio/PT-BR,
+território/residência LatAm, México, "work from anywhere" — e 67 `false` por país/região dura), `seniority`
+51/128 (só por palavra de nível no título). Totais nas 250: `note` 250/250, `hires_latam` 139/250, `seniority`
+108/250 (22 junior, 3 mid-level, 83 senior). Mesmo aviso de sempre: só `would_apply` é gabarito. **Próximo passo
+do aluno:** subir `version` para `test-set-v2` e rodar `freeze_test_set.py` (régua nova, membros totalmente
+diferentes), depois `evaluate_baseline.py` para o novo chão do `tfidf-v1` na v2.
+
 **2026-10-27 — 3b.2.2 fechada: conjunto de teste congelado.** `analyzer/freeze_test_set.py` lê os 122
 rótulos (`ORDER BY job_id`), faz `train_test_split` estratificado em `would_apply` com `random_state=7`,
 `test_size=0.3`, e grava o conjunto de teste em `analyzer/frozen.json` (`test-set-v1`). Resultado: **37**
