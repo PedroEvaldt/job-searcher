@@ -7,12 +7,12 @@ import psycopg
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from boilerplate import (
+from jobradar.boilerplate import (
     cut_boilerplate,
     paragraphs_counter,
 )
-from skills import ALIASES, skills_extractor
-from text import html_to_paragraphs
+from jobradar.skills import ALIASES, skills_extractor
+from jobradar.text import html_to_paragraphs
 
 SKILLS_LIMIT: int = 100
 
@@ -157,7 +157,7 @@ def scorer(jobs: list[tuple[int, str]], counter: Counter[str]) -> dict[int, floa
         kept = cut_boilerplate(job_paragraphs, counter)
         descriptions[job_id] = "\n".join(kept)
 
-    cv_path = Path(__file__).parents[1] / "cv.md"
+    cv_path = Path(__file__).parents[2] / "cv.md"
     cv_text = cv_path.read_text(encoding="utf-8")
     corpus = [cv_text, *descriptions.values()]
     matrix = TfidfVectorizer(stop_words="english").fit_transform(corpus)

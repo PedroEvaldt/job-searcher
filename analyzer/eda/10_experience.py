@@ -7,9 +7,9 @@ from db import sql_to_dataframe
 
 pd.set_option("display.width", 120)
 sys.path.insert(0, str(Path.cwd().parent if Path.cwd().name == "eda" else Path.cwd()))
-from boilerplate import cut_boilerplate, paragraphs_counter
-from experience import extract_years
-from text import html_to_paragraphs
+from jobradar.boilerplate import cut_boilerplate, paragraphs_counter
+from jobradar.experience import extract_years
+from jobradar.text import html_to_paragraphs
 
 
 def section(title: str) -> None:

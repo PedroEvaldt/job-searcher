@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from boilerplate import cut_boilerplate, paragraphs_counter
-from text import html_to_paragraphs
+from jobradar.boilerplate import cut_boilerplate, paragraphs_counter
+from jobradar.text import html_to_paragraphs
 
 
 @pytest.mark.parametrize(

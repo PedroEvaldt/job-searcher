@@ -5,7 +5,7 @@ import sys
 import psycopg
 from sklearn.metrics import roc_auc_score
 
-from freeze_test_set import OUTPUT_PATH
+from scripts.freeze_test_set import OUTPUT_PATH
 
 MODEL_VERSION = "tfidf-v1"
 

@@ -1,6 +1,6 @@
 import pytest
 
-from text import html_to_paragraphs
+from jobradar.text import html_to_paragraphs
 
 # Real descriptions (2026-10-19 dump), cut right after a closing tag
 

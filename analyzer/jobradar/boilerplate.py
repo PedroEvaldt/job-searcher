@@ -3,7 +3,7 @@
 from collections import Counter
 from collections.abc import Iterable, Mapping
 
-from text import html_to_paragraphs
+from jobradar.text import html_to_paragraphs
 
 # A paragraph found in this many distinct descriptions or more is boilerplate. Measured
 # on the live jobs (2026-10-21, see PROGRESS.md): it cuts 10.2% of the text and empties

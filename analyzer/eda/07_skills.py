@@ -7,13 +7,13 @@ from db import sql_to_dataframe
 
 # boilerplate.py, skills.py and text.py live in analyzer/, one level above eda/
 sys.path.insert(0, str(Path.cwd().parent if Path.cwd().name == "eda" else Path.cwd()))
-from boilerplate import (
+from jobradar.boilerplate import (
     BOILERPLATE_MIN_DESCRIPTIONS,
     cut_boilerplate,
     paragraphs_counter,
 )
-from skills import ALIASES, skills_extractor
-from text import html_to_paragraphs
+from jobradar.skills import ALIASES, skills_extractor
+from jobradar.text import html_to_paragraphs
 
 
 def skills_per_job() -> dict[int, dict[str, float]]:

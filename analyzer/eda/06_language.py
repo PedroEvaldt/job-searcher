@@ -9,7 +9,7 @@ from db import sql_to_dataframe
 
 # text.py lives in analyzer/, one level above eda/ (works with cwd in either one)
 sys.path.insert(0, str(Path.cwd().parent if Path.cwd().name == "eda" else Path.cwd()))
-from text import html_to_paragraphs
+from jobradar.text import html_to_paragraphs
 
 pd.set_option("display.width", 120)
 

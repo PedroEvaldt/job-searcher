@@ -169,7 +169,7 @@ Analyzer:
 
 ```
 cd analyzer
-uv run --env-file ../.env main.py
+uv run --env-file ../.env python -m scripts.main
 ```
 
 Migrations by hand (the collector applies them on its own; these are for checking or
@@ -254,7 +254,7 @@ Python checks:
 ```
 cd analyzer
 uv run ruff check .
-uv run mypy --strict main.py
+uv run --group dev mypy --strict jobradar/ scripts/ tests/
 ```
 
 ## Project status
@@ -270,7 +270,7 @@ uv run mypy --strict main.py
   age (`jobs` columns), and a first TF-IDF ranking of every job against the résumé
   (`scores`, `model_version='tfidf-v1'`).
 - ✅ **Phase 3b:** the `radar` CLI and the first honest baseline — 122 jobs hand-labelled into
-  `labels`, a stratified test set frozen to `analyzer/frozen.json`, and the Phase 3a ranking
+  `labels`, a stratified test set frozen to `analyzer/data/frozen.json`, and the Phase 3a ranking
   measured on it: `tfidf-v1 ROC AUC = 0.50` on 37 held-out jobs (5 positive) — no ranking power
   yet. That is the number the next phases have to beat.
 

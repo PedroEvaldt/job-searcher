@@ -12,8 +12,8 @@ pd.set_option("display.width", 120)
 # (analyzer/ or analyzer/eda/), the same way the other eda scripts do.
 ANALYZER_ROOT = Path.cwd().parent if Path.cwd().name == "eda" else Path.cwd()
 sys.path.insert(0, str(ANALYZER_ROOT))
-from boilerplate import cut_boilerplate, paragraphs_counter
-from text import html_to_paragraphs
+from jobradar.boilerplate import cut_boilerplate, paragraphs_counter
+from jobradar.text import html_to_paragraphs
 
 # cv.md lives at the repo root, one level above analyzer/
 CV_PATH = ANALYZER_ROOT.parent / "cv.md"

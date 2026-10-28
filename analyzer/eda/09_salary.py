@@ -7,7 +7,7 @@ from db import sql_to_dataframe
 
 pd.set_option("display.width", 120)
 sys.path.insert(0, str(Path.cwd().parent if Path.cwd().name == "eda" else Path.cwd()))
-from salary import normalize_salary
+from jobradar.salary import normalize_salary
 
 
 def section(title: str) -> None:

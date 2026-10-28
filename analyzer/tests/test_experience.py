@@ -1,6 +1,6 @@
 import pytest
 
-from experience import extract_years
+from jobradar.experience import extract_years
 
 
 @pytest.mark.parametrize(

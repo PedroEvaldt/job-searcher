@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 RANDOM_STATE = 7
 TEST_SIZE = 0.3
-OUTPUT_PATH = Path(__file__).parent / "frozen.json"
+OUTPUT_PATH = Path(__file__).parents[1] / "data" / "frozen.json"
 
 
 def freeze_test_set() -> int:

@@ -1,6 +1,6 @@
 import pytest
 
-from salary import normalize_salary
+from jobradar.salary import normalize_salary
 
 
 @pytest.mark.parametrize(

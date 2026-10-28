@@ -37,13 +37,13 @@ Dependencies live in groups, so neither the image nor the tests pull what they d
 ## Running the analyzer
 
 ```bash
-uv run --env-file ../.env python main.py
+uv run --env-file ../.env python -m scripts.main
 ```
 
 One pass over the database, in order:
 
 1. **Skills** — for every live job still unextracted (`skills_extracted_at IS NULL`), it runs
-   the text pipeline (`text.py` → `boilerplate.py`) and the dictionary matcher (`skills.py`),
+   the text pipeline (`jobradar/text.py` → `jobradar/boilerplate.py`) and the dictionary matcher (`jobradar/skills.py`),
    then writes the canonical skills to `job_skills (job_id, skill, confidence)`. Jobs are
    claimed in batches with `FOR UPDATE SKIP LOCKED` so two instances never process the same
    one, and a job's old rows are deleted before reinsert, so a skill dropped from the text
@@ -65,20 +65,20 @@ with the `radar` CLI (see the [root README](../README.md)), the labels were spli
 test half was frozen to disk — it never enters training, tuning, or question rewriting, in any
 phase.
 
-- `freeze_test_set.py` → `frozen.json`. Reads every row of `labels`, makes a stratified split
+- `scripts/freeze_test_set.py` → `data/frozen.json`. Reads every row of `labels`, makes a stratified split
   (`random_state = 7`, 30% held out) so the positive/negative ratio is kept on both sides, and
-  writes the test half to `frozen.json`: a versioned record (`test-set-v1`) with the counts and
+  writes the test half to `data/frozen.json`: a versioned record (`test-set-v1`) with the counts and
   the `(job_id, would_apply)` of each held-out job. Only the test set is stored — the train set
   is "every label not in here" — so adding more labels later never disturbs it. Re-running is
   deterministic: it overwrites the file identically.
-- `evaluate_baseline.py`. Loads `frozen.json`, fetches the `tfidf-v1` score of exactly those
+- `scripts/evaluate_baseline.py`. Loads `data/frozen.json`, fetches the `tfidf-v1` score of exactly those
   jobs, and prints the ROC AUC with its `model_version` and the set size. ROC AUC fits here
   because the label is binary and rare while the score is a continuous ranking: 0.5 is no
   ranking power, 1.0 is perfect.
 
 ```bash
-uv run --env-file ../.env python freeze_test_set.py     # writes frozen.json
-uv run --env-file ../.env python evaluate_baseline.py   # prints the metric
+uv run --env-file ../.env python -m scripts.freeze_test_set     # writes data/frozen.json
+uv run --env-file ../.env python -m scripts.evaluate_baseline   # prints the metric
 ```
 
 First result: `tfidf-v1 ROC AUC=0.5000 n=37 pos=5` — on the frozen set the Phase 3a ranking is
@@ -88,16 +88,16 @@ no better than chance. That is the honest baseline the embedding and Jev phases 
 
 Each has type hints and tests (`tests/`):
 
-- `text.py` — turns a description's HTML into a list of plain-text paragraphs.
-- `boilerplate.py` — counts paragraphs across descriptions and cuts the shared boilerplate.
-- `skills.py` — `skills_extractor(text, aliases)`: finds the dictionary's skills in a text,
+- `jobradar/text.py` — turns a description's HTML into a list of plain-text paragraphs.
+- `jobradar/boilerplate.py` — counts paragraphs across descriptions and cuts the shared boilerplate.
+- `jobradar/skills.py` — `skills_extractor(text, aliases)`: finds the dictionary's skills in a text,
   maps aliases to a canonical name, and returns a confidence per skill.
-- `salary.py` — `normalize_salary(...)`: converts an amount + currency + period to annual USD
+- `jobradar/salary.py` — `normalize_salary(...)`: converts an amount + currency + period to annual USD
   for comparison; returns `None` when the input is missing or the unit is unknown.
-- `experience.py` — `extract_years(text)`: estimates the required years of experience by
+- `jobradar/experience.py` — `extract_years(text)`: estimates the required years of experience by
   regex on the cleaned description.
 
-The scoring pipeline itself (skills + TF-IDF) lives in `main.py`.
+The scoring pipeline itself (skills + TF-IDF) lives in `scripts/main.py`.
 
 ## The EDA bench
 
@@ -131,7 +131,7 @@ The findings are written up in [`../docs/eda.md`](../docs/eda.md).
 ```bash
 uv run --group dev pytest                                     # tests (tests/)
 uv run ruff check .                                           # lint
-uv run --group dev mypy --strict main.py text.py boilerplate.py skills.py salary.py experience.py tests/
+uv run --group dev mypy --strict jobradar/ scripts/ tests/
 ```
 
 `mypy --strict` covers the production modules. The `eda/` scripts import pandas and

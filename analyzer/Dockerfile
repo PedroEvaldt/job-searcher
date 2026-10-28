@@ -15,4 +15,4 @@ COPY . .
 
 RUN uv sync --locked --no-dev
 
-CMD ["uv", "run", "--no-dev", "main.py"]
+CMD ["uv", "run", "--no-dev", "python", "-m", "scripts.main"]

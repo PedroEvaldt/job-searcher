@@ -1,6 +1,6 @@
 import pytest
 
-from skills import skills_extractor
+from jobradar.skills import skills_extractor
 
 
 @pytest.mark.parametrize(
