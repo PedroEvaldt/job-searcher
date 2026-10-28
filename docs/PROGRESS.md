@@ -156,6 +156,16 @@ dia); a distinção entre leituras se mantém pelo `n` que acompanha todo númer
 segue sem poder de ranking, é o chão que a 4a tem que bater. **Fronteira combinada:** a partir do momento em que a 4a
 escolher modelo com base nesse conjunto, ele trava; rótulos novos depois disso exigiriam `test-set-v2`.
 
+**Fase 4a aberta em 2026-10-28** (embeddings vs baseline; detalhe no `ROADMAP.md`). **Subtarefa 4a.1.1 fechada
+em 2026-10-28:** `db/migrations/010_add_vector_table.sql` liga o `pgvector` (`CREATE EXTENSION vector`) e cria
+`job_embeddings(job_id→jobs.id, model_version, embeddings vector(384), computed_at, PK(job_id, model_version))`,
+simétrica ao `scores`. `Down` na ordem inversa; reversibilidade conferida em transação revertida. Infra
+(boilerplate do mentor): imagem do Postgres trocada por `pgvector/pgvector:pg16` e container recriado — o
+`postgres:16-alpine` não traz o binário do `vector` (`extension not available`); volume `postgres_data`
+reaproveitado (mesmo PG 16 major), `vector` 0.8.7 disponível, 250 rótulos / 16.800 vagas intactos. Nits não
+bloqueantes: `embeddings` nullable (poderia ser `NOT NULL`, como `scores.score`) e nome no plural. A 4a.2 foi
+dividida em 4a.2.1 (encoder isolado) e 4a.2.2 (persistir no banco).
+
 **2026-10-27 — 3b.2.2 fechada: conjunto de teste congelado.** `analyzer/freeze_test_set.py` lê os 122
 rótulos (`ORDER BY job_id`), faz `train_test_split` estratificado em `would_apply` com `random_state=7`,
 `test_size=0.3`, e grava o conjunto de teste em `analyzer/frozen.json` (`test-set-v1`). Resultado: **37**

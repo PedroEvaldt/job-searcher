@@ -866,13 +866,21 @@ tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então nã
 
 ### Tarefa 4a.1 — pgvector entra no banco
 
-- [ ] **4a.1.1** Migração goose que habilita a extensão `vector` e cria onde guardar o embedding de
+- [x] **4a.1.1** Migração goose que habilita a extensão `vector` e cria onde guardar o embedding de
       cada vaga (uma dimensão fixa, a do modelo), com `down` que desfaz. Idempotente.
+      ✅ 2026-10-28 — `db/migrations/010_add_vector_table.sql`: `CREATE EXTENSION IF NOT EXISTS vector`
+      + tabela `job_embeddings(job_id→jobs.id, model_version, embeddings vector(384), computed_at,
+      PK(job_id, model_version))`, espelhando o `scores`. `Down` na ordem inversa (tabela→extensão),
+      reversibilidade conferida em transação revertida. Infra: imagem do Postgres recriada para
+      `pgvector/pgvector:pg16` (volume reaproveitado, `vector` 0.8.7). Nullable em `embeddings` e nome
+      no plural ficaram como nit (não bloqueante).
 
 ### Tarefa 4a.2 — Gerar os embeddings
 
-- [ ] **4a.2.1** Script no `analyzer/` que encoda o CV e as vagas vivas com o `sentence-transformers`
-      e grava os vetores no banco. Idempotente: só encoda o que ainda não tem vetor.
+- [ ] **4a.2.1** Script no `analyzer/` que carrega o `all-MiniLM-L6-v2` e transforma um texto num vetor
+      de 384 floats (encoder provado isolado, antes de tocar o banco). Dep em grupo próprio do `uv`.
+- [ ] **4a.2.2** Ligar o encoder ao banco: ler as vagas vivas sem embedding, encodar o texto limpo e
+      gravar em `job_embeddings`. Idempotente: rodar de novo não reprocessa nada.
 
 ### Tarefa 4a.3 — Pontuar com o cosseno
 
