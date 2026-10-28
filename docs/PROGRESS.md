@@ -100,7 +100,7 @@ verificação que atravessa a fase: o mentor não reproduz runtime nesta máquin
 banco da 5433 na migração 7 / intermitente) — testcontainers Go e observações de banco ficaram no
 relato do aluno.
 
-**Fase 3b aberta em 2026-10-26** (rotulagem e avaliação; roadmap detalhado no `ROADMAP.md`:
+**Fase 3b aberta em 2026-10-26, fechada em 2026-10-28** (rotulagem e avaliação; roadmap detalhado no `ROADMAP.md`:
 3b.1 binário `radar` → 3b.2 rotular + congelar split → 3b.3 TF-IDF no conjunto congelado → 3b.4
 fechamento). **Subtarefa 3b.1.1 fechada em 2026-10-26:** `cmd/radar/main.go` (`package main`) — o
 segundo binário Go nasce; `pgx.Connect`+`Ping`, contagem `LEFT JOIN labels … WHERE duplicate_of IS
@@ -157,7 +157,20 @@ das que não, neste conjunto. É o número que justifica embeddings (4a) e o Jev
 mentor a pedido (constante `MODEL_VERSION`, query única, checagem explícita de score faltando no lugar de
 `assert`, métrica arredondada, `__name__` guard). ruff/mypy limpos.
 
-Última sessão: **2026-10-27**.
+**2026-10-28 — 3b.1.3 e 3b.4 fechadas: Fase 3b encerrada.** A 3b.1.3 estava com três de quatro itens já
+prontos pela estrutura do `label()`: a query `WHERE l.labeled_at IS NULL ORDER BY j.id` retoma nas
+não-rotuladas e nunca re-mostra uma rotulada; faltava só sair limpo. Commitado o trabalho que estava solto
+no `cmd/radar/main.go` (commit `3045c1e`): Ctrl+D (`io.EOF`) sai com `"shutting down"` em cada prompt em vez
+de logar erro (fecha o nit da 3b.1.2), `cleanDescription` + `clearScreen` deixam uma vaga por tela (só
+exibição; o texto no banco não muda). **"Pular vaga" cortado por YAGNI** — as 122 foram rotuladas sem
+precisar; se fizer falta, vira subtarefa de ~20 min. A fase não abriu nenhum 🔴/🟡; o único nit morreu com
+esse commit. `.gitignore` passou a ignorar o binário `cmd/radar/radar` e os `.fuse_hidden*` do mount FUSE
+(commit `125fa2d`). Docs: README raiz ganhou "Labelling jobs (`radar`)" + Phase 3b no status;
+`analyzer/README.md` ganhou "Evaluation: the frozen test set" (freeze + baseline). Build e `go vet` limpos.
+**Próxima fase: 4a — embeddings** (sentence-transformers + pgvector contra a baseline `ROC AUC=0.50` no
+conjunto congelado).
+
+Última sessão: **2026-10-28**.
 
 ---
 

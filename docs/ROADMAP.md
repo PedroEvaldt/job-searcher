@@ -761,7 +761,7 @@ Débitos abertos na fase, README da parte de extração atualizado.
 
 ---
 
-## Fase 3b — Rotulagem e avaliação 📍 (aberta 2026-10-26)
+## Fase 3b — Rotulagem e avaliação ✅ (fechada 2026-10-28)
 
 **Objetivo de aprendizado:** nasce o segundo binário Go (`radar`, a CLI do usuário), e com ele
 a verdade de ter o rótulo humano como referência. Você rotula ~100 vagas à mão, congela um
@@ -802,8 +802,14 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
       `seniority`/`note`, trim no armazenamento, `ErrNoRows` como fim) escritos pelo mentor após o
       aluno mudar o §0 do `CLAUDE.md` pra permitir na insistência. Nit aberto: Ctrl+D (`io.EOF`) loga
       como erro em vez de sair quieto.
-- [ ] **3b.1.3** Robustez da sessão de rotulagem: retomar de onde parou, pular vaga, sair limpo;
+- [x] **3b.1.3** Robustez da sessão de rotulagem: retomar de onde parou, pular vaga, sair limpo;
       não re-mostrar vaga já rotulada.
+      ✅ 2026-10-28 — a query do `label()` filtra `WHERE l.labeled_at IS NULL ORDER BY j.id`: cada
+      run retoma nas não-rotuladas e nunca re-mostra uma rotulada. Ctrl+D (`io.EOF`) sai com
+      `"shutting down"` em cada prompt, em vez de logar como erro (fecha o nit da 3b.1.2).
+      `cleanDescription`/`clearScreen` deixam uma vaga por tela. **"Pular vaga" cortado por YAGNI:**
+      as 122 foram rotuladas sem precisar pular; se fizer falta, vira subtarefa de ~20 min.
+      Commit `3045c1e`.
 
 ### Tarefa 3b.2 — Rotular ~100 e congelar o split
 
@@ -818,9 +824,14 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
       `model_version` e tamanho — a primeira baseline honesta. — `analyzer/evaluate_baseline.py`:
       `tfidf-v1 ROC AUC=0.5000 n=37 pos=5` (sem poder de ranking no conjunto congelado).
 
-### Tarefa 3b.4 — Fechamento da Fase 3b
+### Tarefa 3b.4 — Fechamento da Fase 3b ✅ (fechada 2026-10-28)
 
-- [ ] Débitos abertos na fase + README/docs da rotulagem.
+- [x] Débitos abertos na fase + README/docs da rotulagem.
+      ✅ 2026-10-28 — a fase não abriu 🔴/🟡; o único nit (Ctrl+D) morreu no commit `3045c1e`.
+      `.gitignore` passou a ignorar o binário `cmd/radar/radar` e os `.fuse_hidden*` do mount
+      (commit `125fa2d`). README raiz ganhou a seção "Labelling jobs (`radar`)" + Phase 3b no
+      status; `analyzer/README.md` ganhou "Evaluation: the frozen test set". Débitos pendentes
+      são todos de fases anteriores, já reagendados (D8/D9/D23/D24/D25/D26/D33/D40/D41/D42/D44/D45/D47/D48).
 
 ---
 

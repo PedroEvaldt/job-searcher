@@ -196,6 +196,30 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
 | `live_duplicates.sql` | duplicate groups left among the jobs you read (`duplicate_of IS NULL`). Expected: `0 \| 0`                                                                     |
 | `duplicates.sql`      | duplicate groups across all jobs, ignoring the marks: how much the dedupe has to do                                                                            |
 
+## Labelling jobs (`radar`)
+
+`radar` is the single-user CLI: it is how you tell the project which jobs you would actually
+apply to, so later phases have a human ground truth to measure models against. It reads the
+same database and never shows any model score while you label.
+
+Build it and run it against a database (it reads `DATABASE_URL`):
+
+```
+go build -o cmd/radar/radar ./cmd/radar
+./cmd/radar/radar status      # LABELED <done>/<remaining> among the jobs you read
+./cmd/radar/radar label       # label the next unlabelled jobs, one at a time
+```
+
+`label` shows one job at a time — title, company, and a cleaned-up description — and asks
+whether you would apply (`y`/`n`), plus three optional fields (hires LatAm, seniority, a free
+note). Each answer is written to the `labels` table right away, so a later run resumes where
+you left off and never re-shows a job you already labelled. Press Ctrl+D to stop.
+
+The `labels` table is human ground truth: only `would_apply` is the label that trains and
+evaluates models. The optional fields are notes, never evaluation targets. How those labels
+become a frozen test set, and how the TF-IDF ranking scores against it, is in
+[`analyzer/README.md`](analyzer/README.md).
+
 ## Running on a Raspberry Pi
 
 The collector runs unattended on a Raspberry Pi (arm64). Docker builds both images
@@ -245,9 +269,12 @@ uv run mypy --strict main.py
 - ✅ **Phase 3a:** extraction in code — skills (`job_skills`), salary, required years and job
   age (`jobs` columns), and a first TF-IDF ranking of every job against the résumé
   (`scores`, `model_version='tfidf-v1'`).
+- ✅ **Phase 3b:** the `radar` CLI and the first honest baseline — 122 jobs hand-labelled into
+  `labels`, a stratified test set frozen to `analyzer/frozen.json`, and the Phase 3a ranking
+  measured on it: `tfidf-v1 ROC AUC = 0.50` on 37 held-out jobs (5 positive) — no ranking power
+  yet. That is the number the next phases have to beat.
 
-Later phases add labelling and a frozen test set, embeddings, a weekly Discord digest, and a
-Kubernetes deployment.
+Later phases add embeddings, a weekly Discord digest, and a Kubernetes deployment.
 
 ## License
 

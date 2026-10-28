@@ -58,6 +58,32 @@ One pass over the database, in order:
 So the analyzer fills `job_skills`, `scores`, and — via the Go side — the `jobs` columns
 `posted_at`, `salary_min`, `salary_max`, `currency`, `salary_period`.
 
+## Evaluation: the frozen test set
+
+A score is only trustworthy on jobs the model never saw. Once ~100 jobs were hand-labelled
+with the `radar` CLI (see the [root README](../README.md)), the labels were split once and the
+test half was frozen to disk — it never enters training, tuning, or question rewriting, in any
+phase.
+
+- `freeze_test_set.py` → `frozen.json`. Reads every row of `labels`, makes a stratified split
+  (`random_state = 7`, 30% held out) so the positive/negative ratio is kept on both sides, and
+  writes the test half to `frozen.json`: a versioned record (`test-set-v1`) with the counts and
+  the `(job_id, would_apply)` of each held-out job. Only the test set is stored — the train set
+  is "every label not in here" — so adding more labels later never disturbs it. Re-running is
+  deterministic: it overwrites the file identically.
+- `evaluate_baseline.py`. Loads `frozen.json`, fetches the `tfidf-v1` score of exactly those
+  jobs, and prints the ROC AUC with its `model_version` and the set size. ROC AUC fits here
+  because the label is binary and rare while the score is a continuous ranking: 0.5 is no
+  ranking power, 1.0 is perfect.
+
+```bash
+uv run --env-file ../.env python freeze_test_set.py     # writes frozen.json
+uv run --env-file ../.env python evaluate_baseline.py   # prints the metric
+```
+
+First result: `tfidf-v1 ROC AUC=0.5000 n=37 pos=5` — on the frozen set the Phase 3a ranking is
+no better than chance. That is the honest baseline the embedding and Jev phases have to beat.
+
 ## Production helpers
 
 Each has type hints and tests (`tests/`):
