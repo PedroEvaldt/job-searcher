@@ -5,12 +5,37 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
+	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
+
+var (
+	brTag      = regexp.MustCompile(`(?i)<br\s*/?>`)
+	blockClose = regexp.MustCompile(`(?i)</(p|div|li|ul|ol|h[1-6])>`)
+	anyTag     = regexp.MustCompile(`<[^>]+>`)
+	blankRuns  = regexp.MustCompile(`\n{3,}`)
+)
+
+// cleanDescription makes a job description readable on screen while labelling:
+// it turns line/block tags into newlines, drops every other tag, decodes HTML
+// entities, and collapses blank-line runs. It is a DISPLAY helper only — the
+// description stored in the database is never touched.
+func cleanDescription(desc string) string {
+	desc = brTag.ReplaceAllString(desc, "\n")
+	desc = blockClose.ReplaceAllString(desc, "\n")
+	desc = anyTag.ReplaceAllString(desc, "")
+	// Unescape AFTER stripping, so literal "&lt;b&gt;" in the text is not turned
+	// into a real tag and then removed.
+	desc = html.UnescapeString(desc)
+	desc = blankRuns.ReplaceAllString(desc, "\n")
+	return strings.TrimSpace(desc)
+}
 
 func main() {
 	logger := slog.Default()
@@ -69,7 +94,8 @@ func label(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, limit int) 
 			logger.Error("failed to query database for labeling", "error", err)
 			return
 		}
-		fmt.Printf("Title: %s \nCompany: %s\nDescription: %s\n", title, company, description)
+		clearScreen()
+		fmt.Printf("Title: %s\nCompany: %s\n\n%s\n", title, company, cleanDescription(description))
 
 		fmt.Print("Would apply (y/n): ")
 		var (
@@ -81,6 +107,10 @@ func label(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, limit int) 
 	outer:
 		for {
 			wouldApplyStr, err := reader.ReadString('\n')
+			if errors.Is(err, io.EOF) {
+				fmt.Println("shutting down")
+				return
+			}
 			if err != nil {
 				logger.Error("failed to read user input", "error", err)
 				return
@@ -99,6 +129,10 @@ func label(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, limit int) 
 		}
 		fmt.Printf("Hires Latam (y|n): ")
 		hiresLatamStr, err := reader.ReadString('\n')
+		if errors.Is(err, io.EOF) {
+			fmt.Println("shutting down")
+			return
+		}
 		if err != nil {
 			logger.Error("failed to read user input", "error", err)
 			return
@@ -109,6 +143,10 @@ func label(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, limit int) 
 		}
 		fmt.Printf("Seniority (junior|mid-level|senior): ")
 		seniorityStr, err := reader.ReadString('\n')
+		if errors.Is(err, io.EOF) {
+			fmt.Println("shutting down")
+			return
+		}
 		if err != nil {
 			logger.Error("failed to read user input", "error", err)
 			return
@@ -118,6 +156,10 @@ func label(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, limit int) 
 		}
 		fmt.Printf("Note: ")
 		noteStr, err := reader.ReadString('\n')
+		if errors.Is(err, io.EOF) {
+			fmt.Println("shutting down")
+			return
+		}
 		if err != nil {
 			logger.Error("failed to read user input", "error", err)
 			return
@@ -145,4 +187,8 @@ func status(ctx context.Context, logger *slog.Logger, conn *pgx.Conn) {
 		return
 	}
 	fmt.Printf("LABELED %d/%d\n", labeled, toLabel)
+}
+
+func clearScreen() {
+	fmt.Print("\033[H\033[2J") // cursor to home, then clear the whole screen
 }
