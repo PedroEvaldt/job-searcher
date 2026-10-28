@@ -76,6 +76,19 @@ class _ParagraphCollector(HTMLParser):
 def html_to_paragraphs(html: str) -> list[str]:
     """The paragraphs of `html` as plain text, in order and without empty ones."""
     collector = _ParagraphCollector()
-    collector.feed(html)
+    collector.feed(remove_mojibake(html))
     collector.close()
     return collector.paragraphs
+
+
+def remove_mojibake(description: str) -> str:
+    """Undo UTF-8 that was decoded as Latin-1 ("cafÃ©" -> "café").
+
+    Clean text is not mojibake and raises on the round trip: a lone accented byte
+    is not valid UTF-8, and anything above Latin-1 (an em dash, an emoji) cannot be
+    encoded to it at all. On either error the original is returned unchanged.
+    """
+    try:
+        return description.encode("latin-1").decode("utf-8")
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        return description

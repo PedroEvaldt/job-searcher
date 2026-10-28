@@ -36,3 +36,16 @@ def cut_boilerplate(
     if len(remaining) == 0:
         return paragraphs
     return remaining
+
+
+def clean_descriptions(corpus: list[str], descriptions: list[str]) -> list[str]:
+    """Each of `descriptions` as one clean string: mojibake fixed and HTML stripped
+    (via html_to_paragraphs) and shared boilerplate cut. The boilerplate statistic is
+    built over `corpus` (the whole live set), so the cut does not change with the subset
+    being cleaned. Lives here, not in text.py, because text.py is the lower layer."""
+    counts = paragraphs_counter(corpus)
+    cleaned: list[str] = []
+    for description in descriptions:
+        kept = cut_boilerplate(html_to_paragraphs(description), counts)
+        cleaned.append("\n".join(kept))
+    return cleaned

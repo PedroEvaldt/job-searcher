@@ -1,6 +1,6 @@
 import pytest
 
-from jobradar.text import html_to_paragraphs
+from jobradar.text import html_to_paragraphs, remove_mojibake
 
 # Real descriptions (2026-10-19 dump), cut right after a closing tag
 
@@ -119,3 +119,20 @@ HIMALAYAS_JOB_120_PARAGRAPHS = [
 )
 def test_html_to_paragraphs(html: str, expected: list[str]) -> None:
     assert html_to_paragraphs(html) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # UTF-8 that was read as Latin-1: the round trip restores the characters
+        ("cafÃ©", "café"),
+        ("Ã©quipe", "équipe"),
+        # Not mojibake, left untouched: plain ASCII, a clean accent, and a character
+        # above Latin-1 (the round trip raises on the last two, so the original is kept)
+        ("Senior Backend Engineer", "Senior Backend Engineer"),
+        ("café", "café"),
+        ("ship it 🚀", "ship it 🚀"),
+    ],
+)
+def test_remove_mojibake(text: str, expected: str) -> None:
+    assert remove_mojibake(text) == expected
