@@ -1,0 +1,74 @@
+import os
+import sys
+
+import psycopg
+
+from jobradar.boilerplate import clean_descriptions
+from jobradar.embed import embed
+
+MODEL_VERSION = "minilm-l6-v2"
+
+
+def embed_jobs() -> int:
+    """Embed every live job that has no `MODEL_VERSION` vector yet and store it.
+
+    Kept out of the always-on `main.py` on purpose: loading the model pulls in torch.
+    Resumable and idempotent — a second run embeds only what is still missing, and the
+    ON CONFLICT upsert means re-embedding a job overwrites its row, never duplicates it.
+    """
+    database_url = os.getenv("DATABASE_URL")
+    if database_url is None:
+        print("DATABASE_URL is not set", file=sys.stderr)
+        return 1
+    try:
+        conn = psycopg.connect(database_url)
+    except psycopg.Error as e:
+        detail = " ".join(str(e).split())
+        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        return 1
+
+    conn.autocommit = True
+    with conn, conn.cursor() as cur:
+        # The whole live set: clean_descriptions builds the boilerplate statistic over
+        # it, so the cut does not change with the pending subset.
+        corpus = [
+            row[0]
+            for row in cur.execute(
+                "SELECT description FROM jobs WHERE duplicate_of IS NULL;"
+            ).fetchall()
+        ]
+        # Live jobs with no vector for this model yet: anti-join on the pair that is
+        # job_embeddings' primary key (LEFT JOIN ... WHERE the right side is missing).
+        rows = cur.execute(
+            "SELECT j.id, j.description FROM jobs j "
+            "LEFT JOIN job_embeddings e "
+            "ON e.job_id = j.id AND e.model_version = %s "
+            "WHERE j.duplicate_of IS NULL AND e.job_id IS NULL "
+            "ORDER BY j.id;",
+            (MODEL_VERSION,),
+        ).fetchall()
+        if not rows:
+            print("no jobs to embed")
+            return 0
+
+        job_ids = [job_id for job_id, _ in rows]
+        descriptions = [description for _, description in rows]
+        vectors = embed(clean_descriptions(corpus, descriptions))
+
+        with conn.transaction():
+            cur.executemany(
+                "INSERT INTO job_embeddings (job_id, model_version, embedding) "
+                "VALUES (%s, %s, %s::vector) "
+                "ON CONFLICT (job_id, model_version) DO UPDATE "
+                "SET embedding = EXCLUDED.embedding, computed_at = now();",
+                [
+                    (job_id, MODEL_VERSION, "[" + ",".join(map(str, vector)) + "]")
+                    for job_id, vector in zip(job_ids, vectors)
+                ],
+            )
+    print(f"embedded {len(job_ids)} jobs as {MODEL_VERSION}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(embed_jobs())
