@@ -269,12 +269,17 @@ uv run --group dev mypy --strict jobradar/ scripts/ tests/
 - ✅ **Phase 3a:** extraction in code — skills (`job_skills`), salary, required years and job
   age (`jobs` columns), and a first TF-IDF ranking of every job against the résumé
   (`scores`, `model_version='tfidf-v1'`).
-- ✅ **Phase 3b:** the `radar` CLI and the first honest baseline — 122 jobs hand-labelled into
-  `labels`, a stratified test set frozen to `analyzer/data/frozen.json`, and the Phase 3a ranking
-  measured on it: `tfidf-v1 ROC AUC = 0.50` on 37 held-out jobs (5 positive) — no ranking power
-  yet. That is the number the next phases have to beat.
+- ✅ **Phase 3b:** the `radar` CLI and the first honest baseline — jobs hand-labelled into
+  `labels` (250 so far), a stratified test set frozen to `analyzer/data/frozen.json` (`test-set-v1`,
+  75 held out, 5 positive), and the Phase 3a ranking measured on it: `tfidf-v1 ROC AUC ≈ 0.51` — no
+  ranking power yet. That is the number the next phases have to beat.
+- ✅ **Phase 4a:** embeddings vs. the baseline — every live job and the CV embedded with
+  `all-MiniLM-L6-v2` into a `pgvector` table (`job_embeddings`) and scored by cosine into `scores`
+  (`model_version='minilm-l6-v2'`), then compared on the frozen set: `minilm-l6-v2 ROC AUC = 0.46`
+  vs. `tfidf-v1 0.51`. Raw cosine against the CV — TF-IDF or embedding — does not rank the jobs
+  worth applying to; that sends the next phase to richer, Jev-extracted features.
 
-Later phases add embeddings, a weekly Discord digest, and a Kubernetes deployment.
+Later phases add a weekly Discord digest and a Kubernetes deployment.
 
 ## License
 

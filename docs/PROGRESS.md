@@ -162,8 +162,9 @@ em 2026-10-28:** `db/migrations/010_add_vector_table.sql` liga o `pgvector` (`CR
 simétrica ao `scores`. `Down` na ordem inversa; reversibilidade conferida em transação revertida. Infra
 (boilerplate do mentor): imagem do Postgres trocada por `pgvector/pgvector:pg16` e container recriado — o
 `postgres:16-alpine` não traz o binário do `vector` (`extension not available`); volume `postgres_data`
-reaproveitado (mesmo PG 16 major), `vector` 0.8.7 disponível, 250 rótulos / 16.800 vagas intactos. Nits não
-bloqueantes: `embeddings` nullable (poderia ser `NOT NULL`, como `scores.score`) e nome no plural. A 4a.2 foi
+reaproveitado (mesmo PG 16 major), `vector` 0.8.7 disponível, 250 rótulos / 16.800 vagas intactos. A migração
+010 commitada tem `embedding` (singular) `NOT NULL`, igual ao `scores.score` — os "nits" de nome plural/nullable
+que esta nota chegou a registrar não existem no que foi commitado (conferido e corrigido na 4a.5). A 4a.2 foi
 dividida em 4a.2.1 (encoder isolado) e 4a.2.2 (persistir no banco).
 
 **2026-10-27 — 3b.2.2 fechada: conjunto de teste congelado.** `analyzer/freeze_test_set.py` lê os 122
@@ -221,6 +222,14 @@ ruidoso, a diferença 0.51 × 0.46 está dentro do ruído; o que se afirma é "n
 renomeada pra `evaluate`, `fetch_scores` devolve o dict direto, resultados coletados e impressos no fim
 (all-or-nothing no `missing`), colunas alinhadas por largura dinâmica, docstrings. **Falta 4a.5** (fechamento:
 débitos + README/docs) pra encerrar a fase.
+
+**2026-10-28 — 4a.5 fechada: Fase 4a encerrada.** Auditoria de débitos: o único 🟡 nascido na fase é o **D49**
+(CV fora do `model_version`), destino mantido (adiar até o CV mudar). A nota antiga sobre `embedding`
+nullable/plural foi corrigida — a migração 010 commitada tem `embedding` singular `NOT NULL`. Docs (escritos
+pelo mentor; a partir de agora regra durável — READMEs sempre podem ser do mentor): `analyzer/README.md` ganhou
+o grupo `embed`, a seção "Embeddings (Phase 4a)" (como rodar `embed_jobs`/`score_embeddings`, a tabela pgvector,
+D49) e o resultado atual no `evaluate`; `README.md` raiz ganhou o bullet da Fase 4a e deixou de prometer
+embeddings como "futuro". **Fase 4a fechada.** Próxima: **Fase 4b** (Jev como extrator de features).
 
 Última sessão: **2026-10-28**.
 

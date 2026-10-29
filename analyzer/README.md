@@ -3,7 +3,9 @@
 The Python side of [job-radar](../README.md). It reads the Postgres that the Go `collector`
 fills, extracts meaning from each job, and ranks it against the résumé. As of Phase 3a it
 extracts skills, normalizes salary and required experience, derives job age, and produces a
-first TF-IDF ranking of every job against the CV.
+first TF-IDF ranking of every job against the CV. Phase 4a adds a second ranking — every job and
+the CV embedded with a sentence-transformer and scored by cosine in `pgvector` — plus an
+evaluation harness that measures any model against a frozen test set.
 
 Go and Python never share memory or files — only the Postgres schema. See the root README
 for the whole picture.
@@ -30,6 +32,7 @@ Dependencies live in groups, so neither the image nor the tests pull what they d
 | (base) | the analyzer itself            | `uv sync`                  |
 | `dev`  | tests, lint, types             | `uv run --group dev …`     |
 | `eda`  | exploration (pandas, IPython…) | `uv run --group eda …`     |
+| `embed` | embeddings (sentence-transformers → torch) | `uv run --group embed …` |
 
 `DATABASE_URL` is read straight from the environment (no dotenv loading). Export it, or pass
 `--env-file ../.env` to `uv run`.
@@ -58,9 +61,35 @@ One pass over the database, in order:
 So the analyzer fills `job_skills`, `scores`, and — via the Go side — the `jobs` columns
 `posted_at`, `salary_min`, `salary_max`, `currency`, `salary_period`.
 
+## Embeddings (Phase 4a)
+
+A second, model-heavy ranking kept out of the always-on `main.py`: loading the
+sentence-transformer pulls in torch, so it lives in its own `uv` group (`embed`) and its own
+scripts.
+
+- `jobradar/embed.py` — `embed(texts)`: encodes a list of texts with `all-MiniLM-L6-v2` into
+  384-dimensional vectors.
+- `scripts/embed_jobs.py` — embeds every live job with no `minilm-l6-v2` vector yet (after the
+  same boilerplate cut the scorer uses) and upserts it into `job_embeddings (job_id,
+  model_version, embedding vector(384))`, a `pgvector` table symmetric to `scores`. Resumable and
+  idempotent: a second run embeds only what is still missing.
+- `scripts/score_embeddings.py` — embeds the CV, then lets `pgvector` take the cosine
+  `1 - (embedding <=> cv)` of every job against it in one `INSERT … SELECT`, upserting into
+  `scores` under `model_version = 'minilm-l6-v2'`.
+
+```bash
+uv run --group embed --env-file ../.env python -m scripts.embed_jobs        # fill job_embeddings
+uv run --group embed --env-file ../.env python -m scripts.score_embeddings  # write minilm-l6-v2 scores
+```
+
+Postgres needs the `vector` extension; the compose stack uses the `pgvector/pgvector:pg16` image
+for it. A `scores` row carries the embedding model's version, not the CV's — change `cv.md` and
+re-run and the row is overwritten under the same `model_version` (debt D49 in
+[`../docs/PROGRESS.md`](../docs/PROGRESS.md)).
+
 ## Evaluation: the frozen test set
 
-A score is only trustworthy on jobs the model never saw. Once ~100 jobs were hand-labelled
+A score is only trustworthy on jobs the model never saw. Once the jobs were hand-labelled
 with the `radar` CLI (see the [root README](../README.md)), the labels were split once and the
 test half was frozen to disk — it never enters training, tuning, or question rewriting, in any
 phase.
@@ -71,24 +100,37 @@ phase.
   the `(job_id, would_apply)` of each held-out job. Only the test set is stored — the train set
   is "every label not in here" — so adding more labels later never disturbs it. Re-running is
   deterministic: it overwrites the file identically.
-- `scripts/evaluate_baseline.py`. Loads `data/frozen.json`, fetches the `tfidf-v1` score of exactly those
-  jobs, and prints the ROC AUC with its `model_version` and the set size. ROC AUC fits here
-  because the label is binary and rare while the score is a continuous ranking: 0.5 is no
-  ranking power, 1.0 is perfect.
+- `scripts/evaluate.py`. Loads `data/frozen.json` and, for each `model_version` given on the
+  command line (default: `tfidf-v1` and `minilm-l6-v2`), fetches that model's score of exactly
+  those jobs and prints the ROC AUC with the `model_version` and the set size — one line per
+  model, every model on the same frozen jobs so the numbers compare. ROC AUC fits here because
+  the label is binary and rare while the score is a continuous ranking: 0.5 is no ranking power,
+  1.0 is perfect.
 
 ```bash
-uv run --env-file ../.env python -m scripts.freeze_test_set     # writes data/frozen.json
-uv run --env-file ../.env python -m scripts.evaluate_baseline   # prints the metric
+uv run --env-file ../.env python -m scripts.freeze_test_set           # writes data/frozen.json
+uv run --env-file ../.env python -m scripts.evaluate                  # every model, side by side
+uv run --env-file ../.env python -m scripts.evaluate minilm-l6-v2     # just one model
 ```
 
-First result: `tfidf-v1 ROC AUC=0.5000 n=37 pos=5` — on the frozen set the Phase 3a ranking is
-no better than chance. That is the honest baseline the embedding and Jev phases have to beat.
+Current result on the frozen set:
+
+```
+tfidf-v1      ROC AUC=0.5086  n=75  pos=5
+minilm-l6-v2  ROC AUC=0.4600  n=75  pos=5
+```
+
+Neither raw cosine against the CV ranks the jobs you would apply to: TF-IDF sits at chance, the
+MiniLM embedding below it. With only 5 positives in 75 the gap is within noise — the honest
+reading is "no signal", not "TF-IDF beats embeddings". That is why Phase 4b turns to features
+extracted from the job text (Jev) instead of raw similarity.
 
 ## Production helpers
 
 Each has type hints and tests (`tests/`):
 
-- `jobradar/text.py` — turns a description's HTML into a list of plain-text paragraphs.
+- `jobradar/text.py` — turns a description's HTML into a list of plain-text paragraphs (repairing
+  mojibake first).
 - `jobradar/boilerplate.py` — counts paragraphs across descriptions and cuts the shared boilerplate.
 - `jobradar/skills.py` — `skills_extractor(text, aliases)`: finds the dictionary's skills in a text,
   maps aliases to a canonical name, and returns a confidence per skill.
@@ -96,8 +138,11 @@ Each has type hints and tests (`tests/`):
   for comparison; returns `None` when the input is missing or the unit is unknown.
 - `jobradar/experience.py` — `extract_years(text)`: estimates the required years of experience by
   regex on the cleaned description.
+- `jobradar/embed.py` — `embed(texts)`: encodes texts into 384-dim vectors with `all-MiniLM-L6-v2`
+  (Phase 4a; needs the `embed` group).
 
-The scoring pipeline itself (skills + TF-IDF) lives in `scripts/main.py`.
+The always-on pipeline (skills + TF-IDF) lives in `scripts/main.py`; the embedding pipeline in
+`scripts/embed_jobs.py` and `scripts/score_embeddings.py`.
 
 ## The EDA bench
 

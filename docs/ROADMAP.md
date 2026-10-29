@@ -835,7 +835,7 @@ conectar e contar — pra provar a estrutura de dois binários antes de qualquer
 
 ---
 
-## Fase 4a — Embeddings vs baseline 📍 (aberta 2026-10-28)
+## Fase 4a — Embeddings vs baseline ✅ (aberta e fechada 2026-10-28)
 
 **Objetivo de aprendizado:** trocar a representação do texto — de TF-IDF (conta palavras) para
 embeddings densos de um modelo pré-treinado (`sentence-transformers`) — e descobrir, no mesmo
@@ -895,7 +895,8 @@ tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então nã
 
 ### Tarefa 4a.5 — Fechamento da Fase 4a
 
-- [ ] Débitos abertos na fase + README/docs dos embeddings.
+- [x] Débitos abertos na fase + README/docs dos embeddings. Único débito 4a = D49 (adiado). READMEs
+      (raiz + analyzer) atualizados com o pipeline de embeddings e o veredito. Fechada em 2026-10-28.
 
 ---
 
