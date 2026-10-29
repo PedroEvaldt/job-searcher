@@ -931,9 +931,12 @@ projeto roda sem chave (cai no cosseno). Invariantes do Jev no §2.1 do `CLAUDE.
 - [ ] **4b.4.1** Combinar as respostas com pesos manuais num score; o `question_set_version` entra no
       `model_version`; gravar em `scores` e avaliar no congelado contra `tfidf-v1`/`minilm-l6-v2`.
 
-### Tarefa 4b.5 — PT-BR em lote separado + fechamento
+### Tarefa 4b.5 — Idioma e fechamento
 
-- [ ] **4b.5.1** Fontes em PT-BR avaliadas em lote separado.
+- [x] **4b.5.1** Idioma da vaga por `langdetect` (seed fixo) numa coluna `jobs.language` (migração 012),
+      resumível. Substitui o "lote separado" do SPEC §11: o Jev roda em todas as línguas, e o idioma vira
+      critério da decisão final (ex.: francês não é enviado). Distribuição: en 15202, de 330, es 258, pt 154,
+      fr 109, … (~6% não-inglês). **Atualizar o SPEC §11** no fechamento.
 - [ ] **4b.5.2** Débitos da fase + README/docs.
 
 ---

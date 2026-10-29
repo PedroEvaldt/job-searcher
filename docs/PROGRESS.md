@@ -252,6 +252,17 @@ tokens). Testes offline: `_parse` contra resposta gravada em `testdata/` + fallb
 **Falta 4b.3** (piloto + concordância + custo). Débito aberto: a PK da `jev_answers` não distingue o modelo que
 respondeu (irmão do D49; SPEC fixou assim).
 
+**2026-10-29 — piloto do Jev + idioma.** Piloto enxuto (concordância humana descopada por ora):
+`scripts/jev_pilot.py` roda o Jev em N=5 vagas vivas (`state` = `Title: <título>\n\n<descrição limpa>`),
+grava em `jev_answers` (`qs-v1`, `answers` jsonb via `Json`) e imprime o custo por mil (input tokens ×
+$0.042/M). 5 linhas gravadas com probabilidades que discriminam. `JEV_MODEL` voltou pra `jev-latest` (eu tinha
+pinado errado em `jev-1.13`, que não existe na API nativa — `typesafe/jev-1.13` era o id do defapi); `TODO(4b.4):
+pinar` numa versão concreta via `client.models()`. **Idioma (4b.5.1 redefinida):** decisão do aluno — nada de
+lote separado; `langdetect` (seed 0) numa coluna `jobs.language` (migração 012), resumível, Jev roda em todas as
+línguas e o idioma é critério da decisão final (francês não é enviado). Distribuição: en 15202 / de 330 / es 258
+/ pt 154 / fr 109 / … (~6% não-inglês). Isso muda o SPEC §11 ("lote separado" → "coluna de idioma + filtro"),
+a atualizar no fechamento da fase (§2.2).
+
 Última sessão: **2026-10-29**.
 
 ---
