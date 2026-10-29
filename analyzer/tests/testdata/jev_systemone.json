@@ -1,0 +1,9 @@
+{
+  "model": "jev-1.13",
+  "usage": {"input_tokens": 533, "output_tokens": 0},
+  "answers": {
+    "open_to_latam": {"type": "noul", "noul": 0.98},
+    "fully_remote": {"type": "noul", "noul": 0.94},
+    "is_senior_role": {"type": "noul", "noul": 0.99}
+  }
+}
