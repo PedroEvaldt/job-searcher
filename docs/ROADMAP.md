@@ -900,9 +900,45 @@ tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então nã
 
 ---
 
-## Fases seguintes (resumo)
+## Fase 4b — Jev como extrator de features 📍 (aberta 2026-10-28)
 
-**Fase 4b — Jev como extrator de features.** Question set v1, `jev_answers`, piloto com anotação manual, pesos manuais.
+**Objetivo da fase:** usar um LLM (Jev) como extrator de _features atômicas sobre a vaga_ — nunca juiz do
+match — medir a concordância por pergunta contra anotação humana e o custo por mil vagas, e garantir que o
+projeto roda sem chave (cai no cosseno). Invariantes do Jev no §2.1 do `CLAUDE.md` / §11 do `SPEC.md`.
+
+### Tarefa 4b.1 — Question set v1 + onde guardar
+
+- [x] **4b.1.1** Escrever o question set v1: perguntas atômicas em inglês, sobre a vaga (nunca o match),
+      com condição literal, versionado como `question_set_version='qs-v1'`. 3 perguntas `noul` (open_to_latam,
+      fully_remote, is_senior_role), cada uma com `instructions` + `criteria {true,false}`.
+- [x] **4b.1.2** Migração goose da `jev_answers` (PK `(job_id, question_set_version)`). [boilerplate]
+
+### Tarefa 4b.2 — Cliente do Jev (trocável por base URL, testável sem rede)
+
+- [x] **4b.2.1** Cliente do Jev atrás de um `Protocol JevClient`; adaptador #1 = `TypeSafeAdapter` (SDK
+      nativo `system_one`/`Noul`, chave do `JEV_API_KEY`, `model=jev-1.13`). defapi anotado como adaptador
+      #2 futuro. (TypeSafe/defapi não são OpenAI-compatíveis — ver PROGRESS.)
+- [x] **4b.2.2** Resposta gravada em `tests/testdata/jev_systemone.json` → `_parse` testado sem rede.
+- [x] **4b.2.3** Sem `JEV_API_KEY`, `jev_client()` devolve `None` (scorer cai no cosseno); teste prova.
+
+### Tarefa 4b.3 — Piloto, concordância e custo
+
+- [ ] **4b.3.1** Rodar o Jev num piloto, anotar as mesmas perguntas à mão, medir concordância por pergunta.
+- [ ] **4b.3.2** Medir custo por mil vagas (tokens × preço do provider).
+
+### Tarefa 4b.4 — Pesos manuais → score
+
+- [ ] **4b.4.1** Combinar as respostas com pesos manuais num score; o `question_set_version` entra no
+      `model_version`; gravar em `scores` e avaliar no congelado contra `tfidf-v1`/`minilm-l6-v2`.
+
+### Tarefa 4b.5 — PT-BR em lote separado + fechamento
+
+- [ ] **4b.5.1** Fontes em PT-BR avaliadas em lote separado.
+- [ ] **4b.5.2** Débitos da fase + README/docs.
+
+---
+
+## Fases seguintes (resumo)
 
 **Fase 4c — sklearn.** Features do Jev + cosseno + features do código; três abordagens comparadas.
 

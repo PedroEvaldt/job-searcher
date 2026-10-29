@@ -231,7 +231,28 @@ o grupo `embed`, a seção "Embeddings (Phase 4a)" (como rodar `embed_jobs`/`sco
 D49) e o resultado atual no `evaluate`; `README.md` raiz ganhou o bullet da Fase 4a e deixou de prometer
 embeddings como "futuro". **Fase 4a fechada.** Próxima: **Fase 4b** (Jev como extrator de features).
 
-Última sessão: **2026-10-28**.
+**Fase 4b aberta em 2026-10-28** (Jev como extrator de features; detalhe no `ROADMAP.md`). Terreno conferido:
+`jev_answers` ainda não existe (é a 4b.1.2), `config.yaml` hoje é só do coletor Go (o Jev entra lá, lido pelo
+analyzer), SPEC §11 e invariantes §2.1 valendo. Começando pela **4b.1.1** (question set v1).
+
+**2026-10-29 — 4b.1 e 4b.2 fechadas.** Question set v1 (`jobradar/jev/questions.py`): 3 perguntas `noul`
+versionadas (`qs-v1`), cada uma `Question(id, instructions, criteria_true, criteria_false)` — os critérios
+true/false são o contrato de anotação que o humano e o Jev usam. Migração `011_add_jev_answers.sql`
+(`jev_answers`, PK `(job_id, question_set_version)`, `answers jsonb`). Cliente (`jobradar/jev/client.py`):
+`Protocol JevClient` + `JevAnswers(answers: dict[str,float], input_tokens)` + `TypeSafeAdapter` (SDK nativo,
+uma chamada `system_one` com todas as perguntas, `model=jev-1.13` fixo) + `jev_client()` selector (sem
+`JEV_API_KEY` → `None` → cosseno). **Descoberta importante:** nem TypeSafe nem defapi são OpenAI-compatíveis —
+TypeSafe é a API tipada `system_one` (`noul`/`choice`/`score`, devolve probabilidade calibrada); defapi é um
+gateway com schema "Decisions" próprio que serve o mesmo `typesafe/jev-1.13` e devolve `usage.cost` pronto.
+Adotado o design C (interface + adaptadores): TypeSafe nativo como #1, defapi anotado no `client.py` como #2
+futuro. Billing do Jev: **só input tokens** (output free, ~$0.042/M input) — por isso `JevAnswers` guarda só
+`input_tokens`. Smoke real confirmou (open_to_latam 0.98 / fully_remote 0.94 / is_senior_role 0.99, 533 input
+tokens). Testes offline: `_parse` contra resposta gravada em `testdata/` + fallback sem chave. mypy/ruff limpos
+(só o `EXE002` do NTFS). Nota: o `mypy --strict` da árvore toda agora precisa de `--group jev` (typesafe-sdk).
+**Falta 4b.3** (piloto + concordância + custo). Débito aberto: a PK da `jev_answers` não distingue o modelo que
+respondeu (irmão do D49; SPEC fixou assim).
+
+Última sessão: **2026-10-29**.
 
 ---
 
