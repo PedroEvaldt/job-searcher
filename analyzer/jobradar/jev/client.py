@@ -12,15 +12,16 @@ from typesafe_sdk import (
 
 from jobradar.jev.questions import Question
 
-# Pinned on purpose: the model id becomes part of the model_version downstream, so a
-# floating "jev-latest" would make scores non-reproducible across runs.
-JEV_MODEL = "jev-1.13"
+# "jev-latest" floats across releases — fine for the pilot, but the model id becomes part
+# of model_version downstream, so pin it to a concrete version (see client.models()) before
+# trusting scores in the frozen-set comparison. TODO(4b.4): pin.
+JEV_MODEL = "jev-latest"
 
 
 @dataclass(frozen=True)
 class JevAnswers:
     answers: dict[str, float]  # question id -> probability the statement is true (0..1)
-    input_tokens: int          # Jev bills input only; output is free
+    input_tokens: int  # Jev bills input only; output is free
 
 
 class JevClient(Protocol):
