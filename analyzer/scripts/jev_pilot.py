@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -7,13 +8,39 @@ from psycopg.types.json import Json
 from jobradar.boilerplate import clean_descriptions
 from jobradar.jev.client import JevAnswers, jev_client
 from jobradar.jev.questions import QUESTION_SET_VERSION, QUESTIONS
+from scripts.freeze_test_set import OUTPUT_PATH
 
 # Jev bills input tokens only, ~$0.042 per million (output is free).
 INPUT_PRICE_PER_MILLION = 0.042
 
 
-def jev_pilot(n: int) -> int:
-    """Run Jev on the first n live jobs, store the answers, and print the cost per 1000."""
+def jev_pilot(mode: str) -> int:
+    """Run Jev on a set of jobs picked by `mode`, store the answers, and print the cost per 1000.
+
+    "test" is the frozen test set's jobs; "train" is the labelled jobs outside of it;
+    "all" is every live job outside of it.
+    """
+
+    mode_query: dict[str, str] = {
+        "train": """SELECT j.id, j.title, j.description FROM jobs j
+                JOIN labels l ON l.job_id = j.id
+                WHERE j.duplicate_of IS NULL AND j.id != ALL(%s)
+                ORDER BY j.id;""",
+        "test": """SELECT id, title, description FROM jobs
+                WHERE duplicate_of IS NULL AND id = ANY(%s)
+                ORDER BY id;""",
+        "all": """SELECT id, title, description FROM jobs
+                WHERE duplicate_of IS NULL AND id != ALL(%s)
+                ORDER BY id;""",
+    }
+    query = mode_query.get(mode, None)
+    if query is None:
+        print("Invalid mode for jev")
+        return 2
+
+    data = json.loads(OUTPUT_PATH.read_text(encoding="utf-8"))
+    ids = [d["job_id"] for d in data["test_set"]]
+
     database_url = os.getenv("DATABASE_URL")
     if database_url is None:
         print("DATABASE_URL is not set", file=sys.stderr)
@@ -35,12 +62,10 @@ def jev_pilot(n: int) -> int:
                 "SELECT description FROM jobs WHERE duplicate_of IS NULL;"
             ).fetchall()
         ]
-        # The first n live jobs — a small, deterministic pilot sample.
+        # The frozen test set's jobs — a fixed, deterministic sample.
         rows = cur.execute(
-            "SELECT id, title, description FROM jobs "
-            "WHERE duplicate_of IS NULL "
-            "ORDER BY id LIMIT %s;",
-            (n,),
+            query,
+            (ids,),
         ).fetchall()
         if not rows:
             print("no jobs to score")
@@ -87,4 +112,4 @@ def jev_pilot(n: int) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(jev_pilot(5))
+    sys.exit(jev_pilot("all"))
