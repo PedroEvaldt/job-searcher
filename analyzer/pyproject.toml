@@ -5,6 +5,7 @@ description = "Scores job-radar jobs against the CV (Python side of the project)
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "joblib>=1.5.2",
     "langdetect>=1.0.9",
     "psycopg[binary]>=3.3.6",
     "scikit-learn>=1.9.1",
@@ -47,4 +48,9 @@ ignore_missing_imports = true
 # langdetect ships no stubs; same treatment.
 [[tool.mypy.overrides]]
 module = "langdetect.*"
+ignore_missing_imports = true
+
+# joblib ships no py.typed marker; same treatment.
+[[tool.mypy.overrides]]
+module = "joblib.*"
 ignore_missing_imports = true

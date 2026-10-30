@@ -18,6 +18,7 @@ name = "analyzer"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "joblib" },
     { name = "langdetect" },
     { name = "psycopg", extra = ["binary"] },
     { name = "scikit-learn" },
@@ -44,6 +45,7 @@ jev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "joblib", specifier = ">=1.5.2" },
     { name = "langdetect", specifier = ">=1.0.9" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
