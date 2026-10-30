@@ -15,11 +15,10 @@ a anterior fecha.
 | 3a     | Extração no código            | Skills, anos exigidos, salário, idade da vaga; ranking TF-IDF — extrator acerta as skills do currículo |
 | 3b     | Rotulagem e avaliação         | `radar label` (~100 vagas), conjunto de teste congelado, TF-IDF medido nele                            |
 | 4a     | Embeddings                    | sentence-transformers + pgvector vs baseline — sabe qual ganha e por quanto, no conjunto congelado     |
-| 4b     | Jev como extrator de features | Question set v1, `jev_answers` — concordância por pergunta e custo por mil vagas medidos; roda sem chave |
+| 4b     | Jev como extrator de features | Question set v1, `jev_answers` — piloto com checagem visual (concordância formal dispensada, 2026-10-30) e custo por mil vagas medido; roda sem chave |
 | 4c     | sklearn                       | Features do Jev + cosseno + features do código — três abordagens comparadas no conjunto congelado      |
-| 5      | FastAPI e digest              | Primeiro digest chega no Discord sem você rodar nada à mão                                             |
-| 6      | Kubernetes                    | `kubectl apply -k deploy/k8s` sobe tudo do zero                                                        |
-| 7      | Fechamento                    | Outra pessoa roda seguindo só o README                                                                 |
+| 5      | Digest                        | Primeiro digest diário chega no Discord sem você rodar nada à mão                                      |
+| 6      | Fechamento                    | Outra pessoa roda seguindo só o README                                                                 |
 
 **Mudanças aplicadas ao plano original (Sessão Zero):**
 
@@ -30,6 +29,13 @@ a anterior fecha.
 **Revisão de 2026-09-29 (sincronização com o `CLAUDE.md`):** "Etapa" virou "Fase"; Fase 3
 dividida em 3a/3b e Fase 4 em 4a/4b/4c (Jev entra na 4b); "rodar 7 dias sozinho" voltou a
 ser o critério da Fase 1; rotulagem concentrada na 3b.
+
+**Revisão de 2026-10-30:** Kubernetes (antiga Fase 6) descartado — sem onde rodar um cluster de
+verdade além do próprio Pi, que já roda o compose (ver `docs/SPEC.md` §9). FastAPI/`cmd/api`
+(previstos pra Fase 5) também saíram, sem necessidade concreta. Digest passou de semanal pra
+diário. Com isso, Prometheus (que tinha ido pra "Fase 6, onde existe scraper de verdade" na
+nota acima) perde o destino — fica fora do roadmap; `runs` continua sendo a observabilidade do
+projeto, permanentemente, não só "até lá". Fase 7 (Fechamento) renumerada pra **Fase 6**.
 
 ---
 
@@ -900,11 +906,12 @@ tamanho. O modelo é pré-treinado — não há `fit` sobre o corpus, então nã
 
 ---
 
-## Fase 4b — Jev como extrator de features 📍 (aberta 2026-10-28)
+## Fase 4b — Jev como extrator de features ✅ (aberta 2026-10-28, fechada 2026-10-30)
 
 **Objetivo da fase:** usar um LLM (Jev) como extrator de _features atômicas sobre a vaga_ — nunca juiz do
-match — medir a concordância por pergunta contra anotação humana e o custo por mil vagas, e garantir que o
-projeto roda sem chave (cai no cosseno). Invariantes do Jev no §2.1 do `CLAUDE.md` / §11 do `SPEC.md`.
+match — checar visualmente a coerência das respostas do piloto (concordância formal dispensada por decisão
+de 2026-10-30, veja `PROGRESS.md`), medir o custo por mil vagas, e garantir que o projeto roda sem chave (cai
+no cosseno). Invariantes do Jev no §2.1 do `CLAUDE.md` / §11 do `SPEC.md`.
 
 ### Tarefa 4b.1 — Question set v1 + onde guardar
 
@@ -921,14 +928,18 @@ projeto roda sem chave (cai no cosseno). Invariantes do Jev no §2.1 do `CLAUDE.
 - [x] **4b.2.2** Resposta gravada em `tests/testdata/jev_systemone.json` → `_parse` testado sem rede.
 - [x] **4b.2.3** Sem `JEV_API_KEY`, `jev_client()` devolve `None` (scorer cai no cosseno); teste prova.
 
-### Tarefa 4b.3 — Piloto, concordância e custo
+### Tarefa 4b.3 — Piloto, checagem visual e custo
 
-- [ ] **4b.3.1** Rodar o Jev num piloto, anotar as mesmas perguntas à mão, medir concordância por pergunta.
-- [ ] **4b.3.2** Medir custo por mil vagas (tokens × preço do provider).
+- [x] **4b.3.1** Rodar o Jev num piloto (N=5) e checar visualmente a coerência das respostas. Concordância
+      formal contra rótulo humano **dispensada por decisão do aluno em 2026-10-30** (custo/benefício: N=5 dá
+      número grosseiro demais pra confiar; checagem visual aceita como critério — veja `PROGRESS.md`).
+- [x] **4b.3.2** Medir custo por mil vagas (tokens × preço do provider).
 
 ### Tarefa 4b.4 — Pesos manuais → score
 
-- [ ] **4b.4.1** Combinar as respostas com pesos manuais num score; o `question_set_version` entra no
+- [x] **4b.4.1** Rodar o Jev nas 75 vagas do conjunto congelado (`frozen.json`) e gravar em `jev_answers`
+      (hoje só tem as 5 do piloto — nenhuma das 75 está coberta, exceto coincidência).
+- [x] **4b.4.2** Combinar as 3 respostas com pesos manuais num score; o `question_set_version` entra no
       `model_version`; gravar em `scores` e avaliar no congelado contra `tfidf-v1`/`minilm-l6-v2`.
 
 ### Tarefa 4b.5 — Idioma e fechamento
@@ -937,16 +948,73 @@ projeto roda sem chave (cai no cosseno). Invariantes do Jev no §2.1 do `CLAUDE.
       resumível. Substitui o "lote separado" do SPEC §11: o Jev roda em todas as línguas, e o idioma vira
       critério da decisão final (ex.: francês não é enviado). Distribuição: en 15202, de 330, es 258, pt 154,
       fr 109, … (~6% não-inglês). **Atualizar o SPEC §11** no fechamento.
-- [ ] **4b.5.2** Débitos da fase + README/docs.
+- [x] **4b.5.2** Débitos da fase + README/docs.
+
+---
+
+## Fase 4c — sklearn ✅ (aberta e fechada 2026-10-30)
+
+**Objetivo da fase:** treinar um modelo combinado (features do Jev + cosseno + features do código) com os
+175 rótulos de treino (250 total − 75 congelados), avaliar no congelado ao lado de `tfidf-v1`/`minilm-l6-v2`/
+`jev-manual-qs-v1`, e entender quais features pesam mais. Invariante §2.1: o congelado nunca entra em treino
+nem em ajuste de hiperparâmetro — o split treino/teste já existe (`frozen.json`), é só não cruzar.
+
+### Tarefa 4c.1 — Features de treino
+
+- [x] **4c.1.1** Rodar o Jev nos 175 jobs de treino (rotulados, fora do congelado) e gravar em `jev_answers`
+      — terceira generalização do mesmo fluxo de `jev_pilot.py`/`score_jev.py`, trocando a fonte dos ids.
+- [x] **4c.1.2** Montar a matriz de features dos 250 jobs rotulados: as 3 respostas do Jev + o cosseno
+      (`minilm-l6-v2`) + as features de código da 3a (skills, anos exigidos, salário, idade da vaga) + o
+      rótulo `would_apply`.
+
+### Tarefa 4c.2 — Treinar e avaliar o modelo combinado
+
+- [x] **4c.2.1** Treinar um `LogisticRegression` (ou equivalente) nas features dos 175 de treino, com
+      `random_state` fixo e regularização escolhida por validação cruzada (invariante §2.1 — poucos
+      rótulos, poucas colunas).
+- [x] **4c.2.2** Avaliar no congelado e comparar numa tabela só: `tfidf-v1`, `minilm-l6-v2`,
+      `jev-manual-qs-v1`, e o modelo combinado novo.
+
+### Tarefa 4c.3 — Fechamento
+
+- [x] **4c.3.1** Explicar os 3 maiores coeficientes (por `|peso|`) do modelo combinado — o que cada um diz
+      sobre o que o modelo aprendeu a valorizar.
+- [x] **4c.3.2** Débitos da fase (D47 confiança crua, D48 longest-match, D50 versionamento de modelo/pesos)
+      + README/docs.
+
+---
+
+## Fase 5 — Digest 📍 (aberta 2026-10-30)
+
+**Objetivo da fase:** `jev-manual-qs-v1` (o score que venceu na 4c, 0.72 no congelado) chegando no Discord
+uma vez por dia, sem servidor HTTP (FastAPI/`cmd/api` tirados do escopo em 2026-10-30) e sem Kubernetes
+(descartado em 2026-10-30) — só `docker compose up` no Raspberry Pi. `sklearn-combined-v1` fica de lado
+(perdeu a comparação); volta se "melhorar o modelo" (backlog) mudar esse resultado.
+
+### Tarefa 5.1 — Jev em escala, em lotes e retomável
+
+- [ ] **5.1.1** Reescrever o fluxo de pontuação do Jev (`jev_pilot.py`/`score_jev.py`, hoje scripts
+      de pesquisa de uma rodada só) num processo de produção: lotes com commit incremental, retomável
+      se cair no meio, pronto pra rodar todo dia sobre as vagas novas que o `collector` traz.
+
+### Tarefa 5.2 — `radar digest`
+
+- [ ] **5.2.1** Comando novo em `radar`: lê `scores` pelo `model_version` que vier do `config.yaml`
+      (não fixo no binário — é o que torna trocar de modelo depois uma mudança de config, não de
+      código), filtra pela nota mínima, monta a mensagem.
+- [ ] **5.2.2** Manda a mensagem pro Discord via `DISCORD_WEBHOOK_URL`; não repete vaga já enviada.
+
+### Tarefa 5.3 — Agendamento
+
+- [ ] **5.3.1** Uma vez por dia, em sequência: pontuar vagas novas com Jev (5.1) → `radar digest` (5.2).
+      Decidir o mecanismo (cron no Pi vs. laço próprio, mesmo padrão do `collector`).
+
+### Tarefa 5.4 — Fechamento
+
+- [ ] **5.4.1** Débitos da fase + README/docs.
 
 ---
 
 ## Fases seguintes (resumo)
 
-**Fase 4c — sklearn.** Features do Jev + cosseno + features do código; três abordagens comparadas.
-
-**Fase 5 — FastAPI e digest.** Digest semanal no Discord chegando sozinho.
-
-**Fase 6 — Kubernetes.** Imagens multi-stage/multi-arch, minikube.
-
-**Fase 7 — Fechamento.** CI, painel de tendências, README verificado por outra pessoa.
+**Fase 6 — Fechamento.** CI, painel de tendências, README verificado por outra pessoa.

@@ -2,7 +2,7 @@
 
 A self-hosted aggregator of international remote job postings. It collects jobs from
 public job boards, stores them in Postgres, and (in later phases) ranks each one against
-your résumé and sends you a weekly digest on Discord.
+your résumé and sends you a daily digest on Discord.
 
 Single-user by design: you clone it, run it on your own machine, and nothing leaves it.
 
@@ -278,8 +278,22 @@ uv run --group dev mypy --strict jobradar/ scripts/ tests/
   (`model_version='minilm-l6-v2'`), then compared on the frozen set: `minilm-l6-v2 ROC AUC = 0.46`
   vs. `tfidf-v1 0.51`. Raw cosine against the CV — TF-IDF or embedding — does not rank the jobs
   worth applying to; that sends the next phase to richer, Jev-extracted features.
+- ✅ **Phase 4b:** an LLM (Jev) as a feature extractor, never the match judge — a 3-question set
+  (`open_to_latam`, `fully_remote`, `is_senior_role`), a swappable client that falls back to the
+  cosine score with no API key, and job language detected with `langdetect` (`jobs.language`).
+  Cost measured at **~$0.05 per 1000 jobs**. The 3 answers combined with manual weights chosen
+  before looking at the frozen set score **`jev-manual-qs-v1` ROC AUC = 0.72** on the same
+  75-job set — well above both Phase 4a baselines, on a thin 5-positive sample. See
+  [`analyzer/README.md`](analyzer/README.md#jev-phase-4b).
+- ✅ **Phase 4c:** a `sklearn` `LogisticRegression` learning weights over every feature at once
+  (Jev answers + `minilm-l6-v2` cosine + the Phase 3a code-extracted features), trained on the
+  175 non-frozen labelled jobs, `C` chosen by cross-validation on that fold only. Honest result:
+  **`sklearn-combined-v1` ROC AUC = 0.65**, *below* the hand-picked `jev-manual-qs-v1` (0.72) —
+  the top coefficient belongs to `cosine_minilm`, a feature with no standalone signal (Phase 4a),
+  likely overfit at this sample size. See [`analyzer/README.md`](analyzer/README.md#sklearn-the-combined-model-phase-4c).
 
-Later phases add a weekly Discord digest and a Kubernetes deployment.
+A later phase adds the daily Discord digest. There is no Kubernetes deployment planned —
+`docker compose up` on a Raspberry Pi is the only deploy target.
 
 ## License
 

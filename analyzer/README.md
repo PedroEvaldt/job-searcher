@@ -116,14 +116,99 @@ uv run --env-file ../.env python -m scripts.evaluate minilm-l6-v2     # just one
 Current result on the frozen set:
 
 ```
-tfidf-v1      ROC AUC=0.5086  n=75  pos=5
-minilm-l6-v2  ROC AUC=0.4600  n=75  pos=5
+tfidf-v1          ROC AUC=0.5086  n=75  pos=5
+minilm-l6-v2      ROC AUC=0.4600  n=75  pos=5
+jev-manual-qs-v1  ROC AUC=0.7200  n=75  pos=5
 ```
 
 Neither raw cosine against the CV ranks the jobs you would apply to: TF-IDF sits at chance, the
 MiniLM embedding below it. With only 5 positives in 75 the gap is within noise — the honest
 reading is "no signal", not "TF-IDF beats embeddings". That is why Phase 4b turns to features
-extracted from the job text (Jev) instead of raw similarity.
+extracted from the job text (Jev) instead of raw similarity — and `jev-manual-qs-v1` (see below)
+clears both by a wide margin, though still on a thin 5-positive sample.
+
+## Jev (Phase 4b)
+
+An LLM used as a **feature extractor**, never as the match judge: it answers a fixed set of
+atomic, literal yes/no questions about the job posting, never about the job and the CV together.
+
+- `jobradar/jev/questions.py` — the question set (`QUESTION_SET_VERSION = "qs-v1"`), each
+  `Question` carrying `instructions` plus a `criteria_true`/`criteria_false` pair that is the
+  annotation contract between a human and the Jev. v1 asks `open_to_latam`, `fully_remote`,
+  `is_senior_role`.
+- `jobradar/jev/client.py` — `Protocol JevClient` behind the base-URL-swappable provider; adapter
+  #1 is `TypeSafeAdapter` (native SDK `system_one`). `jev_client()` returns `None` when
+  `JEV_API_KEY` is unset, so the scorer falls back to the cosine score — a test proves this.
+- `db/migrations/011_add_jev_answers.sql` — `jev_answers (job_id, question_set_version, answers
+  jsonb)`, PK `(job_id, question_set_version)`.
+- `scripts/jev_pilot.py` — runs the Jev on the frozen test set's jobs (boilerplate-cut text,
+  `Title: ...\n\n...`), upserts the answers into `jev_answers`, and prints the real cost per 1000
+  jobs (Jev bills input tokens only).
+- `scripts/score_jev.py` — combines the 3 answers with manual weights (`WEIGHT`, chosen before
+  ever looking at the frozen set's score — tuning them against it would be the same invariant
+  violation as training on it) into one score per job, upserted into `scores` under
+  `model_version = 'jev-manual-qs-v1'`.
+
+```bash
+uv run --group jev --env-file ../.env python -m scripts.jev_pilot  # fill jev_answers
+uv run --env-file ../.env python -m scripts.score_jev              # write jev-manual-qs-v1 scores
+```
+
+Measured cost: **~$0.0524 per 1000 jobs** (75 jobs, 93539 input tokens). The question set's
+answers aren't cross-checked against a full hand-labelled agreement measurement (visual spot
+check accepted instead — see `docs/PROGRESS.md`, 2026-10-30); the `jev-manual-qs-v1` score is a
+disposable diagnostic, not a `model_version` meant to survive into production — Phase 4c decides
+whether and how the Jev features earn a permanent place. `jev_answers` doesn't record which
+concrete Jev model answered (`JEV_MODEL` floats on `jev-latest`, debt D50).
+
+## sklearn: the combined model (Phase 4c)
+
+Three standalone signals exist by Phase 4b: `tfidf-v1`, `minilm-l6-v2` (both at or below chance —
+Phase 4a) and `jev-manual-qs-v1` (0.72, manual weights). Phase 4c asks whether *learning* the
+weights, over all the features at once (Jev answers + cosine + the code-extracted features from
+Phase 3a), beats picking 3 numbers by hand.
+
+- `scripts/build_features.py` — one feature row per labelled job (250), joining `jev_answers`,
+  `scores` (`minilm-l6-v2`), and `job_skills` (aggregated to `skills_matched = SUM(confidence)` —
+  one column, not one per skill; invariant §9, few labels mean few columns). `years_required` and
+  `salary_usd_year` are computed on the fly (`jobradar/experience.py`, `jobradar/salary.py` — never
+  persisted as columns before this). Writes `data/features.json`. The train/test split is decided
+  once, by `data/frozen.json` — this file holds all 250 so that decision is never duplicated.
+- `scripts/train_model.py` — the 175 training jobs (everything in `features.json` not in the
+  frozen set) through a `Pipeline(SimpleImputer → StandardScaler → LogisticRegression)`.
+  `GridSearchCV(scoring="roc_auc", cv=5)` picks `C` by cross-validation on the training fold only
+  — the frozen set never influences this choice. Saves the whole fitted pipeline (imputer, scaler
+  and model together, so scoring later reuses exactly what training learned) to
+  `data/jev_sklearn_model.pkl`.
+- `scripts/score_sklearn.py` — loads that pipeline, scores the 75 frozen jobs, writes `scores`
+  under `model_version = 'sklearn-combined-v1'`.
+- `scripts/explain_model.py` — the 3 largest-magnitude coefficients of the trained model.
+
+```bash
+uv run --env-file ../.env python -m scripts.build_features   # writes data/features.json
+uv run --env-file ../.env python -m scripts.train_model      # writes data/jev_sklearn_model.pkl
+uv run --env-file ../.env python -m scripts.score_sklearn     # writes sklearn-combined-v1 scores
+uv run --env-file ../.env python -m scripts.explain_model     # top-3 coefficients
+```
+
+Result on the frozen set, all four approaches side by side:
+
+```
+sklearn-combined-v1  ROC AUC=0.6486  n=75  pos=5
+jev-manual-qs-v1      ROC AUC=0.7200  n=75  pos=5
+tfidf-v1               ROC AUC=0.5086  n=75  pos=5
+minilm-l6-v2           ROC AUC=0.4600  n=75  pos=5
+```
+
+An honest, unexpected result: the learned combination scores **below** the 3 hand-picked Jev
+weights. The 3 largest coefficients explain why — `open_to_latam` (+0.98) and `is_senior_role`
+(−0.89) agree in direction with the manual weights (real signal), but the single largest,
+`cosine_minilm` (+1.04), belongs to a feature with no standalone ranking power at all
+(`minilm-l6-v2` alone scored 0.46, below chance, in Phase 4a). With 175 training jobs and a
+handful of positives, `GridSearchCV` picked a weakly-regularized `C=100` — likely letting a noisy
+feature pick up a coefficient it hasn't earned. The takeaway isn't "sklearn is worse than
+hand-picked weights" in general; it's that this particular combination, at this sample size,
+overfits a feature that was already known to carry no signal on its own.
 
 ## Production helpers
 

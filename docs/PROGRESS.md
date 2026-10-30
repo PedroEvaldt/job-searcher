@@ -263,7 +263,221 @@ línguas e o idioma é critério da decisão final (francês não é enviado). D
 / pt 154 / fr 109 / … (~6% não-inglês). Isso muda o SPEC §11 ("lote separado" → "coluna de idioma + filtro"),
 a atualizar no fechamento da fase (§2.2).
 
-Última sessão: **2026-10-29**.
+**2026-10-30 — 4b.3.2 fechada: custo por mil medido.** Resultado real do `jev_pilot.py` (N=5):
+`5 jobs: 6304 input tokens, $0.000265 total -> ~$0.0530 per 1000 jobs`.
+
+**2026-10-30 — `/replan`: concordância formal da 4b.3.1 dispensada.** Decisão do aluno: aceitar a checagem
+visual das 5 respostas do piloto (já feita, "coerentes") como critério de aceite, em vez de rotular à mão e
+medir concordância por pergunta. Motivo que o aluno pesou: com N=5 o número sairia grosseiro demais (cada
+vaga = 20% do resultado) pra justificar o custo de fazer a medição formal agora. Critério de aceite da Fase
+4b atualizado no `ROADMAP.md` e no `CLAUDE.md` (tabela de fases, linha 4b) pra "checagem visual" em vez de
+"concordância medida"; **4b.3.1 fechada** nesses termos. Nenhum dado foi re-rotulado nem descartado — a
+decisão é sobre o critério de aceite, não sobre o piloto em si.
+
+**2026-10-30 — 4b.4.1 fechada: Jev rodado no conjunto congelado.** `jev_pilot.py` generalizado pra ler os
+75 `job_id` do `test_set` de `frozen.json` (mesmo padrão de `evaluate.py`) em vez do `ORDER BY id LIMIT n`;
+`n`/`LIMIT` removidos (ficaram mortos depois do filtro por id). Rodado de verdade: `75 jobs: 93539 input
+tokens, $0.003929 total -> ~$0.0524 per 1000 jobs`; `jev_answers` com as 75 vagas do congelado cobertas
+(conferido 75/75, 0 faltando). `ruff`/`mypy --strict`/51 testes limpos.
+
+**2026-10-30 — `/replan` parcial: 4b.4.1/4b.4.2 avaliam o Jev sozinho, por diagnóstico (não vai pra produção
+como `model_version`).** O aluno questionou medir o Jev "em competição" com `tfidf-v1`/`minilm-l6-v2`, já
+que ele é pensado como complemento, nunca ranking solo. Decisão: a medição solo continua, mas como
+diagnóstico de sinal (mesmo método usado em 4a pra TF-IDF/MiniLM), não como candidato a `model_version`
+definitivo — o `jev-manual-qs-v1` é descartável, existe só pra saber se há sinal antes de investir na 4c.
+
+**2026-10-30 — 4b.4.2 fechada: Jev manual bate os dois baselines da 4a.** `analyzer/scripts/score_jev.py`
+combina as 3 respostas do Jev com pesos escolhidos pelo aluno **antes** de rodar qualquer avaliação
+(`fully_remote=0.7, open_to_latam=0.6, is_senior_role=-0.7` — pesos dele, não tocados pelo mentor),
+grava em `scores` como `jev-manual-qs-v1`. O aluno escreveu a lógica de peso e a estrutura do script
+(copiada de `score_embeddings.py`); o mentor corrigiu, a pedido explícito ("ajeite o que falta"), os bugs
+mecânicos que impediam rodar: faltava `.fetchall()` (`rows` era o cursor, `TypeError: 'Cursor' object is
+not subscriptable` — mypy também achou), `VALUE` em vez de `VALUES` (erro de sintaxe SQL), sem `ON CONFLICT`
+(quebraria na PK `(job_id, model_version)` numa segunda rodada), `question_set_version` inferido de
+`rows[0][1]` em vez de filtrado explicitamente, nome da função (`score_embeddings`, herdado do copy-paste),
+ordem de import. Resultado real, conferido (`uv run python -m scripts.evaluate jev-manual-qs-v1 tfidf-v1
+minilm-l6-v2`): **`jev-manual-qs-v1` ROC AUC=0.72 × `tfidf-v1` 0.5086 × `minilm-l6-v2` 0.4600 (n=75, pos=5)**
+— o Jev sozinho bate os dois baselines por uma margem grande. **Cautela estatística, no mesmo padrão já
+usado nesta fase:** 5 positivos em 75 é pouco; 0.72 é promissor, não definitivo. Idempotência conferida
+(2 rodadas, 75 linhas as duas vezes). `ruff`/`mypy --strict`/51 testes limpos. Rodado nesta ordem (pesos
+escolhidos → só depois avaliado) — sem ajuste de peso após ver o número, invariante do congelado preservado.
+
+**2026-10-30 — 4b.5.2 e Fase 4b fechadas** (feito pelo mentor, a pedido). Auditoria de débitos: **D10 pago**
+(mojibake já corrigido na 4a, entidades HTML já decodificadas desde a 2.3, salário já tratado na 3a.3.3,
+`slug` morto/sem dono); **D45 pago** (`langdetect` substitui o detector heurístico que confundia PT×ES, e o
+idioma virou critério direto da decisão final, não mais sinal fraco atrás da localização da Himalayas); **D49
+continua aberto** (fora do escopo da 4b); **D50 aberto, novo** — `jev_answers`/`scores` não guardam qual
+modelo Jev concreto respondeu (`JEV_MODEL=jev-latest`, flutuante) nem quais pesos manuais geraram o score,
+reagendado pra **Fase 4c** (quando os pesos deixarem de ser manuais é o momento de versionar isso e o D49
+juntos). `docs/SPEC.md` §11 e `CLAUDE.md` §2.1 atualizados: "lote PT-BR separado" → "coluna de idioma como
+critério da decisão final". READMEs (`analyzer/README.md` + raiz) ganharam a seção da Fase 4b: cliente Jev,
+question set, piloto, `score_jev.py`, custo medido e o resultado `jev-manual-qs-v1 ROC AUC=0.72`.
+
+**Fase 4c aberta em 2026-10-30** (sklearn sobre as features do Jev + cosseno + features do código; roadmap
+detalhado no `ROADMAP.md`: 4c.1 features de treino → 4c.2 treinar/avaliar o modelo combinado → 4c.3
+fechamento). Começando pela **4c.1.1**.
+
+**2026-10-30 — 4c.1.1 fechada: Jev rodado nos 175 jobs de treino.** `jev_pilot.py` generalizado uma
+terceira vez: função única `jev_pilot(mode)` com um dicionário de queries por `"train"/"test"/"all"` (ideia
+do aluno, resolve a duplicação de corpo que existia antes entre as versões `_test`/`_train`). Três rodadas
+de bugs reais até ficar certo, corrigidos pelo mentor a pedido explícito ("ajeite tudo isso"): (1ª) filtro
+`id != ANY(%s)` não exclui nada (`!= ANY` é "diferente de pelo menos um elemento", quase sempre verdadeiro)
+— rodou de verdade contra a API pros 250 rotulados (não 175), sobrescrevendo de novo as respostas dos 75 do
+congelado; (2ª) depois de trocar pra `!= ALL` (operador certo), `ids` continuava vindo só do `frozen.json`
+pra qualquer `mode`, então `"train"` pedia as mesmas 75 vagas do `"test"`; (3ª) faltava o `JOIN labels` —
+sem ele, `"train"`/`"all"` bateriam em **16129** vagas vivas (toda vaga fora do congelado, não só as
+rotuladas) — conferido no banco antes de rodar, sem gastar API. Import não usado (`contextlib.nullcontext`)
+e ordem de imports também corrigidos. Rodado de verdade, com a árvore limpa (`ruff`/`mypy --strict`/51
+testes): **`175 jobs: 240402 input tokens, $0.010097 total -> ~$0.0577 per 1000 jobs`**. Conferido no banco:
+`jev_answers` (`qs-v1`) com 250 linhas — 75 do congelado + 175 de treino, sem sobreposição, sem furo.
+**Próxima: 4c.1.2** (montar a matriz de features dos 250 rotulados: Jev + cosseno + código).
+
+**2026-10-30 — achado fora de tarefa: banco local desatualizado.** Ao montar a 4c.1.2, `salary_min`/
+`posted_at` apareceram `NULL` em **toda** a tabela `jobs` (16204/16204), não só nas rotuladas — a 3a.3
+(extração de salário/`posted_at` em Go) nunca tinha sido retroaplicada neste banco local (forward-only,
+precisa do `-renormalize`; a última coleta aqui é de 2026-10-19, antes da 3a.3 existir). Rodado `go run .
+-renormalize` (offline, reprocessa `raw_jobs.payload` já salvo, sem rede): 16.800 vagas renormalizadas.
+Resultado nas 250 rotuladas: `posted_at` 243/250, `salary_min` 72/250 (o resto é ausência real — Remotive
+não extrai salário, defeito já conhecido da 3a.3.3, não bug).
+
+**2026-10-30 — 4c.1.2 fechada: `analyzer/scripts/build_features.py`.** Script novo: `labels` join `jobs`
+(salário/idade) + `jev_answers` (`qs-v1`) + `scores` (`minilm-l6-v2`) + uma subquery agregando `job_skills`
+(`SUM(confidence) GROUP BY job_id`, decisão do aluno depois de discutir por que uma lista de
+`{skill: confidence}` por vaga não serve de feature pra um modelo linear com N pequeno — ver invariante §9).
+Grava `analyzer/data/features.json`, 250 linhas. O aluno escreveu a estrutura e a lógica de agregação de
+skills (a parte certa, de propósito); o mentor corrigiu, a pedido explícito ("ajeite o que falta"), uma
+cascata de bugs mecânicos que só apareciam um depois do outro ao rodar de verdade: ids lidos do próprio
+arquivo de saída em vez do `frozen.json` (`FileNotFoundError`); `l.id` inexistente (`labels.job_id` é a PK);
+filtro de exclusão dos 75 do congelado que não devia existir (o cartão pedia os 250, com o `frozen.json`
+decidindo o split depois); `;` sobrando dentro de uma subquery (erro de sintaxe SQL); `Decimal` (tipo do
+Postgres `numeric`) multiplicado por `float` dentro de `normalize_salary` (`TypeError`); `INNER JOIN` com a
+subquery de skills descartando as 158 vagas com zero skill batida (trocado por `LEFT JOIN` + `COALESCE(...,
+0)` — zero skills é um valor real, não ausência). Resultado final conferido: 250 linhas, nulos só em
+`years_required` (209, regex não achou), `salary_usd_year` (178, ausência real) e `job_age_days` (6, sem
+`posted_at`) — `skills_matched` nunca nulo. `ruff`/`mypy --strict`/51 testes limpos. **Próxima: Fase 4c,
+Tarefa 4c.2** (treinar e avaliar o modelo combinado).
+
+**2026-10-30 — 4c.2.1 fechada: `analyzer/scripts/train_model.py`.** O aluno escreveu a estrutura inteira
+(separar treino do congelado, montar a matriz, `has_salary` como flag de ausência de salário — a decisão
+discutida antes —, `GridSearchCV` com `scoring="roc_auc"` escolhendo `C`, `joblib.dump`). Bug real que ele
+mesmo achou e corrigiu sozinho, depois de uma pergunta guiada: o corte `[:-2]` tirava `has_salary` da matriz
+de features e deixava `job_id` dentro dela como se fosse preditor — um vazamento clássico (o id cresce com
+a ordem de rotulagem, em lotes ao longo de dias diferentes). Resto corrigido pelo mentor a pedido explícito
+("ajeite a 1 e a 3"): `test_set`/`train_set` reaproveitando o mesmo nome de variável pra tipos diferentes
+(lista → `ndarray`, achado pelo `mypy --strict`); o código morto de avaliação no congelado
+(`x_test_set`/`y_test_set`, nunca usados — virou a decisão de arquitetura "avaliação é trabalho da 4c.2.2,
+via `scores`/`evaluate.py`, não um bloco paralelo aqui"); `LogisticRegression` sozinho dava
+`ConvergenceWarning` (colunas em escalas bem diferentes — salário em centenas/milhares vs. probabilidades
+0–1 vs. anos 0–20) — virou um `sklearn.pipeline.Pipeline` (`SimpleImputer` → `StandardScaler` →
+`LogisticRegression`), que resolve a escala **e** a persistência (um objeto só, treinado e salvo junto,
+sem reaplicar mediana/escala manualmente na 4c.2.2). Caminho do modelo: `analyzer/data/jev_sklearn_model.pkl`.
+`joblib` virou dependência explícita (`pyproject.toml`) com override de `mypy` (sem stub, mesmo tratamento
+de `sklearn`/`sentence-transformers`/`langdetect`). Resultado real: **`Best C: 100`**, sem warning, 51
+testes/`ruff`/`mypy --strict` limpos. **Próxima: 4c.2.2** (avaliar o modelo salvo no congelado, gravar em
+`scores`, comparar com `tfidf-v1`/`minilm-l6-v2`/`jev-manual-qs-v1`).
+
+**2026-10-30 — 4c.2.2 fechada: veredito honesto da Fase 4c.** `analyzer/scripts/score_sklearn.py` carrega o
+pipeline salvo, roda `predict_proba` nas 75 vagas do congelado (mesma ordem de `COLS`, `has_salary`
+recalculado igual ao treino) e grava em `scores` sob `sklearn-combined-v1`. Bugs mecânicos corrigidos pelo
+mentor a pedido ("ajeite o que faltar", depois do aluno já ter corrigido vários sozinho): faltava
+`import numpy as np` (`mypy`/`ruff` acharam antes de rodar), função sem `return` no caminho de sucesso
+(assinatura promete `int`), ordem de imports, e o `score` gravado sem `float()` (vem como `numpy.float64`
+do `predict_proba`). Resultado real, `evaluate.py` com os 4 juntos (n=75, pos=5):
+
+```
+sklearn-combined-v1  ROC AUC=0.6486
+jev-manual-qs-v1      ROC AUC=0.7200
+tfidf-v1              ROC AUC=0.5086
+minilm-l6-v2          ROC AUC=0.4600
+```
+
+**Achado honesto, não o esperado:** o modelo combinado (Jev + cosseno + features de código, pesos
+aprendidos por `sklearn`) fica **abaixo** do score manual do Jev sozinho (4b.4.2). Hipóteses a investigar
+na 4c.3 (não decidido ainda): (a) 175 exemplos de treino com poucos positivos é pouco pra `LogisticRegression`
+aprender pesos melhores que uma escolha manual de 3 números; (b) `cosine_minilm`/features de código (que
+isoladamente não têm sinal — 4a mediu `minilm-l6-v2` em 0.46) podem estar diluindo o peso das 3 perguntas
+do Jev, que são o sinal real; (c) `StandardScaler`+regularização podem estar encolhendo demais os
+coeficientes do Jev. `ruff`/`mypy --strict`/51 testes limpos. **Próxima: 4c.3** (explicar os 3 maiores
+coeficientes do modelo combinado — é aí que a hipótese (b)/(c) se confirma ou não — e fechar a fase).
+
+**2026-10-30 — 4c.3.1 fechada: hipótese confirmada, de um jeito específico.** `analyzer/scripts/explain_model.py`
+(escrito pelo mentor a pedido explícito do aluno — "faça para mim") carrega o pipeline, pega
+`model.coef_[0]` do passo `"model"`, ordena por módulo. Resultado real (rodado pelo aluno):
+`cosine_minilm +1.0421`, `open_to_latam +0.9781`, `is_senior_role -0.8893`. Leitura: `open_to_latam` e
+`is_senior_role` concordam em direção com os pesos manuais da 4b.4.2 (`+0.6`/`-0.7`) — essas duas perguntas
+do Jev carregam sinal real. O suspeito é `cosine_minilm`: ganhou o **maior** peso do modelo combinado sendo
+uma feature sem sinal isolado comprovado (`minilm-l6-v2` sozinho = ROC AUC 0.46 na 4a, abaixo do acaso) —
+sintoma de overfit com N pequeno (175 treino, ~20-30 positivos, `C=100` escolhido pela CV é regularização
+fraca). Não é "cosseno/código diluindo o Jev" de forma genérica — é um feature especificamente ruidoso
+pegando peso que não devia, o que explica o combinado (0.6486) ficar abaixo do Jev manual sozinho (0.72).
+**2026-10-30 — 4c.3.2 e Fase 4c fechadas** (feito pelo mentor, a pedido). Débitos: **D47/D48 seguem abertos**,
+reagendados pro **backlog** (`skills_matched` virou feature na 4c mas não apareceu no top-3 de coeficientes,
+não deu pra confirmar se a normalização/longest-match mudaria o resultado). **D50 pago parcialmente**: a
+metade "pesos" resolvida por convenção (`model_version` versionado à mão por método —
+`jev-manual-qs-v1`/`sklearn-combined-v1` — trocar o método exige nome novo, nunca sobrescrever); a metade
+"qual `JEV_MODEL` respondeu" (`jev-latest` flutuante) continua aberta, reagendada pra **Fase 5** (quando o
+digest em produção tornar isso operacionalmente importante). READMEs (`analyzer/README.md` + raiz) ganharam
+a seção da Fase 4c inteira: os 4 scripts (`build_features`/`train_model`/`score_sklearn`/`explain_model`),
+a tabela final de 4 `model_version`, e o achado honesto por escrito. **Fase 4c fechada — é o fim da Fase 4
+(embeddings → Jev → combinado aprendido).** Próxima: **Fase 5** (digest semanal no Discord).
+
+**2026-10-30 — `/replan`: FastAPI e `cmd/api` tirados do escopo (Fase 5 e geral).** Discussão: o `SPEC.md`
+previa duas superfícies HTTP nascendo na Fase 5 (`cmd/api` em Go, FastAPI no `analyzer`) sem uma necessidade
+concreta — "página mínima de config" era condicional desde a Sessão Zero, e uma página pra navegar scores
+não ganha nada sobre `psql` pra um projeto single-tenant onde o próprio dono já é fluente em SQL. O produto
+já tem um mecanismo de visualização deliberado (o digest — `SPEC.md` §8 já descartava notificação em tempo
+real de propósito). Decisão: **nenhuma das duas nasce.** A Fase 5 vira só `radar digest` (disparado por
+agendamento, sem servidor) + `config.yaml` (nota mínima, horário) + `DISCORD_WEBHOOK_URL`. `SPEC.md`
+atualizado (§1, §2, §3 diagrama, §4.2, §6, §7, §8), `ROADMAP.md` e `CLAUDE.md` (tabela de fases) também.
+Se uma necessidade concreta aparecer depois (ex.: health check HTTP), vira decisão própria naquele momento,
+pequena e justificada — não bagagem herdada da Sessão Zero.
+
+**2026-10-30 — `/replan`: Kubernetes descartado, digest vira diário.** Motivo do aluno: não tem onde
+rodar um cluster de verdade além do próprio Raspberry Pi, que já roda o compose (validado desde a Fase 1
+— 7 dias sozinho, 3 quedas de energia atravessadas). A antiga Fase 6 (Kubernetes, multi-arch, minikube)
+nasceu na Sessão Zero só por portfólio/aprendizado (`SPEC.md` §9 já era explícito sobre isso), nunca uma
+necessidade funcional — descartada sem perda pro produto. **Fase 7 (Fechamento) renumerada pra Fase 6.**
+Efeito colateral: Prometheus, que tinha sido adiado pra "Fase 6, onde existe scraper de verdade" (nota de
+roadmap antiga), perde o destino — fica fora do escopo; `runs` continua sendo a observabilidade do projeto,
+permanentemente. O aluno também pediu o digest diário em vez de semanal (ele vai rodar o `job-radar` no
+próprio Pi, recebendo vagas todo dia). `SPEC.md` (§1, §8, §9), `ROADMAP.md` (tabela + resumo) e `CLAUDE.md`
+(tabela de fases) atualizados. **Duas revisões de escopo nesta sessão** (FastAPI/`api` e Kubernetes) —
+ambas cortando trabalho que a Sessão Zero presumiu sem necessidade concreta que se confirmasse depois.
+
+**2026-10-30 — decisão de sequência: pipeline antes de melhorar o modelo.** Dúvida do aluno: fazer a Fase 5
+(digest) antes ou depois de melhorar o modelo da 4c (que ficou mediano — 0.65/0.72, `cosine_minilm`
+suspeito). Decisão: **Fase 5 primeiro.** Motivo: com 5 positivos em 75 no congelado, "melhorar o modelo"
+não tem critério de parada hoje — qualquer ganho medido é ruído até vir mais rótulo; e o digest é
+desacoplado do modelo (lê o `model_version` que estiver em `scores`; melhorar o modelo depois é trocar
+config, não refazer o pipeline). "Melhorar o modelo" foi pro **backlog pós-4c** (`CLAUDE.md` §2), sem
+decidir ainda o método.
+
+**2026-10-30 — decisão: pipeline final sem `sklearn-model`.** O aluno propôs um pipeline com
+`jev_score → sklearn-model → digest`; como `sklearn-combined-v1` perdeu pra `jev-manual-qs-v1` na 4c
+(0.65 × 0.72), isso mandaria a abordagem que mediu pior. Decisão: `jev-manual-qs-v1` vai direto pro
+digest; `sklearn-model` fica de lado até "melhorar o modelo" (backlog) mudar esse resultado. Decisão de
+desenho que viabiliza troca futura sem reescrever o pipeline: `radar digest` lê o `model_version` do
+`config.yaml`, nunca fixo no binário. **Fase 5 aberta** com 4 tarefas (5.1 Jev em lotes/retomável → 5.2
+`radar digest` → 5.3 agendamento diário → 5.4 fechamento). Começando pela **5.1.1**.
+
+**2026-10-30 — rodada manual em andamento:** o aluno trocou `jev_pilot.py` pro modo `"all"` (todas as
+vagas vivas fora do congelado) e deixou rodar sem lote/checkpoint — risco sinalizado (sem log de
+progresso, sem salvar nada até o fim; se cair, perde tudo). Decisão do aluno: deixar essa rodada
+terminar e só então consertar a falta de lote/retomada (é exatamente o que a 5.1.1 resolve, pras
+rodadas futuras).
+**Risco assumido, a reavaliar na 4b.4:** os pesos manuais que combinam as 3 respostas num score vão ser
+escolhidos sem saber qual pergunta é mais confiável que outra (ex.: `is_senior_role` é julgamento, `fully_remote`
+é texto explícito). Se os pesos da 4b.4 derem resultado estranho no conjunto congelado, a concordância medida
+(dispensada aqui) é o primeiro lugar a olhar.
+
+**2026-10-30 — evidência extra (informal, não substitui medição formal):** o aluno anotou à mão as vagas
+3–5 do piloto (pulou a 1, em alemão) e o mentor comparou com o Jev (`jev_answers`, corte 0.5): **4/4 bateu
+nas três perguntas.** Ressalva: em `open_to_latam` o aluno respondeu `false` nas 4, sem nenhum caso `true`
+pra testar — o 100% aí não prova que o Jev distingue os dois lados. Em `fully_remote` e `is_senior_role`
+teve `0` e `1` dos dois lados e ainda bateu tudo, sinal mais forte. Não altera o critério de aceite definido
+no `/replan` acima; é só um dado a mais se a 4b.4 precisar revisar os pesos.
+
+Última sessão: **2026-10-30**.
 
 ---
 
@@ -1293,7 +1507,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D7~~  | `main.go:56`   | `http.Get` sem timeout — o padrão espera para sempre. No cron, um servidor que aceita a conexão e não responde pendura o coletor e o ciclo seguinte sobe outro em cima. | ✅ pago 2026-10-05 (1.3.1) — client com 30s + orçamento por fonte via contexto; provado por `TestClientTimeout` |
 | D8  | `main.go:99`   | `content_hash` calculado sobre JSON compactado, mas `json.Compact` não canoniza ordem de chaves. Se a fonte reordenar chaves, todos os hashes mudam de uma vez e nascem "novas versões" falsas. | aberto — sem dono; sintoma seria inexplicável se ocorrer |
 | D9  | `main.go:86`   | Falha de `Unmarshal` é logada sem identificar o item — e não há como identificar, já que o parse é justamente o que falhou. Alarme sem endereço. | aberto — reavaliar em 0.2.3 junto com `runs.failed` |
-| D10 | dados          | Payloads do Remote OK chegam com entidades HTML cruas (`&amp;`) e mojibake (`Donâ\u0080\u0099t`, `å\u008C\u0096`). Um `slug` vazio. `salary_min: 0` significa "não informado", não zero. | reagendado 2026-10-26 (3a.6) → **Fase 4b**: a 3a.2.1 provou que não afeta a extração de skills (Remote OK é 137/20.029 e mojibake/entidades estragam só não-ASCII, não os tokens ASCII das skills); só volta a doer quando o texto limpo for pro Jev (`salary_min: 0` já tratado na 3a.3.3) |
+| ~~D10~~ | dados          | Payloads do Remote OK chegam com entidades HTML cruas (`&amp;`) e mojibake (`Donâ\u0080\u0099t`, `å\u008C\u0096`). Um `slug` vazio. `salary_min: 0` significa "não informado", não zero. | ✅ pago 2026-10-30 (4b.5.2) — mojibake corrigido em `remove_mojibake` (4a.2.1, dentro de `html_to_paragraphs`, o texto que vai pro Jev); entidades HTML já são decodificadas pelo `HTMLParser` desde a 2.3; `salary_min: 0` tratado na 3a.3.3; `slug` nunca foi lido por nenhum código de produção (só citado num comentário de EDA) — sem dono, morto |
 | ~~D11~~ | `main.go:54`   | `defer` roda durante panic e grava `error=NULL`: a run mente dizendo sucesso enquanto o processo morreu de SIGSEGV. Verificado em 2026-09-03. | ✅ pago 2026-10-05 (1.3.4) — `defer` com `recover` declarado **depois** do `defer` do `closeRun` (LIFO: roda antes) converte o panic em `panic: ...` no resultado nomeado; a fonte vira falha e as outras seguem. `TestPanic` com `Source` falsa |
 | ~~D12~~ | `db/migrations/001_init.sql` | `runs` não tem `finished_at` — dá para saber quando começou e o que houve, não quanto durou. E não há limiar de `failed/fetched` que marque a run como fracasso. | ✅ pago 2026-10-05 — limiar na 1.3.3; `finished_at` (migration `006`, preenchido no `closeRun`) na 1.3.4 |
 | D13 | `main_test.go:143` | `err := db.Close()` é sobrescrito pela linha seguinte: se o `Close` falhar e o `Terminate` funcionar, `teardown()` devolve `nil`. O `return err` final é sempre `nil`. | ✅ pago 2026-09-09 — `errors.Join` acumulando os dois |
@@ -1328,11 +1542,12 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D42 | `main.go:28` (`himalayasMaxPages = 20`) | O teto de 20 páginas (400 vagas) por ciclo está batendo: na maioria dos ciclos, 370–400 das 400 vagas lidas são inéditas, então a Himalayas publica mais em 6h do que o coletor lê, e parte das vagas nunca é vista. Medido em 2026-10-19 no dump local (runs 144–171; a 159 deu 0 por ser um restart 40 min depois da anterior). | aberto — 🟡, dono: Fase 2 (candidato à lista de defeitos da 2.2) — **defeito 7 do `docs/eda.md`** (47 runs: 37 de 44 cheias com ≥370 inéditas); decisão: consertar no Go, reagendado 2026-10-22 (2.5) → backlog (revisitar se a cobertura limitar a 3a) |
 | D43 | `analyzer/text.py` (`_end_paragraph`) | `str.split()` não trata como espaço os caracteres invisíveis U+200B (zero-width space), U+FEFF (BOM), U+200C e U+200D. Parágrafos feitos só deles passam como não vazios: 554 linhas em 387 vagas vivas (U+200B 296, U+FEFF 187). Visto em 2026-10-21 no passo 4 da 2.3.2. | ✅ pago em 2026-10-21 (2.3.3): `REMOVE_INVISIBLE` no `text.py`, apagados antes de normalizar; 579 parágrafos a menos (666.068) — lista medida: U+200B, U+200C, U+200D, U+200E, U+2060, U+FEFF, U+00AD (todos da categoria Unicode `Cf`); 579 linhas só deles |
 | D44 | dedupe (`store.go`, regra de 2026-10-16) | A mesma vaga publicada várias vezes com a cidade, o estado ou o idioma no título escapa da dedupe, porque o título muda. 609 vivas em 208 grupos têm a descrição byte a byte igual à de outra viva (401 cópias a mais); a maior é a Speechify, com `Team Lead, Android Core Product - <cidade>` 24 vezes. Fora as idênticas, há famílias em que só muda o salário ou o idioma (LanguageLine, Talkspace). Efeitos: o digest mostra a mesma vaga repetida, e o corte de boilerplate tira o modelo comum de famílias com ≥ 10 descrições (175 vivas ficam com < 10% do texto). Medido em 2026-10-21. | reagendado 2026-10-22 (2.5) → Fase 5 (consumidor é o digest); segue 🟡, gatilho "reabrir se" da decisão de 2026-10-17 |
-| D45 | `analyzer/eda/06_language.py` (detector de idioma) | O detector por palavras de função confunde **português e espanhol** (e pega francês): ele mede "não-inglês", não PT-BR. Entre as vagas do balde `accept` da 2.4.1, 214 são "pt", mas desambiguando (`não/você/também` × `más/con/usted`) ~metade é espanhol (92 PT, 100 ES, 22 empate). Efeito nº 2 — **falso-negativo localização × idioma:** ~20 vagas em PT-BR puro caem em `reject` porque o `locationRestrictions` da Himalayas está errado (ex.: `[United States]` numa vaga claramente brasileira); nesses casos a língua é sinal de elegibilidade mais confiável que o país mal preenchido. Medido em 2026-10-22 (2.4.2). | aberto — 🟡, futuro (candidato à Fase 4b, quando o tratamento downstream diferir por língua): (a) detector PT-BR vs ES/PT-PT mais fino; (b) usar PT-BR como sinal fraco de elegibilidade quando a localização está vazia/suspeita |
+| ~~D45~~ | `analyzer/eda/06_language.py` (detector de idioma) | O detector por palavras de função confunde **português e espanhol** (e pega francês): ele mede "não-inglês", não PT-BR. Entre as vagas do balde `accept` da 2.4.1, 214 são "pt", mas desambiguando (`não/você/também` × `más/con/usted`) ~metade é espanhol (92 PT, 100 ES, 22 empate). Efeito nº 2 — **falso-negativo localização × idioma:** ~20 vagas em PT-BR puro caem em `reject` porque o `locationRestrictions` da Himalayas está errado (ex.: `[United States]` numa vaga claramente brasileira); nesses casos a língua é sinal de elegibilidade mais confiável que o país mal preenchido. Medido em 2026-10-22 (2.4.2). | ✅ pago 2026-10-30 (4b.5.1/4b.5.2) — (a) o detector heurístico foi substituído por `langdetect` (biblioteca real, não palavras de função) na coluna `jobs.language`, sem a confusão PT×ES; (b) a língua passou a ser **critério direto da decisão final** (ex.: francês não é enviado ao Jev), não mais um sinal fraco atrás da localização — o efeito nº 2 (localização errada da Himalayas) deixou de importar porque o filtro não depende mais só dela |
 | D46 | `store.go` (`insertJob`) + `analyzer/main.py` (`insert_job_skills`) | Skills defasam quando a descrição muda, por duas camadas: (1) `insertJob` reseta `scored_at` → `NULL` no `DO UPDATE` mas **não** `skills_extracted_at`, então vaga de texto alterado nunca volta pra fila de skills; (2) mesmo re-extraída, o `INSERT … ON CONFLICT (job_id, skill) DO UPDATE` só adiciona/atualiza — skill que sumiu da descrição fica como linha morta. Visto na 3a.2.2. | ✅ pago 2026-10-26 (3a.6) — texto muda → skills refeitas do zero: (1) `insertJob` reseta `skills_extracted_at` → `NULL` no `DO UPDATE` com o mesmo `CASE` do `scored_at` (vaga volta à fila de skills); (2) `insert_job_skills` apaga `job_skills` do `job_id` antes de reinserir (skill que sumiu some). `TestNilSkillsExtractedAt` (Go, testcontainer); prune conferido por observação no banco. `ON CONFLICT` do insert virou redundante (débito só do caminho feliz fechado) |
-| D47 | `analyzer/skills.py` / `job_skills.confidence` | `confidence` é contagem crua de menções, não normalizada — infla com descrição longa e não é comparável entre vagas. O TF-IDF da 3a.5 não usa `confidence`. | reagendado 2026-10-26 (3a.6) → **Fase 4c** (é lá que `confidence` vira feature de modelo e a normalização passa a importar); 🟡 |
-| D48 | `analyzer/skills.py` (`skills_extractor`) | O matcher não faz longest-match: `C` e `R` ficaram de fora do dicionário porque casariam em todo lugar, e `Shell` casa dentro de "Bash shell". Impacto baixo hoje (poucas skills de letra única; falso-positivo de `Shell` raro). | reagendado 2026-10-26 (3a.6) → **Fase 4c**/backlog, quando a precisão da extração de skills for medida contra rótulos; 🟡 |
+| D47 | `analyzer/skills.py` / `job_skills.confidence` | `confidence` é contagem crua de menções, não normalizada — infla com descrição longa e não é comparável entre vagas. O TF-IDF da 3a.5 não usa `confidence`. | aberto — a previsão se cumpriu: `skills_matched` (`SUM(confidence)`) virou feature do modelo combinado na 4c.1.2/4c.2.1, mas não apareceu no top-3 de coeficientes da 4c.3.1 — não deu pra confirmar se a normalização mudaria o resultado. Reagendado pro **backlog**, pra quando skills voltarem a ser feature central |
+| D48 | `analyzer/skills.py` (`skills_extractor`) | O matcher não faz longest-match: `C` e `R` ficaram de fora do dicionário porque casariam em todo lugar, e `Shell` casa dentro de "Bash shell". Impacto baixo hoje (poucas skills de letra única; falso-positivo de `Shell` raro). | aberto — mesmo raciocínio do D47, não medido na 4c (skills_matched fora do top-3). Reagendado pro **backlog** |
 | D49 | `analyzer/scripts/score_embeddings.py` (`model_version='minilm-l6-v2'`) | O `model_version` gravado na `scores` identifica o **modelo de embedding**, não o **CV**. Se o `cv.md` mudar e o script rodar de novo, o `ON CONFLICT` sobrescreve os scores sob o mesmo `model_version` → perde-se o rastro de qual CV gerou cada número (tensão com o invariante §2.1 "todo número vem com o `model_version` que o gerou"). Baixo impacto hoje: single-tenant, CV estável. Visto na 4a.3.1 (2026-10-28). | aberto — 🟡; conserto quando o CV mudar de verdade: embutir uma versão/hash do CV no `model_version` (ex.: `minilm-l6-v2+cv1`), para cada número carregar o CV que o gerou |
+| D50 | `analyzer/jobradar/jev/client.py` (`JEV_MODEL`) + `analyzer/scripts/score_jev.py` (`WEIGHT`, `MODEL_VERSION`) | Irmão do D49: `jev_answers`/`scores` identificam o `question_set_version` (`qs-v1`), mas não **qual modelo Jev concreto respondeu** (`JEV_MODEL` é `jev-latest`, flutuante — `TODO(4b.4)` já registrado no código pra pinar via `client.models()`) nem **quais pesos manuais** geraram o score (`WEIGHT` em `score_jev.py` não está no `model_version='jev-manual-qs-v1'`). Se o provedor atualizar `jev-latest` ou o aluno trocar os pesos, o `ON CONFLICT` sobrescreve sem deixar rastro de qual combinação gerou o número. Visto na 4b.3/4b.4 (2026-10-29/30). | 🔶 parcial — a metade "pesos" ficou resolvida por convenção na 4c: cada método de combinação ganha um `model_version` versionado à mão (`jev-manual-qs-v1`, `sklearn-combined-v1`), igual `tfidf-v1`/`minilm-l6-v2` — trocar o método exige escolher um nome novo, não sobrescrever o antigo. A metade "qual `JEV_MODEL` respondeu" continua sem rastro (`jev-latest` flutuante) — reagendado pra **Fase 5**, quando o digest em produção tornar a reprodutibilidade do Jev operacionalmente importante |
 
 ### 🟢 Nits — mencionados uma vez
 

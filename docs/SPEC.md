@@ -8,13 +8,16 @@
 ## 1. O que é
 
 Ferramenta **self-hosted** que coleta vagas remotas internacionais de várias fontes,
-ranqueia cada uma contra o currículo do usuário e manda um digest semanal no Discord.
+ranqueia cada uma contra o currículo do usuário e manda um digest diário no Discord
+(revisto 2026-10-30; era semanal).
 
 Qualquer pessoa clona o repositório, escreve o próprio `cv.md`, ajusta o `config.yaml`,
 exporta duas variáveis de ambiente e roda `docker compose up`.
 
 **Não é** um job board, não é um agregador público, não tem multi-usuário,
-não tem front-end web (a não ser as páginas mínimas do FastAPI na Fase 5).
+não tem front-end web, nem servidor HTTP — o digest é o único jeito de ver o
+resultado, de propósito (revisto 2026-10-30; FastAPI/`cmd/api` estavam previstos na
+Sessão Zero sem necessidade concreta — ver §8).
 
 ---
 
@@ -36,13 +39,12 @@ O critério é: cada linguagem faz o que a outra faria mal.
 |---|---|
 | `collector` | Processo de longa duração com laço próprio: coleta na partida e a cada `collect_every` (desde a 1.6; antes era previsto cron). Busca as fontes, grava `raw_jobs`, normaliza para `jobs`, marca duplicatas, registra em `runs`. |
 | `radar` | CLI do usuário: `init`, `label`, `digest`, `status`. |
-| `api` | Servidor HTTP. Nasce na Fase 5. |
 
 ### Serviço Python
 
 | Serviço | Papel |
 |---|---|
-| `analyzer` | Laço próprio: acorda, procura trabalho pendente, extrai skills, calcula score, escreve em `scores`. Vira serviço HTTP (FastAPI) na Fase 5 **sem deixar de usar o banco**. |
+| `analyzer` | Laço próprio: acorda, procura trabalho pendente, extrai skills, calcula score, escreve em `scores`. |
 
 ---
 
@@ -64,12 +66,8 @@ memória, socket, arquivo nem processo — só schema.
   │   radar    │──────▶│    PostgreSQL    │◀────────scores
   │    (Go)    │       │                  │
   └────────────┘       └──────────────────┘
-   lê jobs+scores               ▲
-   escreve labels               │
-                          ┌─────┴──────┐
-                          │    api     │  Fase 5
-                          │    (Go)    │
-                          └────────────┘
+   lê jobs+scores, escreve labels
+   digest → Discord (Fase 5)
 ```
 
 **Trade-off aceito.** Banco compartilhado acopla os dois lados pelo schema: mudar uma
@@ -110,7 +108,7 @@ Consequências obrigatórias:
 - `raw_job_id` aponta para a **versão mais recente** que originou o estado atual.
 
 Alternativa descartada: `jobs` como snapshot por versão. Rejeitada porque empurraria a
-complexidade para todo consumidor (`digest`, `label`, `api` teriam que escolher a versão
+complexidade para todo consumidor (`digest`, `label` teriam que escolher a versão
 mais nova em toda consulta) e encheria `scores` de notas de versões mortas.
 
 ### 4.3 `scores` com chave `(job_id, model_version)`
@@ -154,7 +152,8 @@ aqui; e markdown deixa o currículo no **mesmo formato textual da descrição de
 permitindo que **um único extrator de skills** rode nos dois lados. É isso que faz o
 matching da Fase 3a fechar com um componente em vez de dois.
 
-Se um dia houver UI de configuração, ela nasce como página do FastAPI na Fase 5.
+UI de configuração está fora de escopo (revisto 2026-10-30) — `config.yaml` editado
+direto continua sendo o jeito.
 
 ### `config.yaml` (versionável, sem segredo)
 - fontes ligadas/desligadas
@@ -184,8 +183,7 @@ segundo binário (`radar`, Fase 3b) precisar deles (decisão de 2026-10-07).
 job-radar/
 ├── cmd/
 │   ├── collector/
-│   ├── radar/
-│   └── api/                 # Fase 5
+│   └── radar/
 ├── internal/
 │   ├── source/              # interface Source + uma impl por fonte
 │   ├── store/               # acesso a Postgres
@@ -195,7 +193,6 @@ job-radar/
 │   ├── pyproject.toml
 │   └── analyzer/
 ├── db/migrations/
-├── deploy/k8s/              # Fase 6
 ├── testdata/
 ├── docs/
 ├── compose.yaml
@@ -215,17 +212,23 @@ Tão importante quanto o que está dentro.
 - ❌ LinkedIn e Indeed (hostis a automação; risco jurídico e técnico)
 - ❌ Cloud gerenciada / custo recorrente — tudo roda na máquina de quem clonou
 - ❌ Treinar modelo de linguagem do zero (usar pré-treinados é o ponto)
-- ❌ Notificação em tempo real — o produto é **digest semanal**, deliberadamente
+- ❌ Notificação em tempo real — o produto é **digest em lote** (diário), deliberadamente
+- ❌ Servidor HTTP / páginas web (API, dashboard, UI de config) — revisto 2026-10-30;
+  FastAPI e `cmd/api` estavam previstos na Sessão Zero sem necessidade concreta que
+  tivesse aparecido depois. O digest é o único jeito de ver o resultado, de propósito.
+- ❌ Kubernetes / segundo caminho de deploy — revisto 2026-10-30 (era a Fase 6; ver §9).
+  `docker compose up` no Raspberry Pi é o único alvo de deploy.
 
 ---
 
-## 9. Tensão registrada: compose vs Kubernetes
+## 9. Kubernetes — descartado (decisão de 2026-10-30)
 
-O produto promete `docker compose up`. A Fase 6 entrega Kubernetes.
-
-São **dois caminhos de deploy paralelos**, não uma migração. O k8s existe pelo portfólio
-e pelo aprendizado; o compose é o contrato com quem clona o repositório. Regra: nenhuma
-mudança da Fase 6 pode quebrar o `docker compose up`. O README continua ensinando compose.
+Previsto desde a Sessão Zero como uma Fase 6 só pelo portfólio e pelo aprendizado (nunca
+uma necessidade funcional — `docker compose up` já bastava). Descartado porque: (a) não
+há onde rodar um cluster de verdade além do próprio Raspberry Pi, que já roda o compose
+sem problema; (b) o tempo que isso consumiria (imagens multi-arch, manifests, minikube)
+compete com o que resta nas Fases 3-4 e o fechamento do projeto. O deploy do job-radar é
+só `docker compose up` no Pi — não há dois caminhos paralelos.
 
 ---
 
@@ -257,5 +260,6 @@ LLM usado como **extrator de features**, não como juiz do match.
   o match**.
 - Números, datas e salário são extraídos e comparados no código, nunca pelo Jev.
 - O texto passa pelo corte de boilerplate (Fase 2) antes de ir para o Jev.
-- Fontes em PT-BR são avaliadas em lote separado.
+- Idioma da vaga detectado (`langdetect`, coluna `jobs.language`) e usado como critério direto da
+  decisão final (ex.: francês não é enviado ao Jev) — não um lote PT-BR separado.
 - Chamadas testáveis sem rede (resposta gravada em `testdata/`).
