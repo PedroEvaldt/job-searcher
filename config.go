@@ -10,10 +10,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+type Digest struct {
+	ModelVersion string  `yaml:"model_version"`
+	MinScore     float64 `yaml:"min_score"`
+}
+
 // Config is the parsed config.yaml: the list of sources the collector may pull from.
 type Config struct {
 	CollectEvery  time.Duration          `yaml:"collect_every"`
 	SourcesConfig []sources.SourceConfig `yaml:"sources"`
+	Digest        Digest                 `yaml:"digest"`
 }
 
 // loadConfig reads the YAML file at path, rejects unknown keys, and validates every

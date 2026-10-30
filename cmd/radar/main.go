@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,16 +11,19 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"go.yaml.in/yaml/v3"
 )
 
 var (
-	brTag      = regexp.MustCompile(`(?i)<br\s*/?>`)
-	blockClose = regexp.MustCompile(`(?i)</(p|div|li|ul|ol|h[1-6])>`)
-	anyTag     = regexp.MustCompile(`<[^>]+>`)
-	blankRuns  = regexp.MustCompile(`\n{3,}`)
+	brTag           = regexp.MustCompile(`(?i)<br\s*/?>`)
+	blockClose      = regexp.MustCompile(`(?i)</(p|div|li|ul|ol|h[1-6])>`)
+	anyTag          = regexp.MustCompile(`<[^>]+>`)
+	blankRuns       = regexp.MustCompile(`\n{3,}`)
+	maxJobsPerRound = 10
 )
 
 // cleanDescription makes a job description readable on screen while labelling:
@@ -66,10 +70,86 @@ func main() {
 		status(ctx, logger, conn)
 	case "label":
 		label(ctx, logger, conn, 100)
+	case "digest":
+		digest(ctx, logger, conn, "./config.yaml")
 	default:
 		logger.Warn("wrong usage for radar: ./radar [status, label]")
 		os.Exit(2)
 	}
+}
+
+func digest(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, path string) error {
+	type Digest struct {
+		ModelVersion string  `yaml:"model_version"`
+		MinScore     float64 `yaml:"min_score"`
+	}
+
+	type Config struct {
+		Digest Digest `yaml:"digest"`
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		logger.Error("failed to read config", "path", path, "error", err)
+		return err
+	}
+
+	var cfg Config
+	// Not KnownFields(true): radar only cares about the digest: key, but config.yaml's
+	// other top-level keys (collect_every, sources) belong to the collector.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&cfg); err != nil {
+		logger.Error("failed to parse digest config", "error", err)
+		return err
+	}
+
+	var models []string
+	rows, err := conn.Query(ctx, "SELECT DISTINCT model_version FROM scores;")
+	if err != nil {
+		logger.Error("failed to query model versions", "error", err)
+		return err
+	}
+	for rows.Next() {
+		var model string
+		err = rows.Scan(&model)
+		if err != nil {
+			logger.Error("failed to scan model version", "error", err)
+			return err
+		}
+		models = append(models, model)
+	}
+
+	if cfg.Digest.MinScore < 0 || cfg.Digest.MinScore > 1 {
+		logger.Warn("digest.min_score out of range, expected 0-1", "min_score", cfg.Digest.MinScore)
+		return nil
+	}
+
+	if !slices.Contains(models, cfg.Digest.ModelVersion) {
+		logger.Warn("digest.model_version has no scores yet", "model_version", cfg.Digest.ModelVersion)
+		return nil
+	}
+
+	rows, err = conn.Query(ctx, "SELECT title FROM jobs JOIN scores ON jobs.id = scores.job_id WHERE model_version = $1 AND score >= $2 ORDER BY score DESC LIMIT $3;", cfg.Digest.ModelVersion, cfg.Digest.MinScore, maxJobsPerRound)
+	if err != nil {
+		logger.Error("failed to query jobs for digest", "error", err)
+		return err
+	}
+	defer rows.Close()
+
+	var titles []string
+	for rows.Next() {
+		var title string
+		err = rows.Scan(&title)
+		if err != nil {
+			logger.Error("failed to scan job title", "error", err)
+			return err
+		}
+		titles = append(titles, title)
+	}
+	for i, t := range titles {
+		fmt.Printf("%d: %s\n", (i + 1), t)
+	}
+	return nil
 }
 
 func label(ctx context.Context, logger *slog.Logger, conn *pgx.Conn, limit int) {

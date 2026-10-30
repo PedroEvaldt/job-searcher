@@ -1,4 +1,7 @@
 collect_every: 6h
+digest:
+  model_version: "jev-manual-qs-v1"
+  min_score: 0.75
 sources:
   - name: remoteok
     enabled: true
