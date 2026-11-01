@@ -993,25 +993,41 @@ uma vez por dia, sem servidor HTTP (FastAPI/`cmd/api` tirados do escopo em 2026-
 
 ### Tarefa 5.1 — Jev em escala, em lotes e retomável
 
-- [ ] **5.1.1** Reescrever o fluxo de pontuação do Jev (`jev_pilot.py`/`score_jev.py`, hoje scripts
+- [x] **5.1.1** Reescrever o fluxo de pontuação do Jev (`jev_pilot.py`/`score_jev.py`, hoje scripts
       de pesquisa de uma rodada só) num processo de produção: lotes com commit incremental, retomável
       se cair no meio, pronto pra rodar todo dia sobre as vagas novas que o `collector` traz.
 
 ### Tarefa 5.2 — `radar digest`
 
-- [ ] **5.2.1** Comando novo em `radar`: lê `scores` pelo `model_version` que vier do `config.yaml`
+- [x] **5.2.1** Comando novo em `radar`: lê `scores` pelo `model_version` que vier do `config.yaml`
       (não fixo no binário — é o que torna trocar de modelo depois uma mudança de config, não de
       código), filtra pela nota mínima, monta a mensagem.
-- [ ] **5.2.2** Manda a mensagem pro Discord via `DISCORD_WEBHOOK_URL`; não repete vaga já enviada.
+- [x] **5.2.2** Manda a mensagem pro Discord via `DISCORD_WEBHOOK_URL`; não repete vaga já enviada.
+      _Código pronto em 2026-11-01; execução real (banco + Discord) pendente → **D51**._
 
 ### Tarefa 5.3 — Agendamento
 
 - [ ] **5.3.1** Uma vez por dia, em sequência: pontuar vagas novas com Jev (5.1) → `radar digest` (5.2).
       Decidir o mecanismo (cron no Pi vs. laço próprio, mesmo padrão do `collector`).
 
-### Tarefa 5.4 — Fechamento
+### Tarefa 5.4 — Pi como host oficial do Postgres (decidido 2026-10-31)
 
-- [ ] **5.4.1** Débitos da fase + README/docs.
+Feita **por último**, com 5.1–5.3 já rodando no desktop. Hoje há dois bancos divergentes: o do Pi
+(coleta de verdade, imagem de `8498ca2`, provavelmente sem as migrações `008`–`012`) e o do desktop
+(cópia antiga do Pi + todo o trabalho das Fases 3–4: skills, embeddings, `labels`, `jev_answers`,
+`scores`). O notebook não alcança nenhum dos dois fora de casa.
+
+- [ ] **5.4.1** Tailscale no Pi, no desktop e no notebook; `ssh pi` funcionando de fora de casa.
+      [boilerplate]
+- [ ] **5.4.2** Copiar o banco do desktop pro Pi (`pg_dump`/`pg_restore`) e subir o código atual no
+      Pi. O Pi vira a **única** fonte da verdade. Cuidado: as vagas coletadas pelo Pi desde a última
+      cópia (2026-10-22) não existem no desktop, e os `labels` são o dado que não pode se perder.
+- [ ] **5.4.3** Notebook e desktop acessam o Postgres do Pi pela rede do Tailscale (DSN no `.env`),
+      sem expor porta no roteador; o pipeline diário (5.3) roda no Pi.
+
+### Tarefa 5.5 — Fechamento
+
+- [ ] **5.5.1** Débitos da fase + README/docs.
 
 ---
 

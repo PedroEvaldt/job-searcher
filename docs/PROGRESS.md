@@ -477,7 +477,48 @@ pra testar — o 100% aí não prova que o Jev distingue os dois lados. Em `full
 teve `0` e `1` dos dois lados e ainda bateu tudo, sinal mais forte. Não altera o critério de aceite definido
 no `/replan` acima; é só um dado a mais se a 4b.4 precisar revisar os pesos.
 
-Última sessão: **2026-10-30**.
+**2026-10-31 — decisão: o Pi vira o host oficial do Postgres (Tarefa 5.4, feita por último).** Gatilho:
+o aluno foi pro notebook e não tinha acesso a nenhum banco. O banco das rodadas do Jev fica no compose do
+desktop, e o Pi (`192.168.76.168`) só é alcançável dentro de casa (`ssh pi` deu timeout do notebook).
+Hoje existem **dois bancos divergentes**: o do Pi tem a coleta de verdade, mas roda a imagem de `8498ca2`
+e provavelmente não tem as migrações `008`–`012`; o do desktop tem a cópia antiga do Pi mais as Fases 3–4
+(`labels`, `jev_answers`, `scores`, embeddings). Opções discutidas: Postgres gerenciado (Neon/Supabase,
+descartado pelo limite do free tier e por uma dependência a mais sem ganho), abrir a 5432 no roteador
+(descartado: expõe o banco na internet) e **Pi + Tailscale** (escolhida, sem mudar a arquitetura). Plano
+do aluno: terminar 5.1–5.3 no desktop, depois copiar o banco do desktop pro Pi, deixar o Pi como
+fonte única da verdade e acessar pelo Tailscale. Fechamento renumerado de 5.4 → **5.5**. **Verificação da
+5.1.1 pendente** (`pending = 0` em `jev_answers`) até o aluno voltar pro desktop; o aluno relatou que
+rodou todos os lotes. Diagnóstico da 5.2.1 (código commitado, sem `/check` formal): sem 🔴. Os 🟡 (o
+erro do `digest` é descartado pelo `main`, `rows.Err()` não é conferido) entraram no passo 1 da 5.2.2.
+
+**2026-10-31 — 5.2.2, passo 1 feito pelo mentor a pedido.** O `cmd/radar/main.go` foi dividido em `main.go`
+(só `main`+`run`), `status.go`, `label.go`, `digest.go` e `discord.go`, este último escrito pelo aluno.
+Erros sobem com `%w` até o `run`, e só o `main` loga e sai com `1`. `min_score` fora da faixa e
+`model_version` sem notas viraram erro. Fim das perguntas no `label` (EOF) e "nada pra rotular" continuam
+saindo `0`. Correções que vieram junto: `pgx.Connect` com o erro descartado (o `conn` nil iria pro `Ping`
+e daria panic), o import acidental `vertica-sql-go/logger` e o `defer conn.Close` que faltava. **Continua
+com o aluno:** os itens 5–15 do `/check` de 2026-10-31 (formato/`%d`, corte em bytes, imprimir sem webhook,
+migração 013, filtro e marcação de `jobs_sent`, JSON do Discord, URL no log, `.env.example`, binário `./main`).
+
+**2026-11-01 — 5.2.2, passos 2–4 feitos pelo mentor a pedido (menos o item 7).** O aluno corrigiu a
+ordem do `Scan`, o `ON CONFLICT DO NOTHING`, o caso "nenhuma vaga" e o `%.2f`. O mentor fez o resto: o
+`digest` foi quebrado em `loadDigestConfig` / `checkModelHasScores` (`EXISTS` no lugar de buscar todos os
+modelos) / `pendingJobs` (`NOT EXISTS` por `model_version`, `duplicate_of IS NULL`) / `formatDigest`
+(função pura, nunca corta uma vaga ao meio, devolve só as vagas que couberam na mensagem, título limitado
+a 200 runes) / `markSent` (uma transação). Também: comentário de *at-least-once*, `redactURL` (o
+`*url.Error` carregava o token do webhook), mensagem de erro do Discord, `.env.example` vazio e
+`digest_test.go` (3 testes; o de vazamento foi conferido derrubando a proteção). Bug pego no caminho: com
+o corte em 2000, as vagas cortadas eram marcadas como enviadas sem terem chegado. **Item 7 (payload JSON
+do Discord) fica com o aluno**, com aula dada, marcado com `TODO(5.2.2, item 7)` no `discord.go`.
+**Sem verificação contra banco** (não há Postgres nesta máquina): o SQL de `pendingJobs`/`markSent` não
+foi executado.
+
+**2026-11-01 — Item 7 feito pelo aluno** (struct `discordWebhookBody` com `content` + `username` fixo; a
+dúvida sobre `username`/`embeds` foi respondida: embeds são uma melhoria possível depois da 5.3). Código da
+**Tarefa 5.2 fechado**, mas a execução ficou pendente → **D51**, porque só dá pra rodar no desktop. Marcadas
+5.1.1/5.2.1/5.2.2 no ROADMAP. Próxima: **5.3.1**.
+
+Última sessão: **2026-11-01**.
 
 ---
 
@@ -1548,6 +1589,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D48 | `analyzer/skills.py` (`skills_extractor`) | O matcher não faz longest-match: `C` e `R` ficaram de fora do dicionário porque casariam em todo lugar, e `Shell` casa dentro de "Bash shell". Impacto baixo hoje (poucas skills de letra única; falso-positivo de `Shell` raro). | aberto — mesmo raciocínio do D47, não medido na 4c (skills_matched fora do top-3). Reagendado pro **backlog** |
 | D49 | `analyzer/scripts/score_embeddings.py` (`model_version='minilm-l6-v2'`) | O `model_version` gravado na `scores` identifica o **modelo de embedding**, não o **CV**. Se o `cv.md` mudar e o script rodar de novo, o `ON CONFLICT` sobrescreve os scores sob o mesmo `model_version` → perde-se o rastro de qual CV gerou cada número (tensão com o invariante §2.1 "todo número vem com o `model_version` que o gerou"). Baixo impacto hoje: single-tenant, CV estável. Visto na 4a.3.1 (2026-10-28). | aberto — 🟡; conserto quando o CV mudar de verdade: embutir uma versão/hash do CV no `model_version` (ex.: `minilm-l6-v2+cv1`), para cada número carregar o CV que o gerou |
 | D50 | `analyzer/jobradar/jev/client.py` (`JEV_MODEL`) + `analyzer/scripts/score_jev.py` (`WEIGHT`, `MODEL_VERSION`) | Irmão do D49: `jev_answers`/`scores` identificam o `question_set_version` (`qs-v1`), mas não **qual modelo Jev concreto respondeu** (`JEV_MODEL` é `jev-latest`, flutuante — `TODO(4b.4)` já registrado no código pra pinar via `client.models()`) nem **quais pesos manuais** geraram o score (`WEIGHT` em `score_jev.py` não está no `model_version='jev-manual-qs-v1'`). Se o provedor atualizar `jev-latest` ou o aluno trocar os pesos, o `ON CONFLICT` sobrescreve sem deixar rastro de qual combinação gerou o número. Visto na 4b.3/4b.4 (2026-10-29/30). | 🔶 parcial — a metade "pesos" ficou resolvida por convenção na 4c: cada método de combinação ganha um `model_version` versionado à mão (`jev-manual-qs-v1`, `sklearn-combined-v1`), igual `tfidf-v1`/`minilm-l6-v2` — trocar o método exige escolher um nome novo, não sobrescrever o antigo. A metade "qual `JEV_MODEL` respondeu" continua sem rastro (`jev-latest` flutuante) — reagendado pra **Fase 5**, quando o digest em produção tornar a reprodutibilidade do Jev operacionalmente importante |
+| D51 | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. | aberto — 🟡; pagar na primeira sessão no desktop, **antes** de agendar (5.3), porque agendar um digest que nunca rodou esconde o erro atrás do cron |
 
 ### 🟢 Nits — mencionados uma vez
 
