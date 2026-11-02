@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jackc/pgx/v5"
 )
 
-const usage = "usage: radar [status | label | digest]"
+const usage = "usage: radar [status | label | digest | digest-loop]"
 
 // main is the only place that logs a failure and picks the exit code; everything
 // below it returns errors with context and leaves that decision here.
@@ -31,8 +33,31 @@ func run(args []string) error {
 		return errors.New("DATABASE_URL is not set")
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	// digest-loop is a daemon: only an invalid config stops it, at start-up, since no
+	// cycle could ever succeed with one. Every cycle error is logged and retried on the
+	// next tick: Postgres or Discord down heal on their own, and a model with no scores
+	// yet is normal right after jev-worker is switched on. Hence it is handled before
+	// the shared connection below — each cycle opens its own, so a Postgres restart
+	// does not leave the loop holding a dead connection.
+	if args[0] == "digest-loop" {
+		cfg, err := loadDigestConfig("./config.yaml")
+		if err != nil {
+			return err
+		}
+		cycle := func() error {
+			conn, err := pgx.Connect(ctx, dbURL)
+			if err != nil {
+				return fmt.Errorf("connect to db: %w", err)
+			}
+			defer conn.Close(ctx) //nolint:errcheck // nothing left to do if closing fails on the way out
+			return digest(ctx, conn, cfg)
+		}
+		digestor(ctx, slog.Default(), cfg.Every, cycle)
+		return nil
+	}
 	conn, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("connect to db: %w", err)
@@ -48,7 +73,12 @@ func run(args []string) error {
 	case "label":
 		return label(ctx, conn, 100)
 	case "digest":
-		return digest(ctx, conn, "./config.yaml")
+		cfg, err := loadDigestConfig("./config.yaml")
+		if err != nil {
+			return err
+		}
+		return digest(ctx, conn, cfg)
+
 	default:
 		return fmt.Errorf("unknown command %q; %s", mode, usage)
 	}

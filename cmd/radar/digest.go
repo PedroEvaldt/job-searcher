@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -25,8 +26,9 @@ const (
 )
 
 type digestConfig struct {
-	ModelVersion string  `yaml:"model_version"`
-	MinScore     float64 `yaml:"min_score"`
+	ModelVersion string        `yaml:"model_version"`
+	MinScore     float64       `yaml:"min_score"`
+	Every        time.Duration `yaml:"every"`
 }
 
 type digestJob struct {
@@ -39,15 +41,10 @@ type digestJob struct {
 
 // digest sends today's best unsent jobs to Discord, or prints them when no webhook
 // is configured. Finding nothing new is a normal day, not an error.
-func digest(ctx context.Context, conn *pgx.Conn, path string) error {
-	cfg, err := loadDigestConfig(path)
-	if err != nil {
-		return err
-	}
+func digest(ctx context.Context, conn *pgx.Conn, cfg digestConfig) error {
 	if err := checkModelHasScores(ctx, conn, cfg.ModelVersion); err != nil {
 		return err
 	}
-
 	jobs, err := pendingJobs(ctx, conn, cfg)
 	if err != nil {
 		return err
@@ -95,6 +92,9 @@ func loadDigestConfig(path string) (digestConfig, error) {
 	cfg := file.Digest
 	if cfg.MinScore < 0 || cfg.MinScore > 1 {
 		return digestConfig{}, fmt.Errorf("digest.min_score is %v, expected 0-1", cfg.MinScore)
+	}
+	if cfg.Every < time.Minute {
+		return digestConfig{}, fmt.Errorf("digest.every is %v, expected > than 1m", cfg.Every)
 	}
 	return cfg, nil
 }
