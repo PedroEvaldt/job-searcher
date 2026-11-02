@@ -11,8 +11,9 @@ import (
 )
 
 type Digest struct {
-	ModelVersion string  `yaml:"model_version"`
-	MinScore     float64 `yaml:"min_score"`
+	ModelVersion string        `yaml:"model_version"`
+	MinScore     float64       `yaml:"min_score"`
+	Every        time.Duration `yaml:"every"`
 }
 
 // Config is the parsed config.yaml: the list of sources the collector may pull from.
