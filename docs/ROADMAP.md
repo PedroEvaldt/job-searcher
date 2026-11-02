@@ -1016,8 +1016,9 @@ pontuada na hora do digest vai no próximo. Decisão e trade-offs em `PROGRESS.m
       falha não derruba o processo, serviço no compose. Inclui pagar o **D51** antes.
       _Código pronto em 2026-11-02 (`scripts/jev_worker.py`, serviço `jev-worker` no profile `jev`); execução
       no compose pendente → **D51**._
-- [ ] **5.3.2** Digest em laço (Go): `radar` com modo daemon a cada `digest.every` (no
+- [x] **5.3.2** Digest em laço (Go): `radar` com modo daemon a cada `digest.every` (no
       `config.yaml`), mesmo padrão do laço do `collector`.
+      _Código pronto em 2026-11-02 (`radar digest-loop`, `loop.go`); Postgres parando/voltando → **D51**._
 - [ ] **5.3.3** `radar` na imagem + serviço no compose; tudo de pé com um `docker compose up -d`
       e observado por ≥ 24h (≥ 4 digests).
 
