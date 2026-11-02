@@ -5,7 +5,7 @@ import psycopg
 from psycopg.types.json import Json
 
 from jobradar.boilerplate import clean_descriptions
-from jobradar.jev.client import JevAnswers, jev_client
+from jobradar.jev.client import JevAnswers, JevClient, jev_client
 from jobradar.jev.questions import QUESTION_SET_VERSION, QUESTIONS
 from scripts.score_jev import MODEL_VERSION, get_score
 
@@ -16,18 +16,11 @@ INPUT_PRICE_PER_MILLION = 0.042
 
 
 def score_jev_batch() -> int:
-    """Score every live job still missing a Jev answer, in batches with a commit per
-    batch — if interrupted, the next run picks up where this one left off, since a job
-    with a jev_answers row is no longer pending."""
+    """One-shot: drain the pending jobs once and exit. The daemon version is
+    scripts.jev_worker; both share process_pending_jobs."""
     database_url = os.getenv("DATABASE_URL")
     if database_url is None:
         print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
-    try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
         return 1
 
     jev_c = jev_client()
@@ -35,7 +28,29 @@ def score_jev_batch() -> int:
         print("no JEV_API_KEY set — nothing to run", file=sys.stderr)
         return 1
 
-    conn.autocommit = True
+    try:
+        # autocommit=True: process_pending_jobs relies on it, so each batch's
+        # conn.transaction() is a real commit instead of a savepoint (3a.2.3 gotcha).
+        conn = psycopg.connect(database_url, autocommit=True)
+    except psycopg.Error as e:
+        detail = " ".join(str(e).split())
+        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        return 1
+
+    with conn:
+        total_jobs, total_cost = process_pending_jobs(conn, jev_c)
+    print(f"done: {total_jobs} jobs scored, ${total_cost:.6f} total ({MODEL_VERSION})")
+    return 0
+
+
+def process_pending_jobs(
+    conn: psycopg.Connection, jev_c: JevClient
+) -> tuple[int, float]:
+    """Score every live job still missing a Jev answer, in batches with a commit per
+    batch — if interrupted, the next call picks up where this one left off, since a job
+    with a jev_answers row is no longer pending. Expects an autocommit connection.
+
+    Returns how many jobs were scored and what they cost, in USD."""
     with conn.cursor() as cur:
         # The whole live set: clean_descriptions builds the boilerplate statistic over
         # it once, so the cut does not change batch to batch.
@@ -110,8 +125,7 @@ def score_jev_batch() -> int:
             f"${batch_cost:.6f} this batch, ${total_cost:.6f} total"
         )
 
-    print(f"done: {total_jobs} jobs scored, ${total_cost:.6f} total ({MODEL_VERSION})")
-    return 0
+    return (total_jobs, total_cost)
 
 
 if __name__ == "__main__":
