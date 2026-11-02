@@ -1022,24 +1022,42 @@ pontuada na hora do digest vai no próximo. Decisão e trade-offs em `PROGRESS.m
 - [ ] **5.3.3** `radar` na imagem + serviço no compose; tudo de pé com um `docker compose up -d`
       e observado por ≥ 24h (≥ 4 digests).
 
-### Tarefa 5.4 — Pi como host oficial do Postgres (decidido 2026-10-31)
+### Tarefa 5.4 — O digest manda o que você quer (replan 2026-11-02)
 
-Feita **por último**, com 5.1–5.3 já rodando no desktop. Hoje há dois bancos divergentes: o do Pi
+**Por quê:** `jev-manual-qs-v1` (0.7·remote + 0.6·latam − 0.7·senior) não olha o CV: qualquer vaga remota,
+LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registradas no `PROGRESS.md` (2026-11-02).
+**Métrica principal:** Average Precision no `test-set-v2` (ROC AUC ao lado).
+
+- [ ] **5.4.1** Rodada 1 de rótulos: `scripts/sample_label_round.py` sorteia 200 vivas (semente fixa) →
+      75 pro `test-set-v2` (+ as 75 do v1 = 150) e 125 pro treino, congelados antes de rotular;
+      `radar label data/label_queue_round1.json` rotula a fila. [ferramentas feitas pelo mentor]
+- [ ] **5.4.2** Match de skills com o CV: conjuntos (tem/não tem), `skill_coverage` (principal),
+      `skill_overlap`, `skill_missing`, `n_job_skills`; função pura + `pytest`.
+- [ ] **5.4.3** Regra com filtro (`skills-gate-v1`): Jev remote ≥ 0.5 ∧ latam ≥ 0.5 ∧ senior < 0.5 →
+      ordena por cobertura (overlap desempata). AP × `jev-manual-qs-v1` no `test-set-v2`.
+- [ ] **5.4.4** Rodada 2 de rótulos: 150 de treino escolhidas pelo topo da regra (5.4.3).
+- [ ] **5.4.5** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill; sem cosseno) treinado nos
+      450 → AP no `test-set-v2`. O vencedor vira o `digest.model_version`; auditoria: rotular o top-10
+      que ele mandaria hoje (precisão@10 real).
+
+### Tarefa 5.5 — Pi como host oficial do Postgres (decidido 2026-10-31; era 5.4 até 2026-11-02)
+
+Feita **por último**, com 5.1–5.4 prontas. Inclui as **24h de observação** da 5.3.3, já no Pi. Hoje há dois bancos divergentes: o do Pi
 (coleta de verdade, imagem de `8498ca2`, provavelmente sem as migrações `008`–`012`) e o do desktop
 (cópia antiga do Pi + todo o trabalho das Fases 3–4: skills, embeddings, `labels`, `jev_answers`,
 `scores`). O notebook não alcança nenhum dos dois fora de casa.
 
-- [ ] **5.4.1** Tailscale no Pi, no desktop e no notebook; `ssh pi` funcionando de fora de casa.
+- [ ] **5.5.1** Tailscale no Pi, no desktop e no notebook; `ssh pi` funcionando de fora de casa.
       [boilerplate]
-- [ ] **5.4.2** Copiar o banco do desktop pro Pi (`pg_dump`/`pg_restore`) e subir o código atual no
+- [ ] **5.5.2** Copiar o banco do desktop pro Pi (`pg_dump`/`pg_restore`) e subir o código atual no
       Pi. O Pi vira a **única** fonte da verdade. Cuidado: as vagas coletadas pelo Pi desde a última
       cópia (2026-10-22) não existem no desktop, e os `labels` são o dado que não pode se perder.
-- [ ] **5.4.3** Notebook e desktop acessam o Postgres do Pi pela rede do Tailscale (DSN no `.env`),
+- [ ] **5.5.3** Notebook e desktop acessam o Postgres do Pi pela rede do Tailscale (DSN no `.env`),
       sem expor porta no roteador; o pipeline diário (5.3) roda no Pi.
 
-### Tarefa 5.5 — Fechamento
+### Tarefa 5.6 — Fechamento
 
-- [ ] **5.5.1** Débitos da fase + README/docs.
+- [ ] **5.6.1** Débitos da fase + README/docs.
 
 ---
 

@@ -596,6 +596,43 @@ flag `-migrate` no collector (`migrateAndExit` em `migrate.go`), serviço `migra
 `depends_on: service_completed_successfully` em todos os outros serviços. Conferido com `docker compose config`;
 a execução real entra no D51 (e).
 
+**2026-11-02 — D51 pago no desktop** (relato do aluno, roteiro de 7 blocos do mentor). Tudo que foi escrito no
+notebook desde a 5.1 agora rodou contra banco, Discord e Docker de verdade. Próximo: as 24h da 5.3.3
+(`docker compose up -d` com tudo, inclusive o `app`, e observação com `RestartCount`, logs e `jobs_sent`).
+
+**2026-11-02 — `/replan`: melhorar o modelo antes do Pi.** O aluno não quer pôr no ar um digest que mande vagas
+que não interessam. O diagnóstico do mentor: `jev-manual-qs-v1` = 0.7·remote + 0.6·latam − 0.7·senior **não
+olha o CV**, então qualquer vaga remota, LATAM e não sênior (enfermagem, vendas) tira a nota máxima. Ordem nova
+proposta: 5.4 qualidade do digest → 5.5 Pi + 24h de observação → 5.6 fechamento (ROADMAP ainda não atualizado,
+as decisões estão sendo tomadas uma por vez). **Decisão 1 (rótulos):** chegar a ~600 (150 teste / 450 treino).
+**Teste:** as 75 do `test-set-v1` continuam no teste, mais **75 sorteadas** entre as vivas não rotuladas, com
+semente fixa e IDs gravados **antes** de rotular (`test-set-v2`). **Treino:** as vagas novas são escolhidas
+pelas "melhores" (topo das notas), não sorteadas; o critério exato ainda está em discussão. **Ordem definida
+pelo aluno:** (1) **200 sorteadas** = 75 de teste (`test-set-v2`) + 125 de treino, num sorteio só com semente
+fixa, e os 75 de teste separados e gravados antes de rotular; (2) decidir e construir o match de skills com o CV;
+(3) **150 de treino direcionadas** pelo topo da nota atual + match de skills. Total 600 (150 teste / 450 treino). **A fazer pelo mentor, a pedido, depois que todas as decisões estiverem tomadas:** (i) script Python que sorteia as
+200 vivas não rotuladas com semente fixa, separa 75 pro teste e grava as duas listas (teste no `test-set-v2`) antes
+de qualquer rótulo; (ii) `radar label` aceita uma fila de IDs (hoje só pega o próximo por `ORDER BY j.id`). **Decisão 2 (métrica):** **Average Precision** (`average_precision_score`) é a métrica principal pra escolher
+modelo, porque pesa os acertos do topo, que é o que o digest mostra. O ROC AUC fica ao lado, só pra comparar com
+as fases 3b–4c. **Decisão 3 (skills):** CV e vagas viram **conjuntos** (tem ou não tem), sem contar menções, porque a contagem
+mede como o texto foi escrito, não o que a pessoa sabe (D47). O extrator acha 12 skills no `cv.md` (Go, Docker,
+Python, Kubernetes, GitHub, SQL, Linux, Bash, Shell, PostgreSQL, CI/CD, Git), e o aluno confirmou que a lista
+está certa. **Decisão 4 (features de match):** `skill_coverage` = |J∩C|/|J| (a principal: do que a vaga pede, quanto eu tenho),
+`skill_overlap` = |J∩C| (desempate), `skill_missing` = |J−C|, `n_job_skills` = |J| (a vaga é técnica?). Vaga sem
+skills → cobertura 0. Peso por skill fica de fora da v1.
+
+**2026-11-02 — Decisão 5 (candidatos) e plano final da 5.4.** Três candidatos no `test-set-v2` por AP: (1)
+`jev-manual-qs-v1` (linha de base); (2) regra `skills-gate-v1`: filtro do Jev com corte **0.5 fixado antes de
+olhar o teste** (remote ∧ latam ∧ não-senior), ordenada por cobertura; (3) `sklearn-combined-v2`: Jev + 4
+features de skill, sem o cosseno do MiniLM (0.46 na 4a). Ordem do aluno: rotular as 200 sorteadas → medir (1)
+× (2) → a regra escolhe as 150 de treino → treinar (3). ROADMAP atualizado: **5.4 nova**, Pi vira 5.5 (com as
+24h), fechamento 5.6. **Feito pelo mentor a pedido:** `analyzer/scripts/sample_label_round.py` (sorteio de 200
+com semente `20261102` entre vivas não rotuladas; 75 teste / 125 treino; grava `data/test_set_v2.json` com
+v1 + 75 novas e `data/label_queue_round1.json` embaralhada, com teste e treino misturados; recusa rodar duas
+vezes) e `radar label [queue.json]` (fila na ordem do arquivo via `array_position`, pula as já rotuladas e
+retoma de onde parou, mostra "N of 200 left"). `ruff`/`mypy --strict`/`go vet`/testes verdes; nada disso
+rodou contra banco (fica pro desktop). O `frozen.json` (v1) não foi tocado, porque 4 scripts leem dele.
+
 Última sessão: **2026-11-02**.
 
 ---
@@ -1667,7 +1704,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D48 | `analyzer/skills.py` (`skills_extractor`) | O matcher não faz longest-match: `C` e `R` ficaram de fora do dicionário porque casariam em todo lugar, e `Shell` casa dentro de "Bash shell". Impacto baixo hoje (poucas skills de letra única; falso-positivo de `Shell` raro). | aberto — mesmo raciocínio do D47, não medido na 4c (skills_matched fora do top-3). Reagendado pro **backlog** |
 | D49 | `analyzer/scripts/score_embeddings.py` (`model_version='minilm-l6-v2'`) | O `model_version` gravado na `scores` identifica o **modelo de embedding**, não o **CV**. Se o `cv.md` mudar e o script rodar de novo, o `ON CONFLICT` sobrescreve os scores sob o mesmo `model_version` → perde-se o rastro de qual CV gerou cada número (tensão com o invariante §2.1 "todo número vem com o `model_version` que o gerou"). Baixo impacto hoje: single-tenant, CV estável. Visto na 4a.3.1 (2026-10-28). | aberto — 🟡; conserto quando o CV mudar de verdade: embutir uma versão/hash do CV no `model_version` (ex.: `minilm-l6-v2+cv1`), para cada número carregar o CV que o gerou |
 | D50 | `analyzer/jobradar/jev/client.py` (`JEV_MODEL`) + `analyzer/scripts/score_jev.py` (`WEIGHT`, `MODEL_VERSION`) | Irmão do D49: `jev_answers`/`scores` identificam o `question_set_version` (`qs-v1`), mas não **qual modelo Jev concreto respondeu** (`JEV_MODEL` é `jev-latest`, flutuante — `TODO(4b.4)` já registrado no código pra pinar via `client.models()`) nem **quais pesos manuais** geraram o score (`WEIGHT` em `score_jev.py` não está no `model_version='jev-manual-qs-v1'`). Se o provedor atualizar `jev-latest` ou o aluno trocar os pesos, o `ON CONFLICT` sobrescreve sem deixar rastro de qual combinação gerou o número. Visto na 4b.3/4b.4 (2026-10-29/30). | 🔶 parcial — a metade "pesos" ficou resolvida por convenção na 4c: cada método de combinação ganha um `model_version` versionado à mão (`jev-manual-qs-v1`, `sklearn-combined-v1`), igual `tfidf-v1`/`minilm-l6-v2` — trocar o método exige escolher um nome novo, não sobrescrever o antigo. A metade "qual `JEV_MODEL` respondeu" continua sem rastro (`jev-latest` flutuante) — reagendado pra **Fase 5**, quando o digest em produção tornar a reprodutibilidade do Jev operacionalmente importante |
-| D51 | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. **Ampliado em 2026-11-02 (5.3.1):** (c) `docker compose up -d --build` com `COMPOSE_PROFILES=jev` → `jev-worker` loga `started` e os ciclos na hora; `stop` < 2s; `stop`/`start postgres` → erro de uma linha e recuperação sozinha; sem o profile, o serviço nem aparece em `docker compose ps`. (d) 5.3.2: `radar digest-loop` com `every: 1m` + `stop`/`start postgres` → um erro por ciclo, recuperação sozinha. (e) 5.3.3/D41: no `docker compose up -d`, `docker compose ps -a migrate` mostra `Exited (0)`, os outros sobem depois dele e nenhum log tem `UndefinedTable` (teste com banco novo fica pra Fase 6: o `container_name` fixo do D23 impede um 2º projeto lado a lado). | aberto — 🟡; pagar na primeira sessão no desktop, **antes** de agendar (5.3), porque agendar um digest que nunca rodou esconde o erro atrás do cron |
+| ~~D51~~ | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. **Ampliado em 2026-11-02 (5.3.1):** (c) `docker compose up -d --build` com `COMPOSE_PROFILES=jev` → `jev-worker` loga `started` e os ciclos na hora; `stop` < 2s; `stop`/`start postgres` → erro de uma linha e recuperação sozinha; sem o profile, o serviço nem aparece em `docker compose ps`. (d) 5.3.2: `radar digest-loop` com `every: 1m` + `stop`/`start postgres` → um erro por ciclo, recuperação sozinha. (e) 5.3.3/D41: no `docker compose up -d`, `docker compose ps -a migrate` mostra `Exited (0)`, os outros sobem depois dele e nenhum log tem `UndefinedTable` (teste com banco novo fica pra Fase 6: o `container_name` fixo do D23 impede um 2º projeto lado a lado). | ✅ pago 2026-11-02 no desktop, **por relato do aluno** ("tudo certo", sem saídas coladas): (a) fila do Jev drenada; (b) os 4 testes do `radar digest`; (c) `jev-worker` no compose (logs na hora, `stop` rápido, Postgres caindo e voltando); (d) `digest-loop` idem; (e) `migrate` `Exited (0)` antes dos outros, sem `UndefinedTable`. O mentor não reproduziu nenhum desses (sem banco nem Docker no notebook) |
 | D52 | `analyzer/scripts/score_jev_batch.py` (fila do Jev) | **Vaga envenenada trava a fila.** A fila é `ORDER BY j.id`, sem marcar falhas. Se uma vaga específica fizer o Jev responder sempre 400/422 (texto grande demais, caractere que a API rejeita), o worker cai nela a cada partida: o `restart` religa, ele pega a mesma vaga primeiro e cai de novo (crash loop), e **nenhuma vaga depois dela é pontuada**. Erro 400 não entra em `TRANSIENT_ERRORS` de propósito (não se cura esperando). Saídas possíveis: marcar a vaga como "falhou N vezes" e pular, ou capturar o erro por vaga dentro do lote. Visto na análise do passo 3 da 5.3.1 (2026-11-02), nunca observado. | aberto — 🟡; reavaliar se aparecer um crash loop com `TypeSafeBadRequestError` no log |
 
 ### 🟢 Nits — mencionados uma vez
