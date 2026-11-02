@@ -18,3 +18,7 @@ Dockerfile
 .dockerignore
 *compose.yml
 
+analyzer/
+db_dump/
+cmd/radar/radar
+cv.md
