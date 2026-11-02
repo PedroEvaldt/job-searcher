@@ -9,10 +9,10 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv sync --locked --no-dev --no-install-project
+RUN uv sync --locked --no-dev --group jev --no-install-project
 
 COPY . .
 
-RUN uv sync --locked --no-dev
+RUN uv sync --locked --no-dev --group jev
 
 CMD ["uv", "run", "--no-dev", "python", "-m", "scripts.main"]

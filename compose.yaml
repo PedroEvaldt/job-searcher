@@ -48,5 +48,29 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+  jev-worker:
+    # Same image as analyzer, different command: the long-running Jev scorer.
+    # Off by default (profile "jev"): without JEV_API_KEY the worker exits 1, and with
+    # restart: unless-stopped that would be a restart loop. Turn it on with
+    # COMPOSE_PROFILES=jev in .env, next to the key.
+    profiles: ["jev"]
+    image: analyzer:latest
+    build:
+      context: ./analyzer/
+      dockerfile: ./Dockerfile
+    command: ["uv", "run", "--no-dev", "--group", "jev", "python", "-m", "scripts.jev_worker"]
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      JEV_API_KEY: ${JEV_API_KEY}
+      JEV_WORKER_INTERVAL_SECONDS: ${JEV_WORKER_INTERVAL_SECONDS:-900}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 volumes:
   postgres_data:
