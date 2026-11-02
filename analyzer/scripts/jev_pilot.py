@@ -6,9 +6,9 @@ import psycopg
 from psycopg.types.json import Json
 
 from jobradar.boilerplate import clean_descriptions
+from jobradar.frozen import FROZEN_PATH as OUTPUT_PATH
 from jobradar.jev.client import JevAnswers, jev_client
 from jobradar.jev.questions import QUESTION_SET_VERSION, QUESTIONS
-from scripts.freeze_test_set import OUTPUT_PATH
 
 # Jev bills input tokens only, ~$0.042 per million (output is free).
 INPUT_PRICE_PER_MILLION = 0.042

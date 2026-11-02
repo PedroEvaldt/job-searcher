@@ -10,8 +10,8 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from jobradar.frozen import FROZEN_PATH as FREEZE_PATH
 from scripts.build_features import OUTPUT_PATH
-from scripts.freeze_test_set import OUTPUT_PATH as FREEZE_PATH
 
 MODEL_PATH = Path(__file__).parents[1] / "data" / "jev_sklearn_model.pkl"
 

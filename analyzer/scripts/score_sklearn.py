@@ -6,8 +6,8 @@ import joblib
 import numpy as np
 import psycopg
 
+from jobradar.frozen import FROZEN_PATH as FREEZE_PATH
 from scripts.build_features import OUTPUT_PATH
-from scripts.freeze_test_set import OUTPUT_PATH as FREEZE_PATH
 from scripts.train_model import COLS, MODEL_PATH
 
 

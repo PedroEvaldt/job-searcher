@@ -2,8 +2,9 @@
 test set and 125 to train, and freeze both lists BEFORE any of them is labelled.
 
 Writes two files under data/:
-- test_set_v2.json: the 75 test-set-v1 jobs plus the 75 new ones. Ids only — the
-  labels live in the labels table, read at evaluation time.
+- frozen.json (test-set-v2): the 75 test-set-v1 jobs plus the 75 new ones. Ids only —
+  the labels live in the labels table, read at evaluation time. Same "test_set" shape
+  as v1, so the scripts that only need the ids read it unchanged.
 - label_queue_round1.json: the 200 new ids, in the order `radar label` shows them.
   Test and train are shuffled together, so while labelling you cannot tell which
   is which.
@@ -15,17 +16,16 @@ import json
 import os
 import random
 import sys
-from pathlib import Path
 
 import psycopg
+
+from jobradar.frozen import DATA_DIR, FROZEN_PATH, FROZEN_V1_PATH
 
 RANDOM_STATE = 20261102
 N_SAMPLE = 200
 N_NEW_TEST = 75
 
-DATA_DIR = Path(__file__).parents[1] / "data"
-FROZEN_V1_PATH = DATA_DIR / "frozen.json"
-TEST_V2_PATH = DATA_DIR / "test_set_v2.json"
+TEST_V2_PATH = FROZEN_PATH
 QUEUE_PATH = DATA_DIR / "label_queue_round1.json"
 
 
@@ -76,7 +76,7 @@ def sample_label_round() -> int:
         "random_state": RANDOM_STATE,
         "from_test_set_v1": v1_test,
         "new": new_test,
-        "job_ids": test_ids,
+        "test_set": [{"job_id": job_id} for job_id in test_ids],
     }
     queue = {
         "round": 1,

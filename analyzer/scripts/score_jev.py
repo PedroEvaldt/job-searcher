@@ -4,8 +4,8 @@ import sys
 
 import psycopg
 
+from jobradar.frozen import FROZEN_PATH as OUTPUT_PATH
 from jobradar.jev.questions import QUESTION_SET_VERSION
-from scripts.freeze_test_set import OUTPUT_PATH
 
 WEIGHT = {"fully_remote": 0.7, "open_to_latam": 0.6, "is_senior_role": -0.7}
 

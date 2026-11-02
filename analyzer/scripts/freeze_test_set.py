@@ -1,17 +1,26 @@
 import json
 import os
 import sys
-from pathlib import Path
 
 import psycopg
 from sklearn.model_selection import train_test_split
 
+from jobradar.frozen import FROZEN_V1_PATH
+
 RANDOM_STATE = 7
 TEST_SIZE = 0.3
-OUTPUT_PATH = Path(__file__).parents[1] / "data" / "frozen.json"
+OUTPUT_PATH = FROZEN_V1_PATH
 
 
 def freeze_test_set() -> int:
+    """Historical: built test-set-v1 (3b.2). Kept to document how v1 was drawn; it
+    refuses to overwrite it, since re-splitting today's labels would give a new set."""
+    if OUTPUT_PATH.exists():
+        print(
+            f"{OUTPUT_PATH.name} already exists — test-set-v1 is frozen",
+            file=sys.stderr,
+        )
+        return 1
     db_url = os.getenv("DATABASE_URL")
     if db_url is None:
         print("DATABASE_URL is not set", file=sys.stderr)
