@@ -8,7 +8,7 @@
 ## 1. O que é
 
 Ferramenta **self-hosted** que coleta vagas remotas internacionais de várias fontes,
-ranqueia cada uma contra o currículo do usuário e manda um digest diário no Discord
+ranqueia cada uma contra o currículo do usuário e manda um digest a cada 6h no Discord
 (revisto 2026-10-30; era semanal).
 
 Qualquer pessoa clona o repositório, escreve o próprio `cv.md`, ajusta o `config.yaml`,
@@ -212,7 +212,7 @@ Tão importante quanto o que está dentro.
 - ❌ LinkedIn e Indeed (hostis a automação; risco jurídico e técnico)
 - ❌ Cloud gerenciada / custo recorrente — tudo roda na máquina de quem clonou
 - ❌ Treinar modelo de linguagem do zero (usar pré-treinados é o ponto)
-- ❌ Notificação em tempo real — o produto é **digest em lote** (diário), deliberadamente
+- ❌ Notificação em tempo real — o produto é **digest em lote** (a cada 6h), deliberadamente
 - ❌ Servidor HTTP / páginas web (API, dashboard, UI de config) — revisto 2026-10-30;
   FastAPI e `cmd/api` estavam previstos na Sessão Zero sem necessidade concreta que
   tivesse aparecido depois. O digest é o único jeito de ver o resultado, de propósito.

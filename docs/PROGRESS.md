@@ -518,7 +518,59 @@ dúvida sobre `username`/`embeds` foi respondida: embeds são uma melhoria poss�
 **Tarefa 5.2 fechado**, mas a execução ficou pendente → **D51**, porque só dá pra rodar no desktop. Marcadas
 5.1.1/5.2.1/5.2.2 no ROADMAP. Próxima: **5.3.1**.
 
-Última sessão: **2026-11-01**.
+**2026-11-02 — decisão: deploy por estado, não por sequência nem por sinais (5.3 redesenhada).** Primeiro
+o mentor propôs um systemd timer no host rodando Jev → digest em sequência. O aluno propôs uma corrente de
+sinais (collector avisa o Jev, que avisa o digest). Discussão: o "sinal" já existe como **estado** no banco
+(`jobs` sem `jev_answers`; `scores` fora de `jobs_sent`), que é a fila de graça do SPEC §3. Sinal se perde
+se quem recebe está fora do ar (`NOTIFY` sem ouvinte é descartado), então o sistema precisaria checar o
+estado na partida de qualquer jeito. Além disso, uma corrente collector→Jev→digest dispararia o digest a
+cada coleta. **Decisão:** cada peça é um daemon no compose com seu próprio ritmo: `collector` 6h (existe),
+worker do Jev (drena e dorme), digest a cada 6h. A pergunta "se o Jev falhar, o digest roda?" deixa de
+existir, e tudo sobe com um `docker compose up` (bom pro critério da Fase 6). **Abre-se mão de:** ordem
+garantida (vaga ainda sem nota na hora do digest vai no próximo) e de recuperação de horário perdido
+(irrelevante com intervalo fixo). `LISTEN`/`NOTIFY` como "acordar mais cedo" foi pro backlog, como
+exercício opcional. **Digest passou de diário pra a cada 6h** (pedido do aluno); SPEC/ROADMAP atualizados.
+
+**2026-11-02 — 5.3.1 passo 1 ✅** (aluno). `process_pending_jobs(conn, jev_c) -> tuple[int, float]` separada do
+one-shot `score_jev_batch()`; o corpus é montado dentro da função de trabalho (recalculado a cada drenagem,
+certo pro daemon). Verificação só estática no notebook: `mypy --strict` e 51 testes verdes, caminho sem banco
+sai `1` sem traceback. **Pra lembrar no passo 4:** o `typesafe-sdk` mora no grupo opcional `jev` do
+`pyproject.toml` (`uv run --group jev`), e o `Dockerfile` do analyzer faz `uv sync --no-dev`, que não instala
+esse grupo → no container o import do cliente quebra. Passo 0 (D51) adiado pelo aluno pro desktop.
+
+**2026-11-02 — 5.3.1 passo 2 ✅** (estrutura do aluno, acertos pelo mentor a pedido). `scripts/jev_worker.py`:
+`threading.Event` + handler de SIGTERM/SIGINT que só levanta a bandeira, `with conn`, intervalo em
+`JEV_WORKER_INTERVAL_SECONDS` (padrão 900; inválido → erro, não fallback silencioso), `flush=True`. Os dois
+pontos de entrada abrem a conexão com `autocommit=True` no `connect`, e a docstring de lotes/retomada foi pra
+`process_pending_jobs`. Bugs corrigidos: o handler no nível do módulo referenciava um `stop` local da função
+(`NameError` no primeiro sinal); com intervalo inválido, `stop.wait(None)` dormia pra sempre; havia
+constantes copiadas sem uso. O `try/except` do ciclo saiu e volta no passo 3 com reconexão (a conexão
+morta depois de um restart do Postgres não se recupera sozinha). Verificado com dublês (sem Docker nesta
+máquina): 2 ciclos de 10s, log em arquivo na hora, SIGTERM no sono → saída `0` imediata. O `uv run` repassa
+o SIGTERM pro Python.
+
+**2026-11-02 — 5.3.1 passo 3 ✅** (feito pelo mentor a pedido). `jev_worker.py`: uma conexão nova por ciclo
+(`run_cycle`, com `with`), porque a conexão aberta antes de um restart do Postgres morre de vez. O
+`try/except TRANSIENT_ERRORS` cobre `psycopg.OperationalError` + `TypeSafeAPIConnectionError` (inclui timeout)
++ `TypeSafeRateLimitError` + `TypeSafeInternalServerError`, e loga uma linha. Bug, chave inválida (401) e
+requisição rejeitada (400) continuam derrubando o worker. Sem conexão na partida: banco fora no boot vira
+"ciclo falhou, tenta de novo", sem `exit 1`. Verificado com dublês: 2 ciclos com banco fora → recupera
+sozinho no 3º; `TypeError` derruba com traceback e `exit 1`; DSN com senha contra porta fechada não vaza a
+senha. Achado → **D52** (vaga envenenada trava a fila). Nit aceito: o worker importa erros do `typesafe_sdk`,
+então a abstração do `JevClient` vaza um pouco (trocar de provedor exige mexer nessa tupla).
+
+**2026-11-02 — 5.3.1 passo 4 e subtarefa 5.3.1 fechados** (o aluno escreveu o serviço; o mentor corrigiu a
+pedido). Serviço `jev-worker` no compose, no profile `jev` (ligado com `COMPOSE_PROFILES=jev` no `.env`, ao lado
+da chave), mesma imagem do `analyzer`, `restart: unless-stopped`, `environment` explícito (sem `env_file`).
+Corrigidos: `context: .analyzer/`, `image: analyzer.latest` (o ponto criava uma 2ª imagem), `"no-dev"` sem
+traços no `command`, `---group`/`-no-install-project` no Dockerfile. **Lição que pegou:** o aluno tirou o
+`:-900` achando redundante com o padrão do código, mas `${VAR}` no `environment:` passa `""` (vazio, não
+ausente) quando o `.env` deixa a variável em branco → `int("")` → `exit 1` → loop de reinício. Agora há
+proteção dos dois lados: `:-900` no compose e `if not raw` no `interval_from_env`. Conferido com
+`docker compose config` (funciona sem o daemon). O `PYTHONUNBUFFERED` ficou de fora com razão (todo `print`
+tem `flush=True`). Execução real → D51.
+
+Última sessão: **2026-11-02**.
 
 ---
 
@@ -1589,7 +1641,8 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D48 | `analyzer/skills.py` (`skills_extractor`) | O matcher não faz longest-match: `C` e `R` ficaram de fora do dicionário porque casariam em todo lugar, e `Shell` casa dentro de "Bash shell". Impacto baixo hoje (poucas skills de letra única; falso-positivo de `Shell` raro). | aberto — mesmo raciocínio do D47, não medido na 4c (skills_matched fora do top-3). Reagendado pro **backlog** |
 | D49 | `analyzer/scripts/score_embeddings.py` (`model_version='minilm-l6-v2'`) | O `model_version` gravado na `scores` identifica o **modelo de embedding**, não o **CV**. Se o `cv.md` mudar e o script rodar de novo, o `ON CONFLICT` sobrescreve os scores sob o mesmo `model_version` → perde-se o rastro de qual CV gerou cada número (tensão com o invariante §2.1 "todo número vem com o `model_version` que o gerou"). Baixo impacto hoje: single-tenant, CV estável. Visto na 4a.3.1 (2026-10-28). | aberto — 🟡; conserto quando o CV mudar de verdade: embutir uma versão/hash do CV no `model_version` (ex.: `minilm-l6-v2+cv1`), para cada número carregar o CV que o gerou |
 | D50 | `analyzer/jobradar/jev/client.py` (`JEV_MODEL`) + `analyzer/scripts/score_jev.py` (`WEIGHT`, `MODEL_VERSION`) | Irmão do D49: `jev_answers`/`scores` identificam o `question_set_version` (`qs-v1`), mas não **qual modelo Jev concreto respondeu** (`JEV_MODEL` é `jev-latest`, flutuante — `TODO(4b.4)` já registrado no código pra pinar via `client.models()`) nem **quais pesos manuais** geraram o score (`WEIGHT` em `score_jev.py` não está no `model_version='jev-manual-qs-v1'`). Se o provedor atualizar `jev-latest` ou o aluno trocar os pesos, o `ON CONFLICT` sobrescreve sem deixar rastro de qual combinação gerou o número. Visto na 4b.3/4b.4 (2026-10-29/30). | 🔶 parcial — a metade "pesos" ficou resolvida por convenção na 4c: cada método de combinação ganha um `model_version` versionado à mão (`jev-manual-qs-v1`, `sklearn-combined-v1`), igual `tfidf-v1`/`minilm-l6-v2` — trocar o método exige escolher um nome novo, não sobrescrever o antigo. A metade "qual `JEV_MODEL` respondeu" continua sem rastro (`jev-latest` flutuante) — reagendado pra **Fase 5**, quando o digest em produção tornar a reprodutibilidade do Jev operacionalmente importante |
-| D51 | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. | aberto — 🟡; pagar na primeira sessão no desktop, **antes** de agendar (5.3), porque agendar um digest que nunca rodou esconde o erro atrás do cron |
+| D51 | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. **Ampliado em 2026-11-02 (5.3.1):** (c) `docker compose up -d --build` com `COMPOSE_PROFILES=jev` → `jev-worker` loga `started` e os ciclos na hora; `stop` < 2s; `stop`/`start postgres` → erro de uma linha e recuperação sozinha; sem o profile, o serviço nem aparece em `docker compose ps`. | aberto — 🟡; pagar na primeira sessão no desktop, **antes** de agendar (5.3), porque agendar um digest que nunca rodou esconde o erro atrás do cron |
+| D52 | `analyzer/scripts/score_jev_batch.py` (fila do Jev) | **Vaga envenenada trava a fila.** A fila é `ORDER BY j.id`, sem marcar falhas. Se uma vaga específica fizer o Jev responder sempre 400/422 (texto grande demais, caractere que a API rejeita), o worker cai nela a cada partida: o `restart` religa, ele pega a mesma vaga primeiro e cai de novo (crash loop), e **nenhuma vaga depois dela é pontuada**. Erro 400 não entra em `TRANSIENT_ERRORS` de propósito (não se cura esperando). Saídas possíveis: marcar a vaga como "falhou N vezes" e pular, ou capturar o erro por vaga dentro do lote. Visto na análise do passo 3 da 5.3.1 (2026-11-02), nunca observado. | aberto — 🟡; reavaliar se aparecer um crash loop com `TypeSafeBadRequestError` no log |
 
 ### 🟢 Nits — mencionados uma vez
 

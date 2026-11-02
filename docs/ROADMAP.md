@@ -17,7 +17,7 @@ a anterior fecha.
 | 4a     | Embeddings                    | sentence-transformers + pgvector vs baseline — sabe qual ganha e por quanto, no conjunto congelado     |
 | 4b     | Jev como extrator de features | Question set v1, `jev_answers` — piloto com checagem visual (concordância formal dispensada, 2026-10-30) e custo por mil vagas medido; roda sem chave |
 | 4c     | sklearn                       | Features do Jev + cosseno + features do código — três abordagens comparadas no conjunto congelado      |
-| 5      | Digest                        | Primeiro digest diário chega no Discord sem você rodar nada à mão                                      |
+| 5      | Digest                        | Digest chega no Discord a cada 6h sem você rodar nada à mão (era diário até 2026-11-02)              |
 | 6      | Fechamento                    | Outra pessoa roda seguindo só o README                                                                 |
 
 **Mudanças aplicadas ao plano original (Sessão Zero):**
@@ -987,7 +987,7 @@ nem em ajuste de hiperparâmetro — o split treino/teste já existe (`frozen.js
 ## Fase 5 — Digest 📍 (aberta 2026-10-30)
 
 **Objetivo da fase:** `jev-manual-qs-v1` (o score que venceu na 4c, 0.72 no congelado) chegando no Discord
-uma vez por dia, sem servidor HTTP (FastAPI/`cmd/api` tirados do escopo em 2026-10-30) e sem Kubernetes
+a cada 6h (era "uma vez por dia" até 2026-11-02), sem servidor HTTP (FastAPI/`cmd/api` tirados do escopo em 2026-10-30) e sem Kubernetes
 (descartado em 2026-10-30) — só `docker compose up` no Raspberry Pi. `sklearn-combined-v1` fica de lado
 (perdeu a comparação); volta se "melhorar o modelo" (backlog) mudar esse resultado.
 
@@ -1005,10 +1005,21 @@ uma vez por dia, sem servidor HTTP (FastAPI/`cmd/api` tirados do escopo em 2026-
 - [x] **5.2.2** Manda a mensagem pro Discord via `DISCORD_WEBHOOK_URL`; não repete vaga já enviada.
       _Código pronto em 2026-11-01; execução real (banco + Discord) pendente → **D51**._
 
-### Tarefa 5.3 — Agendamento
+### Tarefa 5.3 — Cada peça no seu ritmo (redesenhada 2026-11-02)
 
-- [ ] **5.3.1** Uma vez por dia, em sequência: pontuar vagas novas com Jev (5.1) → `radar digest` (5.2).
-      Decidir o mecanismo (cron no Pi vs. laço próprio, mesmo padrão do `collector`).
+Sem sequência nem sinais entre processos: cada peça é um daemon no compose que lê **estado** do banco
+(a "fila de graça" do SPEC §3). `collector` a cada 6h (já existe) · worker do Jev drena `jobs` sem
+`jev_answers` e dorme · digest a cada 6h manda o que estiver pontuado e não enviado. Vaga não
+pontuada na hora do digest vai no próximo. Decisão e trade-offs em `PROGRESS.md` (2026-11-02).
+
+- [x] **5.3.1** Worker do Jev (Python): laço drena → dorme, parada limpa no SIGTERM, ciclo que
+      falha não derruba o processo, serviço no compose. Inclui pagar o **D51** antes.
+      _Código pronto em 2026-11-02 (`scripts/jev_worker.py`, serviço `jev-worker` no profile `jev`); execução
+      no compose pendente → **D51**._
+- [ ] **5.3.2** Digest em laço (Go): `radar` com modo daemon a cada `digest.every` (no
+      `config.yaml`), mesmo padrão do laço do `collector`.
+- [ ] **5.3.3** `radar` na imagem + serviço no compose; tudo de pé com um `docker compose up -d`
+      e observado por ≥ 24h (≥ 4 digests).
 
 ### Tarefa 5.4 — Pi como host oficial do Postgres (decidido 2026-10-31)
 
