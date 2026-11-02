@@ -1029,10 +1029,12 @@ LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registrad
 **Métrica principal:** Average Precision no `test-set-v2` (ROC AUC ao lado).
 
 - [ ] **5.4.1** Rodada 1 de rótulos: `scripts/sample_label_round.py` sorteia 200 vivas (semente fixa) →
-      75 pro `test-set-v2` (+ as 75 do v1 = 150) e 125 pro treino, congelados antes de rotular;
+      75 pro `test-set-v2` (+ as 75 do v1 = 150, gravado como o novo `data/frozen.json`; o v1 virou
+      `frozen_v1.json`) e 125 pro treino, congelados antes de rotular;
       `radar label data/label_queue_round1.json` rotula a fila. [ferramentas feitas pelo mentor]
-- [ ] **5.4.2** Match de skills com o CV: conjuntos (tem/não tem), `skill_coverage` (principal),
+- [x] **5.4.2** Match de skills com o CV: conjuntos (tem/não tem), `skill_coverage` (principal),
       `skill_overlap`, `skill_missing`, `n_job_skills`; função pura + `pytest`.
+      _Feito 2026-11-02 (mentor, a pedido): `jobradar/match.py` + `tests/test_match.py`. Usado na 5.4.3._
 - [ ] **5.4.3** Regra com filtro (`skills-gate-v1`): Jev remote ≥ 0.5 ∧ latam ≥ 0.5 ∧ senior < 0.5 →
       ordena por cobertura (overlap desempata). AP × `jev-manual-qs-v1` no `test-set-v2`.
 - [ ] **5.4.4** Rodada 2 de rótulos: 150 de treino escolhidas pelo topo da regra (5.4.3).

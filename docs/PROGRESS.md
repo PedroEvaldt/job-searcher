@@ -633,6 +633,17 @@ vezes) e `radar label [queue.json]` (fila na ordem do arquivo via `array_positio
 retoma de onde parou, mostra "N of 200 left"). `ruff`/`mypy --strict`/`go vet`/testes verdes; nada disso
 rodou contra banco (fica pro desktop). O `frozen.json` (v1) não foi tocado, porque 4 scripts leem dele.
 
+**2026-11-02 — test-set-v2 vira o `frozen.json` + 5.4.2 (mentor, a pedido).** `data/frozen.json` → `frozen_v1.json`
+(`git mv`). O `sample_label_round.py` passa a gravar o v2 como `data/frozen.json`, no mesmo formato `test_set`
+(só `job_id`), e os scripts que só leem IDs (`jev_pilot`, `score_jev`, `train_model`, `score_sklearn`) seguem
+iguais, agora apontando pro `jobradar/frozen.py` (caminho num lugar só). O `freeze_test_set.py` grava só o v1
+e recusa sobrescrever. O `evaluate.py` lê os rótulos do **banco** (o v2 não tem rótulo embutido), avisa quantas
+vagas de teste faltam rotular e imprime **AP** (principal) + ROC AUC + AP aleatória (= taxa de positivos), com
+padrão `jev-manual-qs-v1`. **Efeito a lembrar:** o `train_model.py` agora exclui as 150 do v2 do treino, como
+deve. **5.4.2:** `jobradar/match.py` (`skill_match(job, cv) -> SkillMatch`, `cv_skills()`), 6 testes (57 no
+total). Construir as features antes de rotular não contamina nada: as decisões (conjuntos, cobertura, corte
+0.5) foram tomadas antes, e o que não pode é **iterar** olhando o resultado no teste.
+
 Última sessão: **2026-11-02**.
 
 ---
