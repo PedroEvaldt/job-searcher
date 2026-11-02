@@ -96,6 +96,7 @@ func main() {
 
 	once := flag.Bool("once", false, "run one time only")
 	renormalize := flag.Bool("renormalize", false, "renormalize jobs database")
+	migrateOnly := flag.Bool("migrate", false, "apply pending migrations and exit")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -110,6 +111,16 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info("shutting down")
+		return
+	}
+	// The compose "migrate" service runs this once; every other service waits for it to
+	// exit 0 (service_completed_successfully), so none of them starts before the schema
+	// exists. run() still migrates at the start of each cycle — a no-op by then.
+	if *migrateOnly {
+		if err := migrateAndExit(dbCtx, logger, dbURL); err != nil {
+			logger.Error("failed to migrate", "error", err)
+			os.Exit(1)
+		}
 		return
 	}
 	if *renormalize {

@@ -64,3 +64,18 @@ func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 			"empty", migration.Empty)
 	}
 }
+
+// migrateAndExit opens a database/sql handle just for goose, applies every pending
+// migration and closes it. It backs the -migrate flag.
+func migrateAndExit(ctx context.Context, logger *slog.Logger, dbURL string) (err error) {
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close database: %w", closeErr)
+		}
+	}()
+	return migrate(ctx, db, logger)
+}
