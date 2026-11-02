@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const usage = "usage: radar [status | label | digest | digest-loop]"
+const usage = "usage: radar [status | label [queue.json] | digest | digest-loop]"
 
 // main is the only place that logs a failure and picks the exit code; everything
 // below it returns errors with context and leaves that decision here.
@@ -24,7 +24,8 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) != 1 {
+	// Only label takes an optional argument: the queue file to label from.
+	if len(args) == 0 || len(args) > 2 || (len(args) == 2 && args[0] != "label") {
 		return errors.New(usage)
 	}
 
@@ -71,7 +72,13 @@ func run(args []string) error {
 	case "status":
 		return status(ctx, conn)
 	case "label":
-		return label(ctx, conn, 100)
+		var queue []int64
+		if len(args) == 2 {
+			if queue, err = loadLabelQueue(args[1]); err != nil {
+				return err
+			}
+		}
+		return label(ctx, conn, 100, queue)
 	case "digest":
 		cfg, err := loadDigestConfig("./config.yaml")
 		if err != nil {
