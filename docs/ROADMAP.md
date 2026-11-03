@@ -1037,7 +1037,10 @@ LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registrad
       _Feito 2026-11-02 (mentor, a pedido): `jobradar/match.py` + `tests/test_match.py`. Usado na 5.4.3._
 - [ ] **5.4.3** Regra com filtro (`skills-gate-v1`): Jev remote ≥ 0.5 ∧ latam ≥ 0.5 ∧ senior < 0.5 →
       ordena por cobertura (overlap desempata). AP × `jev-manual-qs-v1` no `test-set-v2`.
+      _Código pronto 2026-11-02 (mentor): `skills_gate_score` em `jobradar/match.py` + `scripts/score_skills_gate.py`;
+      falta rodar e medir depois da rodada 1._
 - [ ] **5.4.4** Rodada 2 de rótulos: 150 de treino escolhidas pelo topo da regra (5.4.3).
+      _Script pronto 2026-11-02 (mentor): `scripts/build_label_queue_round2.py`._
 - [ ] **5.4.5** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill; sem cosseno) treinado nos
       450 → AP no `test-set-v2`. O vencedor vira o `digest.model_version`; auditoria: rotular o top-10
       que ele mandaria hoje (precisão@10 real).

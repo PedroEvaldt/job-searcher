@@ -644,6 +644,17 @@ deve. **5.4.2:** `jobradar/match.py` (`skill_match(job, cv) -> SkillMatch`, `cv_
 total). Construir as features antes de rotular não contamina nada: as decisões (conjuntos, cobertura, corte
 0.5) foram tomadas antes, e o que não pode é **iterar** olhando o resultado no teste.
 
+**2026-11-02 — código da 5.4.3 e da 5.4.4 (mentor, a pedido; nada rodou contra banco).** `skills_gate_score` em
+`jobradar/match.py`: filtro do Jev (remote ≥ 0.5 ∧ latam ≥ 0.5 ∧ senior < 0.5; resposta ausente reprova) →
+cobertura arredondada a 3 casas + overlap·1e-5 (o overlap só desempata, nunca reordena coberturas diferentes); 9
+testes, 66 no total. `scripts/score_skills_gate.py` grava `skills-gate-v1` pra toda viva com resposta do Jev, numa
+transação, e avisa as vivas sem `skills_extracted_at` (elas tirariam 0 sem aviso; rode `scripts.main` antes).
+`scripts/build_label_queue_round2.py`: top 150 da regra, sem rótulo, fora do `frozen.json` **e** da fila da rodada
+1, embaralhadas com semente `20261103` (a ordem não revela o ranking), grava `label_queue_round2.json` e recusa
+rodar duas vezes. **Pendência pra quando a regra vencer:** hoje ela é um script batch; pra ir pro digest, as vagas
+novas precisam de skills extraídas + resposta do Jev + nota da regra, e isso é trabalho do `jev-worker` (ou de
+um passo depois dele).
+
 Última sessão: **2026-11-02**.
 
 ---
