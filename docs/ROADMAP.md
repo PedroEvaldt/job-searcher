@@ -1028,20 +1028,31 @@ pontuada na hora do digest vai no próximo. Decisão e trade-offs em `PROGRESS.m
 LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registradas no `PROGRESS.md` (2026-11-02).
 **Métrica principal:** Average Precision no `test-set-v2` (ROC AUC ao lado).
 
-- [ ] **5.4.1** Rodada 1 de rótulos: `scripts/sample_label_round.py` sorteia 200 vivas (semente fixa) →
+- [x] **5.4.1** Rodada 1 de rótulos: `scripts/sample_label_round.py` sorteia 200 vivas (semente fixa) →
       75 pro `test-set-v2` (+ as 75 do v1 = 150, gravado como o novo `data/frozen.json`; o v1 virou
       `frozen_v1.json`) e 125 pro treino, congelados antes de rotular;
       `radar label data/label_queue_round1.json` rotula a fila. [ferramentas feitas pelo mentor]
+      _Feito 2026-11-03: 450 rótulos (150 teste, 5 pos / 300 treino, 14 pos). Linha de base `jev-manual-qs-v1`
+      AP=0.1472 / ROC AUC=0.7207 no `test-set-v2` (n=150)._
 - [x] **5.4.2** Match de skills com o CV: conjuntos (tem/não tem), `skill_coverage` (principal),
       `skill_overlap`, `skill_missing`, `n_job_skills`; função pura + `pytest`.
       _Feito 2026-11-02 (mentor, a pedido): `jobradar/match.py` + `tests/test_match.py`. Usado na 5.4.3._
-- [ ] **5.4.3** Regra com filtro (`skills-gate-v1`): Jev remote ≥ 0.5 ∧ latam ≥ 0.5 ∧ senior < 0.5 →
+- [x] **5.4.3** Regra com filtro (`skills-gate-v1`): Jev remote ≥ 0.5 ∧ latam ≥ 0.5 ∧ senior < 0.5 →
       ordena por cobertura (overlap desempata). AP × `jev-manual-qs-v1` no `test-set-v2`.
       _Código pronto 2026-11-02 (mentor): `skills_gate_score` em `jobradar/match.py` + `scripts/score_skills_gate.py`;
       falta rodar e medir depois da rodada 1._
+      _Medido 2026-11-03: **perdeu** — `skills-gate-v1` AP=0.0333 / AUC=0.4966 (= aleatório; filtro, não ranking:
+      tudo fora dele empata em 0)._
 - [ ] **5.4.4** Rodada 2 de rótulos: 150 de treino escolhidas pelo topo da regra (5.4.3).
       _Script pronto 2026-11-02 (mentor): `scripts/build_label_queue_round2.py`._
-- [ ] **5.4.5** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill; sem cosseno) treinado nos
+- [ ] **5.4.5** Revisão dos positivos (pedido do aluno, 2026-11-03): `radar review` mostra, uma por vez, cada
+      vaga rotulada `would_apply = true` (título, empresa, descrição; nunca score, nunca se é teste ou treino)
+      e pergunta se mantém: `y` não faz nada, `n` grava `would_apply = false`. Roda **uma vez, antes da
+      5.4.6**: depois de ver o AP do modelo novo, rótulo de teste não muda mais. Backup dos `labels` antes;
+      `scripts.evaluate` depois (a linha de base a bater pode mudar). Revisão só dos "y": só tira positivos.
+      _Código pronto 2026-11-06 (`cmd/radar/review.go`, do aluno; comentários e nits pelo mentor). Backup
+      `db_dump/labels-2026-11-06.sql` (600 rótulos, 41 "y"). Falta: rodar a revisão e o `scripts.evaluate`._
+- [ ] **5.4.6** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill; sem cosseno) treinado nos
       450 → AP no `test-set-v2`. O vencedor vira o `digest.model_version`; auditoria: rotular o top-10
       que ele mandaria hoje (precisão@10 real).
 

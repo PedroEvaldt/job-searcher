@@ -6,7 +6,7 @@ Takes the live jobs with the highest skills-gate-v1 score that are:
 - not in the round 1 queue (round 1 may still be half-labelled).
 
 The top is where most positives are, and also the costliest mistakes (jobs the rule
-loves and you would not apply to): both teach the sklearn model of 5.4.5.
+loves and you would not apply to): both teach the sklearn model of 5.4.6.
 
 The queue is shuffled with a fixed seed before writing, so the labelling order does
 not tell you which jobs the rule ranked first. Refuses to run twice.

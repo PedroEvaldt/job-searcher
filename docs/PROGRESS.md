@@ -655,7 +655,49 @@ rodar duas vezes. **Pendência pra quando a regra vencer:** hoje ela é um scrip
 novas precisam de skills extraídas + resposta do Jev + nota da regra, e isso é trabalho do `jev-worker` (ou de
 um passo depois dele).
 
-Última sessão: **2026-11-02**.
+**2026-11-03 — rodada 1 rotulada (450 rótulos) + 🔴 índices corrompidos pela troca de imagem (corrigido pelo
+mentor, a pedido).** Linha de base no `test-set-v2` (1.4 do guia): `n=150 pos=5 (random AP=0.0333)`,
+`jev-manual-qs-v1 AP=0.1472 ROC AUC=0.7207`. O 2.1 (`scripts.main`) quebrou com `UniqueViolation` em
+`uq_source_id_external_id` num `UPDATE … skills_extracted_at`. **Causa:** `0937120` (2026-10-28) trocou
+`postgres:16-alpine` (musl) por `pgvector/pgvector:pg16` (Debian/glibc) **com o mesmo volume**; `en_US.utf8`
+ordena diferente nas duas libc, então todo índice B-tree com texto ficou fora de ordem e a busca por ele erra.
+Algum `INSERT … ON CONFLICT` posterior (provavelmente um `-renormalize`) não achou 642 vagas no índice e as
+inseriu de novo (mesmo `raw_job_id`, mesmo texto, ids 17524–36423). O Postgres não avisou porque o banco nasceu
+sob musl, que não informa versão de collation (`datcollversion` NULL). **Correção:** backup
+`db_dump/jobs-pre-collation-fix-2026-11-03.dump`; numa transação, `REINDEX` das tabelas sem duplicata, par a par
+sobrevive a cópia rotulada (senão a mais antiga), respostas do Jev/scores/embeddings que só a outra tinha
+migram (74/101/11), as 642 cópias apagadas, `REINDEX TABLE jobs`; depois `REINDEX DATABASE`. Resultado:
+**16.800 vagas / 16.204 vivas / 450 rótulos / 0 duplicatas** (= dump do Pi de 10-19); `frozen.json` e a fila 1
+intactos (todas as cópias referenciadas sobreviveram, nenhum par com as duas cópias rotuladas → sem vazamento);
+`scripts.evaluate` repetido dá o mesmo AP. `ALTER DATABASE … REFRESH COLLATION VERSION` recusa sair de NULL
+(`invalid collation version change`) — só recriando o banco (dump → `createdb` → restore) a versão fica gravada.
+Débito novo: **D53** (deploy do compose novo no Pi). Próximo: 2.1 do `docs/rotulagem-5.4.md`.
+
+**2026-11-03 — 2.1–2.3 do guia: `skills-gate-v1` perde para a linha de base.** `scripts.main` drenou (0 vivas sem
+skills), `score_skills_gate` deu nota às 16.204 vivas, **207 com score > 0** (796 passam no filtro do Jev; o resto
+tem cobertura 0), cv = 12 skills. No `test-set-v2` (n=150, pos=5): `jev-manual-qs-v1` AP=0.1472 / ROC AUC=0.7207;
+**`skills-gate-v1` AP=0.0333 / ROC AUC=0.4966** = aleatório: só 1 vaga de teste tem score > 0 (um negativo), os 5
+positivos empatam em 0 com 144 negativos. Não é bug (chaves do Jev ok, ninguém sem skills): a regra é um
+**filtro, não um ranking** — tudo fora dele empata em 0. Conferido nos **300 rótulos de treino** (14 pos, fora do
+teste), sem tocar no teste: `jev-manual-qs-v1` AP=0.1504 / AUC=0.7065 (igual ao teste); `skills-gate-v1`
+AP=0.1148 / AUC=0.5357, sustentado por **uma** vaga (1 de 300 com score > 0, por acaso positiva). Onde os
+positivos de treino se perdem: o filtro passa 4/14 (`open_to_latam` ≥ 0.5 sozinho corta 7), cobertura > 0 só
+1 dos 4, e **7/14 positivos não têm nenhuma skill do CV**. Decisão: o aluno seguiu o plano original (opção A) — `label_queue_round2.json` com as 150 do topo da
+`skills-gate-v1` (todas com score > 0, faixa 0.357–1.0, semente `20261103`); rotulagem em andamento. O passo 2.5
+(commitar a fila antes de rotular) foi pulado: a fila ficou sem commit até o meio da rodada (`7e97aa5`).
+
+**2026-11-06 — rodada 2 rotulada (600 rótulos, 41 "y") + código da 5.4.5 (`radar review`).** Passo novo pedido
+pelo aluno: revisar só os "y" antes da 5.4.6 (o sklearn virou 5.4.6). `cmd/radar/review.go` (do aluno): lê os
+positivos com `rows.Next()`, junta as respostas e só grava depois de fechar o `rows` (evita o `conn busy` sem ler
+os IDs antes). Duas voltas de `/check`: não compilava (`cfg` do `digest` passado ao `review`); o Ctrl+D perdia as
+respostas e depois dava `conn busy` (o `break` saía com o `rows` aberto, o `defer` só fechava depois do `Exec`);
+`%w` em `err` nil virava `%!w(<nil>)`. Aprovado com 4 testes do mentor num banco descartável (`radar_check`, 5
+vagas): fim normal, `y`/`n`/Ctrl+D grava a 2ª e sai `0`, mutação de ID inexistente → erro com o job e `got 0`,
+mutação de consulta que quebra → erro sem gravar. Mentor: comentários, `outter` → `outer`, `switch` com tag
+(QF1002), texto do erro de `RowsAffected`. O aluno recusou fazer o backup; o mentor fez
+(`db_dump/labels-2026-11-06.sql`, 600 linhas). Falta: rodar a revisão de verdade e o `scripts.evaluate`.
+
+Última sessão: **2026-11-03**.
 
 ---
 
@@ -1728,6 +1770,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | D50 | `analyzer/jobradar/jev/client.py` (`JEV_MODEL`) + `analyzer/scripts/score_jev.py` (`WEIGHT`, `MODEL_VERSION`) | Irmão do D49: `jev_answers`/`scores` identificam o `question_set_version` (`qs-v1`), mas não **qual modelo Jev concreto respondeu** (`JEV_MODEL` é `jev-latest`, flutuante — `TODO(4b.4)` já registrado no código pra pinar via `client.models()`) nem **quais pesos manuais** geraram o score (`WEIGHT` em `score_jev.py` não está no `model_version='jev-manual-qs-v1'`). Se o provedor atualizar `jev-latest` ou o aluno trocar os pesos, o `ON CONFLICT` sobrescreve sem deixar rastro de qual combinação gerou o número. Visto na 4b.3/4b.4 (2026-10-29/30). | 🔶 parcial — a metade "pesos" ficou resolvida por convenção na 4c: cada método de combinação ganha um `model_version` versionado à mão (`jev-manual-qs-v1`, `sklearn-combined-v1`), igual `tfidf-v1`/`minilm-l6-v2` — trocar o método exige escolher um nome novo, não sobrescrever o antigo. A metade "qual `JEV_MODEL` respondeu" continua sem rastro (`jev-latest` flutuante) — reagendado pra **Fase 5**, quando o digest em produção tornar a reprodutibilidade do Jev operacionalmente importante |
 | ~~D51~~ | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. **Ampliado em 2026-11-02 (5.3.1):** (c) `docker compose up -d --build` com `COMPOSE_PROFILES=jev` → `jev-worker` loga `started` e os ciclos na hora; `stop` < 2s; `stop`/`start postgres` → erro de uma linha e recuperação sozinha; sem o profile, o serviço nem aparece em `docker compose ps`. (d) 5.3.2: `radar digest-loop` com `every: 1m` + `stop`/`start postgres` → um erro por ciclo, recuperação sozinha. (e) 5.3.3/D41: no `docker compose up -d`, `docker compose ps -a migrate` mostra `Exited (0)`, os outros sobem depois dele e nenhum log tem `UndefinedTable` (teste com banco novo fica pra Fase 6: o `container_name` fixo do D23 impede um 2º projeto lado a lado). | ✅ pago 2026-11-02 no desktop, **por relato do aluno** ("tudo certo", sem saídas coladas): (a) fila do Jev drenada; (b) os 4 testes do `radar digest`; (c) `jev-worker` no compose (logs na hora, `stop` rápido, Postgres caindo e voltando); (d) `digest-loop` idem; (e) `migrate` `Exited (0)` antes dos outros, sem `UndefinedTable`. O mentor não reproduziu nenhum desses (sem banco nem Docker no notebook) |
 | D52 | `analyzer/scripts/score_jev_batch.py` (fila do Jev) | **Vaga envenenada trava a fila.** A fila é `ORDER BY j.id`, sem marcar falhas. Se uma vaga específica fizer o Jev responder sempre 400/422 (texto grande demais, caractere que a API rejeita), o worker cai nela a cada partida: o `restart` religa, ele pega a mesma vaga primeiro e cai de novo (crash loop), e **nenhuma vaga depois dela é pontuada**. Erro 400 não entra em `TRANSIENT_ERRORS` de propósito (não se cura esperando). Saídas possíveis: marcar a vaga como "falhou N vezes" e pular, ou capturar o erro por vaga dentro do lote. Visto na análise do passo 3 da 5.3.1 (2026-11-02), nunca observado. | aberto — 🟡; reavaliar se aparecer um crash loop com `TypeSafeBadRequestError` no log |
+| D53 | `compose.yaml` (`postgres`, Pi) | O Pi ainda roda `postgres:16-alpine` (`8498ca2`). Subir o compose novo lá (`pgvector/pgvector:pg16`) sobre o mesmo volume repete o 🔴 de 2026-11-03 no desktop: musl → glibc muda a ordem do `en_US.utf8`, todo índice com texto fica corrompido e o coletor passa a gravar vagas em dobro **sem erro** (o `ON CONFLICT` não acha a original). No deploy: parar o `app` antes, trocar a imagem, `REINDEX DATABASE` antes de religar o coletor, conferir 0 duplicatas por `(source_id, external_id)` com `enable_indexscan=off`. Alternativa mais limpa: `pg_dump` → volume novo → restore (os índices nascem sob glibc e a versão da collation fica gravada). | aberto — 🟡; bloqueia o deploy da Fase 5 no Pi |
 
 ### 🟢 Nits — mencionados uma vez
 

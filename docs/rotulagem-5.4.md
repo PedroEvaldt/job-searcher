@@ -234,12 +234,12 @@ Mesmas regras de 1.3 (terminal com `set -a`, Ctrl+D para parar, backup no fim da
 
 A ordem está embaralhada: a 1ª vaga da fila não é a de nota mais alta. Espere **mais "y" que na
 rodada 1**, porque estas vagas vêm do topo da regra. Mesmo assim, responda pelo seu critério,
-não pela expectativa. Os "n" desta rodada são justamente os erros da regra que o modelo da 5.4.5
+não pela expectativa. Os "n" desta rodada são justamente os erros da regra que o modelo da 5.4.6
 precisa aprender.
 
 ✔️ `nothing left to label`, e `radar status` mostra ~150 feitas a mais que no fim da rodada 1.
 
-📨 **Avise o mentor.** Próximo: 5.4.5, treinar o `sklearn-combined-v2` com os ~450 rótulos de treino.
+📨 **Avise o mentor.** Próximo: 5.4.5, revisar os "y" com `radar review`; depois 5.4.6, treinar o `sklearn-combined-v2` com os ~450 rótulos de treino.
 
 ---
 
