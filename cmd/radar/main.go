@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const usage = "usage: radar [status | label [queue.json] | digest | digest-loop]"
+const usage = "usage: radar [status | label [queue.json] | digest | digest-loop | review]"
 
 // main is the only place that logs a failure and picks the exit code; everything
 // below it returns errors with context and leaves that decision here.
@@ -85,7 +85,8 @@ func run(args []string) error {
 			return err
 		}
 		return digest(ctx, conn, cfg)
-
+	case "review":
+		return review(ctx, conn)
 	default:
 		return fmt.Errorf("unknown command %q; %s", mode, usage)
 	}
