@@ -1043,18 +1043,22 @@ LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registrad
       falta rodar e medir depois da rodada 1._
       _Medido 2026-11-03: **perdeu** — `skills-gate-v1` AP=0.0333 / AUC=0.4966 (= aleatório; filtro, não ranking:
       tudo fora dele empata em 0)._
-- [ ] **5.4.4** Rodada 2 de rótulos: 150 de treino escolhidas pelo topo da regra (5.4.3).
+- [x] **5.4.4** Rodada 2 de rótulos: 150 de treino escolhidas pelo topo da regra (5.4.3).
       _Script pronto 2026-11-02 (mentor): `scripts/build_label_queue_round2.py`._
-- [ ] **5.4.5** Revisão dos positivos (pedido do aluno, 2026-11-03): `radar review` mostra, uma por vez, cada
+- [x] **5.4.5** Revisão dos positivos (pedido do aluno, 2026-11-03): `radar review` mostra, uma por vez, cada
       vaga rotulada `would_apply = true` (título, empresa, descrição; nunca score, nunca se é teste ou treino)
       e pergunta se mantém: `y` não faz nada, `n` grava `would_apply = false`. Roda **uma vez, antes da
       5.4.6**: depois de ver o AP do modelo novo, rótulo de teste não muda mais. Backup dos `labels` antes;
       `scripts.evaluate` depois (a linha de base a bater pode mudar). Revisão só dos "y": só tira positivos.
       _Código pronto 2026-11-06 (`cmd/radar/review.go`, do aluno; comentários e nits pelo mentor). Backup
       `db_dump/labels-2026-11-06.sql` (600 rótulos, 41 "y"). Falta: rodar a revisão e o `scripts.evaluate`._
+      _Revisão feita 2026-11-06: 41 → 27 "y" (teste 5 → 4, treino 36 → 23). Nova linha de base no `test-set-v2`
+      (n=150, pos=4): `jev-manual-qs-v1` AP=0.0618 / ROC AUC=0.6498 (aleatório 0.0267)._
 - [ ] **5.4.6** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill; sem cosseno) treinado nos
-      450 → AP no `test-set-v2`. O vencedor vira o `digest.model_version`; auditoria: rotular o top-10
-      que ele mandaria hoje (precisão@10 real).
+      450 → AP no `test-set-v2`, com o AP da validação cruzada no treino ao lado (4 positivos no teste =
+      número ruidoso).
+- [ ] **5.4.7** O vencedor vira o `digest.model_version` (nota para todas as vivas); auditoria: rotular o
+      top-10 que ele mandaria hoje (precisão@10 real).
 
 ### Tarefa 5.5 — Pi como host oficial do Postgres (decidido 2026-10-31; era 5.4 até 2026-11-02)
 

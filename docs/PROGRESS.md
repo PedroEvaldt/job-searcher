@@ -697,6 +697,15 @@ mutação de consulta que quebra → erro sem gravar. Mentor: comentários, `out
 (QF1002), texto do erro de `RowsAffected`. O aluno recusou fazer o backup; o mentor fez
 (`db_dump/labels-2026-11-06.sql`, 600 linhas). Falta: rodar a revisão de verdade e o `scripts.evaluate`.
 
+**2026-11-06 — revisão feita, 5.4.5 fechada.** **41 → 27 "y"** (14 trocados; teste 5 → 4, treino 36 → 23). O
+critério ficou mais estrito, então revisar só os "y" não enviesa: o que era "n" no critério frouxo continua "n" no
+estrito. Nova linha de base no `test-set-v2` (n=150, **pos=4**, aleatório 0.0267): `jev-manual-qs-v1`
+**AP=0.0618 / ROC AUC=0.6498** (era 0.1472/0.7207 com 5 positivos). Com 4 positivos uma vaga move muito o AP →
+a 5.4.6 reporta também o AP da validação cruzada no treino (450, 23 pos). ROADMAP: 5.4.6 = treinar e medir o
+`sklearn-combined-v2`; 5.4.7 nova = vencedor no digest + auditoria do top-10. Todos os 600 rotulados têm resposta
+do Jev, `minilm-l6-v2` e skills extraídas (o `build_features.py` não perde linha). O `.pkl` da v1
+(`data/jev_sklearn_model.pkl`) não está no git → a v2 grava em arquivo próprio.
+
 Última sessão: **2026-11-03**.
 
 ---
