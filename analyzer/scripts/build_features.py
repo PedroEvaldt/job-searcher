@@ -7,6 +7,7 @@ from pathlib import Path
 import psycopg
 
 from jobradar.experience import extract_years
+from jobradar.jev.questions import QUESTION_SET_VERSION
 from jobradar.salary import normalize_salary
 
 OUTPUT_PATH = Path(__file__).parents[1] / "data" / "features.json"
@@ -34,11 +35,14 @@ def build_features() -> int:
                     je.answers AS jev_score, s.score AS cosine_minilm,
                     COALESCE(sk.skills_matched, 0) AS skills_matched
                     FROM labels l JOIN jobs j ON l.job_id = j.id
+                    -- One question set only: with two, every job would come back twice.
                     JOIN jev_answers je ON l.job_id = je.job_id
+                        AND je.question_set_version = %s
                     JOIN (SELECT job_id, score FROM scores WHERE model_version = 'minilm-l6-v2') s ON s.job_id = l.job_id
                     LEFT JOIN (SELECT job_id, SUM(confidence) AS skills_matched FROM job_skills GROUP BY (job_id)) sk ON sk.job_id = l.job_id
                     ORDER BY l.job_id;
-                    """
+                    """,
+            (QUESTION_SET_VERSION,),
         ).fetchall()
         if not rows:
             print("no jobs to build features")
@@ -65,9 +69,7 @@ def build_features() -> int:
             )
             salary_usd_year = normalize_salary(salary, currency, salary_period)
             job_age_days = (
-                (datetime.now(UTC) - posted_at).days
-                if posted_at is not None
-                else None
+                (datetime.now(UTC) - posted_at).days if posted_at is not None else None
             )
 
             job_features: dict[str, int | bool | float | None] = {
