@@ -706,7 +706,21 @@ a 5.4.6 reporta também o AP da validação cruzada no treino (450, 23 pos). ROA
 do Jev, `minilm-l6-v2` e skills extraídas (o `build_features.py` não perde linha). O `.pkl` da v1
 (`data/jev_sklearn_model.pkl`) não está no git → a v2 grava em arquivo próprio.
 
-Última sessão: **2026-11-03**.
+**2026-11-06 (notebook) — 5.4.6 em código, sem execução.** O banco do notebook (5433, `postgres:16-alpine`) é a
+cópia do Pi de 10-22: **0 `labels`**, sem `jev_answers`/skills recentes → nada da 5.4.6 roda aqui. Decisão do
+aluno: escrever o código no notebook, commitar, e rodar no desktop (5.5 resolve isso de vez). Arquivos novos:
+`scripts/build_features_v2.py` → `data/features_v2.json` e `scripts/train_model_v2.py` →
+`data/jev_sklearn_model_v2.pkl`. A query das skills (`LEFT JOIN` numa subquery com `array_agg(skill)
+GROUP BY job_id`) foi **escrita pelo mentor a pedido** (insistência, §0); o passo 4 do treino (AP por fold do
+`cv_results_`, `StratifiedKFold` com `shuffle`, prevalência) também, a pedido; o resto é do aluno (incl.
+`scoring="average_precision"` e o import do `OUTPUT_PATH` da v2). **Decisão:** a v2
+leva também `years_required` (aluno: "métrica plausível") → v2 = 3 do Jev + 4 de skill + anos. Pergunta do aluno
+registrada: mover positivos do treino pro teste (~7 de 27)? **Não** — seleção pelo rótulo infla a prevalência, e
+os "y" da rodada 2 vieram do topo da `skills-gate-v1` (enviesaria o teste a favor de features de skill); ruído
+se trata com o AP da validação cruzada (e, se preciso, bootstrap ou um lote novo sorteado e congelado). Nota:
+`skill_missing = n_job_skills − skill_overlap` (colinear) → não ler os coeficientes isoladamente.
+
+Última sessão: **2026-11-06**.
 
 ---
 

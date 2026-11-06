@@ -1054,9 +1054,11 @@ LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registrad
       `db_dump/labels-2026-11-06.sql` (600 rótulos, 41 "y"). Falta: rodar a revisão e o `scripts.evaluate`._
       _Revisão feita 2026-11-06: 41 → 27 "y" (teste 5 → 4, treino 36 → 23). Nova linha de base no `test-set-v2`
       (n=150, pos=4): `jev-manual-qs-v1` AP=0.0618 / ROC AUC=0.6498 (aleatório 0.0267)._
-- [ ] **5.4.6** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill; sem cosseno) treinado nos
-      450 → AP no `test-set-v2`, com o AP da validação cruzada no treino ao lado (4 positivos no teste =
-      número ruidoso).
+- [ ] **5.4.6** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill + `years_required`; sem
+      cosseno) treinado nos 450 → AP no `test-set-v2`, com o AP da validação cruzada no treino ao lado (4
+      positivos no teste = número ruidoso).
+      _`years_required` incluído por decisão do aluno (2026-11-06): "métrica plausível". Código escrito no
+      notebook (sem rótulos no banco local); execução no desktop._
 - [ ] **5.4.7** O vencedor vira o `digest.model_version` (nota para todas as vivas); auditoria: rotular o
       top-10 que ele mandaria hoje (precisão@10 real).
 

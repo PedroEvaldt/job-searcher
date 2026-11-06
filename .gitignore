@@ -45,5 +45,5 @@ CLAUDE.md
 __pycache__/
 db_dump
 cv.md
-analyzer/data/features.json
+analyzer/data/features*.json
 analyzer/data/*.pkl
