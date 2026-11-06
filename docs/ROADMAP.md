@@ -1054,13 +1054,25 @@ LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registrad
       `db_dump/labels-2026-11-06.sql` (600 rótulos, 41 "y"). Falta: rodar a revisão e o `scripts.evaluate`._
       _Revisão feita 2026-11-06: 41 → 27 "y" (teste 5 → 4, treino 36 → 23). Nova linha de base no `test-set-v2`
       (n=150, pos=4): `jev-manual-qs-v1` AP=0.0618 / ROC AUC=0.6498 (aleatório 0.0267)._
-- [ ] **5.4.6** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill + `years_required`; sem
+- [x] **5.4.6** `sklearn-combined-v2` (3 respostas do Jev + 4 features de skill + `years_required`; sem
       cosseno) treinado nos 450 → AP no `test-set-v2`, com o AP da validação cruzada no treino ao lado (4
       positivos no teste = número ruidoso).
       _`years_required` incluído por decisão do aluno (2026-11-06): "métrica plausível". Código escrito no
       notebook (sem rótulos no banco local); execução no desktop._
-- [ ] **5.4.7** O vencedor vira o `digest.model_version` (nota para todas as vivas); auditoria: rotular o
-      top-10 que ele mandaria hoje (precisão@10 real).
+      _Medido 2026-11-06 (desktop): `sklearn-combined-v2` C=0.01, **CV AP 0.1465 ± 0.0569** no treino (450, 23
+      pos, aleatório 0.0511); no `test-set-v2` (n=150, pos=4, aleatório 0.0267) **AP=0.1002 / ROC AUC=0.6695**
+      contra `jev-manual-qs-v1` AP=0.0618 / ROC AUC=0.6498. Top-10 do teste: 1 positivo nos dois._
+- [x] **5.4.7** Nota do `sklearn-combined-v2` para todas as vivas (16.204 em 2026-11-06), com o cálculo de
+      features por vaga compartilhado entre o treino e a pontuação.
+      _Feita 2026-11-06 pelo mentor, a pedido ("faça você"): `features_for_job()` no `build_features_v2.py`
+      (`features_v2.json` regerado idêntico) + `scripts/score_live_v2.py` → 16.204 notas (0.0304 a 0.1013), uma
+      transação; `scripts.evaluate` igual ao da 5.4.6 (AP=0.1002 / ROC AUC=0.6695)._
+- [ ] **5.4.8** Auditoria: rotular o top-10 que a v2 mandaria hoje (fila embaralhada no `radar label`) →
+      precisão@10 real.
+- [ ] **5.4.9** A v2 vira o `digest.model_version`: nota para as vagas novas no ciclo do `jev-worker` e
+      `min_score` recalibrado (no teste as notas da v2 vão de 0.031 a 0.067; o `0.75` atual não deixa passar nada).
+      _Replanejado 2026-11-06: a 5.4.7 original virou 5.4.7–5.4.9. Trocar o `model_version` sem nota para as
+      vagas novas deixaria o digest parado sem erro nenhum._
 
 ### Tarefa 5.5 — Pi como host oficial do Postgres (decidido 2026-10-31; era 5.4 até 2026-11-02)
 

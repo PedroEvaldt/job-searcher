@@ -720,6 +720,30 @@ os "y" da rodada 2 vieram do topo da `skills-gate-v1` (enviesaria o teste a favo
 se trata com o AP da validação cruzada (e, se preciso, bootstrap ou um lote novo sorteado e congelado). Nota:
 `skill_missing = n_job_skills − skill_overlap` (colinear) → não ler os coeficientes isoladamente.
 
+**2026-11-06 (desktop) — 5.4.6 fechada.** Nada a sincronizar (o pull do `97eeec3` já estava feito). Rodados
+`build_features_v2` (600 linhas, 27 "y"; `years_required` é `None` em 479/600 → 80% imputado pela mediana) e
+`train_model_v2`: `sklearn-combined-v2` com **C=0.01** (borda da grade; o mentor conferiu numa cópia: abaixo disso
+o CV AP estabiliza em ~0.153, dentro do desvio → grade mantida), **CV AP 0.1465 ± 0.0569** (folds 0.1048 0.1334
+0.2586 0.1246 0.1112; aleatório 0.0511, 23/450). `scripts/score_sklearn_v2.py` (do aluno; o `print` dizia `v1`,
+corrigido no `/check`) → 150 notas. `test-set-v2` (n=150, pos=4, aleatório 0.0267): `sklearn-combined-v2`
+**AP=0.1002 / ROC AUC=0.6695** × `jev-manual-qs-v1` AP=0.0618 / ROC AUC=0.6498. Leitura: posições dos 4 positivos
+v2 = 4, 31, 62, 106; Jev manual = 10, 34–35 (empate), 54, 116 → o ganho de AP vem quase todo de **uma vaga**
+(job 80: 34 → 4); top-10 tem 1 positivo nos dois. Diagnóstico: D54 registrado (`JOIN jev_answers` sem filtro de
+versão). **Ajustes do mentor a pedido ("ajeite tudo"):** `MODEL_VERSION` como constante no `score_sklearn_v2.py`;
+D54 pago; `[tool.ruff.lint] ignore = ["EXE002"]` no `pyproject.toml` (o SSD do desktop marca todo arquivo como
+executável); `ruff format` no `build_features.py`. `eda/` segue com formatação manual (o `ruff format --check .`
+reclama de 3 arquivos lá, de propósito). 66 testes verdes. **Replanejado:** a 5.4.7 virou 5.4.7 (nota para todas as
+vivas), 5.4.8 (auditoria top-10) e 5.4.9 (v2 no digest + notas das vagas novas + `min_score`), porque as notas
+da v2 vão de 0.031 a 0.067 e o `min_score: 0.75` não deixaria passar nada.
+**5.4.7 fechada (mentor, a pedido: "faça você e me explique").** O aluno começou a extração (`features_to_job`,
+incompleta); o mentor terminou como `features_for_job(desc, jev_score, skills, cv_skill)` no
+`build_features_v2.py` (devolve as 8 features; `job_id`/`would_apply` juntados com `**` no laço) e escreveu
+`scripts/score_live_v2.py` (mesma consulta sem `labels` + `duplicate_of IS NULL`; `FEATURE_COLS = COLS[:-1]`;
+`executemany` dentro de `conn.transaction()`). Verificado: `features_v2.json` idêntico (`cmp`), 16.204 notas em
+~3 s, re-run mantém 16.204, `evaluate` inalterado (AP=0.1002 / ROC AUC=0.6695). Notas das vivas: 0.0304 a 0.1013.
+O `score_sklearn_v2.py` ficou redundante (o `score_live_v2` também regrava as 150 do teste), mas foi mantido: é
+o script que mediu a 5.4.6.
+
 Última sessão: **2026-11-06**.
 
 ---
@@ -1794,6 +1818,7 @@ e escrever `SPEC.md` / `ROADMAP.md` / `PROGRESS.md`.
 | ~~D51~~ | `cmd/radar/digest.go` + `discord.go` + `analyzer/scripts/score_jev_batch.py` | Verificação de runtime da 5.1.1 e da 5.2.2 nunca foi feita: o código foi escrito no notebook, sem banco nem webhook, e só roda no desktop. Pendente: (a) 5.1.1, `pending = 0` em `jev_answers` (`qs-v1`) entre as vivas, com o custo total da rodada; (b) 5.2.2, os 4 testes (envia e chega no canal, 2ª rodada sem repetir, sem webhook imprime e sai `0`, webhook inválido sai `≠ 0` sem marcar) e o SQL de `pendingJobs`/`markSent`, que nunca foi executado. Registrado em 2026-11-01. **Ampliado em 2026-11-02 (5.3.1):** (c) `docker compose up -d --build` com `COMPOSE_PROFILES=jev` → `jev-worker` loga `started` e os ciclos na hora; `stop` < 2s; `stop`/`start postgres` → erro de uma linha e recuperação sozinha; sem o profile, o serviço nem aparece em `docker compose ps`. (d) 5.3.2: `radar digest-loop` com `every: 1m` + `stop`/`start postgres` → um erro por ciclo, recuperação sozinha. (e) 5.3.3/D41: no `docker compose up -d`, `docker compose ps -a migrate` mostra `Exited (0)`, os outros sobem depois dele e nenhum log tem `UndefinedTable` (teste com banco novo fica pra Fase 6: o `container_name` fixo do D23 impede um 2º projeto lado a lado). | ✅ pago 2026-11-02 no desktop, **por relato do aluno** ("tudo certo", sem saídas coladas): (a) fila do Jev drenada; (b) os 4 testes do `radar digest`; (c) `jev-worker` no compose (logs na hora, `stop` rápido, Postgres caindo e voltando); (d) `digest-loop` idem; (e) `migrate` `Exited (0)` antes dos outros, sem `UndefinedTable`. O mentor não reproduziu nenhum desses (sem banco nem Docker no notebook) |
 | D52 | `analyzer/scripts/score_jev_batch.py` (fila do Jev) | **Vaga envenenada trava a fila.** A fila é `ORDER BY j.id`, sem marcar falhas. Se uma vaga específica fizer o Jev responder sempre 400/422 (texto grande demais, caractere que a API rejeita), o worker cai nela a cada partida: o `restart` religa, ele pega a mesma vaga primeiro e cai de novo (crash loop), e **nenhuma vaga depois dela é pontuada**. Erro 400 não entra em `TRANSIENT_ERRORS` de propósito (não se cura esperando). Saídas possíveis: marcar a vaga como "falhou N vezes" e pular, ou capturar o erro por vaga dentro do lote. Visto na análise do passo 3 da 5.3.1 (2026-11-02), nunca observado. | aberto — 🟡; reavaliar se aparecer um crash loop com `TypeSafeBadRequestError` no log |
 | D53 | `compose.yaml` (`postgres`, Pi) | O Pi ainda roda `postgres:16-alpine` (`8498ca2`). Subir o compose novo lá (`pgvector/pgvector:pg16`) sobre o mesmo volume repete o 🔴 de 2026-11-03 no desktop: musl → glibc muda a ordem do `en_US.utf8`, todo índice com texto fica corrompido e o coletor passa a gravar vagas em dobro **sem erro** (o `ON CONFLICT` não acha a original). No deploy: parar o `app` antes, trocar a imagem, `REINDEX DATABASE` antes de religar o coletor, conferir 0 duplicatas por `(source_id, external_id)` com `enable_indexscan=off`. Alternativa mais limpa: `pg_dump` → volume novo → restore (os índices nascem sob glibc e a versão da collation fica gravada). | aberto — 🟡; bloqueia o deploy da Fase 5 no Pi |
+| ~~D54~~ | `analyzer/scripts/build_features.py:37` + `build_features_v2.py:35` | `JOIN jev_answers` sem filtrar `question_set_version`: no dia que existir um `qs-v2`, cada vaga rotulada vira duas linhas (uma por versão) e o treino vê a mesma vaga duplicada, com respostas de perguntas diferentes misturadas. Hoje só existe `qs-v1` (16.278 linhas), então nada quebra. Visto no diagnóstico de 2026-11-06 (desktop). | ✅ pago 2026-11-06 (mentor, a pedido: "ajeite tudo") — filtro `je.question_set_version = %s` com `QUESTION_SET_VERSION` nos dois; `features_v2.json` regerado idêntico byte a byte, consulta da v1 com as mesmas 600 linhas |
 
 ### 🟢 Nits — mencionados uma vez
 
