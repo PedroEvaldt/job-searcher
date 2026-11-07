@@ -48,7 +48,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -84,7 +84,17 @@ services:
     build:
       context: ./analyzer/
       dockerfile: ./Dockerfile
-    command: ["uv", "run", "--no-dev", "--group", "jev", "python", "-m", "scripts.jev_worker"]
+    command:
+      [
+        "uv",
+        "run",
+        "--no-dev",
+        "--group",
+        "jev",
+        "python",
+        "-m",
+        "scripts.jev_worker",
+      ]
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
       JEV_API_KEY: ${JEV_API_KEY}
