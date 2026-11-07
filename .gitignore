@@ -1,49 +1,35 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-job-searcher
-# the radar CLI, built in place next to its source
+# Secrets and personal data: never versioned
+.env
+cv.md
+db_dump/
+
+# Go builds
+/bin/
+/collector
+/job-searcher
+/cmd/collector/collector
 /cmd/radar/radar
-
-# FUSE leftovers from the SSD mount (deleted-but-still-open files)
-.fuse_hidden*
-
-# Test binary, built with `go test -c`
 *.test
-
-# Code coverage profiles and other test artifacts
 *.out
 coverage.*
-*.coverprofile
-profile.cov
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
 go.work
 go.work.sum
 
-# env file
-.env
-
-# Editor/IDE
-# .idea/
-# .vscode/
-
-# Claude
-CLAUDE.md
-.claude
-
-#Python
+# Python
 __pycache__/
-db_dump
-cv.md
-analyzer/data/features*.json
-analyzer/data/*.pkl
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Trained models: artifacts of a model_version, rebuilt by scripts.train
+analyzer/data/models/
+# Local caches kept with the archive, regenerable from the database
+archive/analyzer/data/local/
+
+# Local tooling
+CLAUDE.md
+.claude/
+
+# FUSE leftovers from the SSD mount (deleted-but-still-open files)
+.fuse_hidden*
