@@ -49,7 +49,9 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
       model's Jev answers, its score (`jobradar/pipeline.py`).
 - [x] `digest.model_version: sklearn-combined-v10`, `min_score: 0.20` (≈4 jobs a day),
       `max_age: 336h`. Model files are versioned, so the images carry them.
-- [ ] Deploy to the Pi: database move with the reindex (OPERATIONS.md), then the new images.
+- [x] Deploy to the Pi (2026-11-07): the desktop's database restored into a fresh volume, the
+      new images, the worker on v10. Its first cycles took 438 new jobs through the whole
+      pipeline for $0.03; 7 passed the digest's filters.
 
 ## Later
 

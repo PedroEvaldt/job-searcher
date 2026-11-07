@@ -32,11 +32,23 @@ Optional services, both configured in `.env`:
 
 ```
 git pull
-docker compose up -d --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose build
+docker compose up -d
 docker compose run --rm analyzer        # catch up skills and TF-IDF on the new jobs
 ```
 
-Always `--build`: the images have fixed tags, so without it Compose runs the old binary.
+Always build: the images have fixed tags, so without it Compose runs the old binary. On the
+Pi, build one image at a time (`COMPOSE_PARALLEL_LIMIT=1`): `analyzer` and `jev-worker` each
+build `analyzer:latest`, and with the Go image building next to them the Python install ran
+out of time (the Dockerfile also raises uv's bytecode-compile timeout for this).
+
+The repository is private and the Pi has no GitHub credentials, so it cannot `git pull`.
+From the desktop, push the commit to the Pi's clone, then fast-forward it there:
+
+```
+git push pi:pi/job-searcher main:refs/remotes/desktop/main
+ssh pi 'cd ~/pi/job-searcher && git merge --ff-only desktop/main'
+```
 
 Since 2026-11-07 the database container no longer has a fixed name (it was `postgres_db`). The
 first `up` after that change recreates it as `job-searcher-postgres-1` on the **same** volume;
@@ -70,6 +82,29 @@ Zero rows: start everything with `docker compose up -d --build`. The cleaner alt
 dump of the old database restored into a fresh volume (below): the indexes are then built under
 glibc from the start.
 
+## Moving the desktop's database to the Pi
+
+Labelling and modelling happen on the desktop, so the desktop's database is the one that
+counts. On 2026-11-07 it replaced the Pi's (still `postgres:16-alpine`, schema 7, no labels;
+its dump is `db_dump/pi-jobs-2026-11-07.dump`), restored into a fresh volume so the indexes are
+built under glibc from the start:
+
+```
+# desktop
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > db_dump/desktop-jobs-$(date +%F).dump
+# Pi: drop the old stack and its volume, start an empty database, restore into it
+docker compose down
+docker volume rm job-searcher_postgres_data
+docker compose up -d postgres
+docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges --exit-on-error' \
+  < desktop-jobs-YYYY-MM-DD.dump
+```
+
+Compare the row counts of every table on both sides before starting the other services. A
+job keeps its `id` only inside one database: the frozen test set and the label queues name
+job ids, so they belong to the database the labels were made in.
+
 ## Switching the digest to another model
 
 The worker scores new jobs with `MODEL_VERSION` (`analyzer/jobradar/model/combined.py`) and
@@ -82,7 +117,8 @@ so change both in the same commit.
    scale and `digest.max_age`.
 3. If the new version reads a new question set, answer it for the live jobs first
    (`scripts.answer_jev <set> --workers 6`), or the worker will do it slowly, cycle by cycle.
-4. `docker compose up -d --build jev-worker digest`.
+4. `COMPOSE_PARALLEL_LIMIT=1 docker compose build jev-worker digest`, then
+   `docker compose up -d jev-worker digest`.
 
 The digest remembers what it sent per model (`jobs_sent`), so the first run on a new model
 may send jobs the old one already sent.
