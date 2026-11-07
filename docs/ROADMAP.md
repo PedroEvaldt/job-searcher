@@ -51,7 +51,7 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
 - A stack feature read from the title too, with COBOL and other missing languages, as a new
   feature (v8's audit misses); then v8's `qs-v4` location with it.
 - Teach `fully_remote` (see MODELING.md). The sources' location field was tried: no gain.
-- More labels drawn **at random** from the live jobs, to grow the test set past 4 positives.
+- More labels drawn **at random** from the live jobs, to grow the test set past its 3 positives.
   Labels picked by a model's ranking go to training only.
 - Pin the Jev model (`jev-latest` floats) and record the CV version in the model versions.
 - Refit `tfidf-v1`'s vocabulary on the whole live set, as a new version.
