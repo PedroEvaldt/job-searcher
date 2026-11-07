@@ -140,3 +140,26 @@ if __name__ == "__main__":
     print("Skills found:")
     for skill, weight in skills_found.items():
         print(f"{skill}: {weight}")
+
+
+# The canonical skills that are programming languages (or a language's runtime): what a
+# job is written in, as opposed to the tools around it.
+LANGUAGES = frozenset(
+    {
+        "C#",
+        "C++",
+        "Elixir",
+        "Go",
+        "Java",
+        "JavaScript",
+        "Kotlin",
+        "Node.js",
+        "PHP",
+        "Python",
+        "Ruby",
+        "Rust",
+        "Scala",
+        "Swift",
+        "TypeScript",
+    }
+)

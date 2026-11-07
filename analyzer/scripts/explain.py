@@ -8,18 +8,24 @@ their sizes compare directly.
 
 import sys
 
-from jobradar.model.combined import MODEL_VERSION, coefficients, load, model_path
+from jobradar.model.combined import MODEL_VERSION, SPECS, coefficients, load, model_path
 
 
 def main() -> int:
     version = sys.argv[1] if len(sys.argv) > 1 else MODEL_VERSION
+    if version not in SPECS:
+        print(
+            f"unknown model version {version!r}; known: {sorted(SPECS)}",
+            file=sys.stderr,
+        )
+        return 1
     path = model_path(version)
     if not path.exists():
         print(f"no model at {path}", file=sys.stderr)
         return 1
     pipeline = load(path)
     print(f"{version} (C={pipeline.named_steps['model'].C})")
-    for name, weight in coefficients(pipeline):
+    for name, weight in coefficients(pipeline, SPECS[version].features):
         print(f"  {name:<16} {weight:+.3f}")
     return 0
 

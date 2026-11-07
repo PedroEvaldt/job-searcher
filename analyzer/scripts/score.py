@@ -1,23 +1,38 @@
-"""Score every live job with sklearn-combined and write the scores.
+"""Score every live job with a saved sklearn-combined version and write the scores.
 
-    uv run --env-file ../.env python -m scripts.score
+    uv run --env-file ../.env python -m scripts.score [model_version]
 
-Idempotent: a second run rewrites the same scores. The frozen test jobs are live too,
-so this also refreshes the scores scripts.evaluate reads.
+Defaults to MODEL_VERSION. Idempotent: a second run rewrites the same scores. The frozen
+test jobs are live too, so this also refreshes the scores scripts.evaluate reads.
 """
 
 import sys
 
 from jobradar.db import DatabaseError, connect
 from jobradar.match import cv_skills
-from jobradar.model.combined import MODEL_VERSION, load, model_path, predict
-from jobradar.model.features import feature_matrix, features_for_job, fetch_live_jobs
+from jobradar.model.combined import (
+    MODEL_VERSION,
+    SPECS,
+    load,
+    model_path,
+    score_jobs,
+    write_scores,
+)
+from jobradar.model.features import fetch_live_jobs
 
 
 def main() -> int:
-    path = model_path()
+    version = sys.argv[1] if len(sys.argv) > 1 else MODEL_VERSION
+    if version not in SPECS:
+        print(
+            f"unknown model version {version!r}; known: {sorted(SPECS)}",
+            file=sys.stderr,
+        )
+        return 1
+    spec = SPECS[version]
+    path = model_path(version)
     if not path.exists():
-        print(f"no model at {path}: run scripts.train first", file=sys.stderr)
+        print(f"no model at {path}: run scripts.train {version} first", file=sys.stderr)
         return 1
     pipeline = load(path)
 
@@ -27,31 +42,16 @@ def main() -> int:
         print(e, file=sys.stderr)
         return 1
     with conn:
-        jobs = fetch_live_jobs(conn)
+        jobs = fetch_live_jobs(conn, spec.question_set)
         if not jobs:
-            print("no live jobs to score")
+            print(f"no live jobs answered with {spec.question_set}")
             return 0
 
-        cv = cv_skills()
-        probs = predict(
-            pipeline, feature_matrix([features_for_job(j, cv) for j in jobs])
-        )
+        scores = score_jobs(spec, pipeline, jobs, cv_skills())
 
-        # One transaction: the digest never ranks a mix of old and new scores.
-        with conn.transaction(), conn.cursor() as cur:
-            cur.executemany(
-                """
-                INSERT INTO scores (job_id, model_version, score)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (job_id, model_version) DO UPDATE
-                SET score = EXCLUDED.score, computed_at = now();
-                """,
-                [
-                    (job.job_id, MODEL_VERSION, float(prob))
-                    for job, prob in zip(jobs, probs, strict=True)
-                ],
-            )
-    print(f"wrote {len(jobs)} rows to scores ({MODEL_VERSION})")
+        write_scores(conn, version, jobs, scores)
+    dropped = sum(score == 0.0 for score in scores)
+    print(f"wrote {len(jobs)} rows to scores ({version}), {dropped} at 0 by its rules")
     return 0
 
 
