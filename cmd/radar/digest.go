@@ -89,13 +89,14 @@ func pendingJobs(ctx context.Context, conn *pgx.Conn, cfg config.Digest) ([]dige
 		WHERE s.model_version = $1
 		  AND s.score >= $2
 		  AND j.duplicate_of IS NULL
+		  AND ($4::bigint = 0 OR j.posted_at >= now() - make_interval(secs => $4))
 		  AND NOT EXISTS (
 		      SELECT 1 FROM jobs_sent js
 		      WHERE js.job_id = j.id AND js.model_version = s.model_version
 		  )
 		ORDER BY s.score DESC, j.id
 		LIMIT $3;`,
-		cfg.ModelVersion, cfg.MinScore, maxJobsPerRound)
+		cfg.ModelVersion, cfg.MinScore, maxJobsPerRound, int64(cfg.MaxAge.Seconds()))
 	if err != nil {
 		return nil, fmt.Errorf("query jobs for digest: %w", err)
 	}

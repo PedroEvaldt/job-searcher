@@ -147,6 +147,8 @@ func TestDigestValidate(t *testing.T) {
 		{"min_score above 1", func(d *Digest) { d.MinScore = 1.5 }, "min_score"},
 		{"negative min_score", func(d *Digest) { d.MinScore = -0.1 }, "min_score"},
 		{"every below a minute", func(d *Digest) { d.Every = 30 * time.Second }, "every"},
+		{"max_age 0 means no limit", func(d *Digest) { d.MaxAge = 0 }, ""},
+		{"negative max_age", func(d *Digest) { d.MaxAge = -time.Hour }, "max_age"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

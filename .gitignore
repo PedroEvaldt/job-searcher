@@ -22,8 +22,6 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
-# Trained models: artifacts of a model_version, rebuilt by scripts.train
-analyzer/data/models/
 # Local caches kept with the archive, regenerable from the database
 archive/analyzer/data/local/
 

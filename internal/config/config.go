@@ -25,6 +25,9 @@ type Digest struct {
 	MinScore float64 `yaml:"min_score"`
 	// Every is how often digest-loop sends a digest.
 	Every time.Duration `yaml:"every"`
+	// MaxAge leaves out jobs posted longer ago than this (and jobs with no posting
+	// date). Zero sends jobs of any age.
+	MaxAge time.Duration `yaml:"max_age"`
 }
 
 // Config is the parsed config.yaml.
@@ -93,6 +96,9 @@ func (d Digest) Validate() error {
 	}
 	if d.Every < time.Minute {
 		return fmt.Errorf("digest.every is %v, expected at least 1m", d.Every)
+	}
+	if d.MaxAge < 0 {
+		return fmt.Errorf("digest.max_age is %v, expected 0 (no limit) or more", d.MaxAge)
 	}
 	return nil
 }

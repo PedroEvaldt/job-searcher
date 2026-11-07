@@ -74,7 +74,8 @@ services:
         condition: service_completed_successfully
 
   jev-worker:
-    # Same image as analyzer, different command: the long-running Jev scorer.
+    # Same image as analyzer, different command: every 15 min, brings each new job up to
+    # date for the digest's model (language, skills, Jev answers, score).
     # Off by default (profile "jev"): without JEV_API_KEY the worker exits 1, and with
     # restart: unless-stopped that would be a restart loop. Turn it on with
     # COMPOSE_PROFILES=jev in .env, next to the key.
@@ -88,6 +89,9 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
       JEV_API_KEY: ${JEV_API_KEY}
       JEV_WORKER_INTERVAL_SECONDS: ${JEV_WORKER_INTERVAL_SECONDS:-900}
+      CV_PATH: /app/cv.md
+    volumes:
+      - ./cv.md:/app/cv.md:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
