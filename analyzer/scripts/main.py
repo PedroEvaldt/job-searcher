@@ -10,11 +10,10 @@ from jobradar.boilerplate import (
     paragraphs_counter,
 )
 from jobradar.db import DatabaseError, connect
+from jobradar.enrich import extract_pending_skills
 from jobradar.match import CV_PATH
-from jobradar.skills import ALIASES, skills_extractor
 from jobradar.text import html_to_paragraphs
 
-SKILLS_LIMIT: int = 100
 TFIDF_VERSION = "tfidf-v1"
 
 
@@ -30,7 +29,7 @@ def main() -> int:
         return 1
     with conn, conn.cursor() as cur:
         try:
-            insert_job_skills(conn)
+            extract_pending_skills(conn)
             insert_scores(conn)
         except psycopg.OperationalError as e:
             detail = " ".join(str(e).split())
@@ -49,61 +48,6 @@ def main() -> int:
     total, unscored = row
     print(f"jobs: {unscored} of {total} not scored yet")
     return 0
-
-
-def insert_job_skills(conn: psycopg.Connection) -> None:
-    with conn.cursor() as cur:
-        # Build the boilerplate statistic once over the whole corpus, then cut per job
-        descriptions = [
-            d[0]
-            for d in cur.execute(
-                "SELECT description FROM jobs WHERE duplicate_of IS NULL;"
-            ).fetchall()
-        ]
-        counter = paragraphs_counter(descriptions)
-
-        while True:
-            with conn.transaction():
-                jobs = cur.execute(
-                    "SELECT id, description FROM jobs WHERE duplicate_of IS NULL AND skills_extracted_at IS NULL ORDER BY id LIMIT %s FOR UPDATE SKIP LOCKED;",
-                    (SKILLS_LIMIT,),
-                ).fetchall()
-
-                if len(jobs) == 0:
-                    break
-
-                skills = skills_per_job(jobs, counter)
-
-                for job_id, skills_dict in skills.items():
-                    cur.execute("DELETE FROM job_skills WHERE job_id = %s", (job_id,))
-                    cur.executemany(
-                        "INSERT INTO job_skills (job_id, skill, confidence) VALUES(%s, %s, %s) ON CONFLICT (job_id, skill) DO UPDATE set confidence=EXCLUDED.confidence;",
-                        [
-                            (job_id, skill, confidence)
-                            for skill, confidence in skills_dict.items()
-                        ],
-                    )
-                    cur.execute(
-                        "UPDATE jobs SET skills_extracted_at = now() WHERE id = %s",
-                        (job_id,),
-                    )
-
-
-def skills_per_job(
-    jobs: list[tuple[int, str]], counter: Counter[str]
-) -> dict[int, dict[str, float]]:
-    """Canonical skills found in every live job, after cutting shared boilerplate."""
-    paragraphs: dict[int, list[str]] = {}
-    descriptions: list[str] = []
-    for job_id, description in jobs:
-        paragraphs[job_id] = html_to_paragraphs(description)
-        descriptions.append(description)
-
-    skills: dict[int, dict[str, float]] = {}
-    for job_id, job_paragraphs in paragraphs.items():
-        kept = cut_boilerplate(job_paragraphs, counter)
-        skills[job_id] = skills_extractor("\n".join(kept), ALIASES)
-    return skills
 
 
 def insert_scores(conn: psycopg.Connection) -> None:

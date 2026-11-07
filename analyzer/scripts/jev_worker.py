@@ -1,6 +1,9 @@
-"""Daemon mode of the Jev scorer: drain every pending job, sleep, repeat.
+"""The worker: bring every new live job up to date for the digest's model, sleep, repeat.
 
-The one-shot version is scripts.score_jev_batch; both share process_pending_jobs.
+Each cycle is one jobradar.pipeline.update_jobs pass: language, skills, the model's Jev
+answers and its score, each only for the jobs still missing it. The model is
+MODEL_VERSION (jobradar/model/combined.py), which must be the one config.yaml's
+digest.model_version names. Needs JEV_API_KEY.
 """
 
 import os
@@ -9,6 +12,7 @@ import sys
 import threading
 
 import psycopg
+from sklearn.pipeline import Pipeline
 from typesafe_sdk import (
     TypeSafeAPIConnectionError,
     TypeSafeInternalServerError,
@@ -16,8 +20,8 @@ from typesafe_sdk import (
 )
 
 from jobradar.jev.client import JevClient, jev_client
-from jobradar.jev.manual import MODEL_VERSION
-from scripts.score_jev_batch import process_pending_jobs
+from jobradar.model.combined import MODEL_VERSION, SPECS, ModelSpec, load, model_path
+from jobradar.pipeline import update_jobs
 
 DEFAULT_INTERVAL_SECONDS = 15 * 60
 
@@ -64,8 +68,15 @@ def main() -> int:
 
     jev_c = jev_client()
     if jev_c is None:
-        print("no JEV_API_KEY set — nothing to run", file=sys.stderr, flush=True)
+        print("no JEV_API_KEY set, nothing to run", file=sys.stderr, flush=True)
         return 1
+
+    spec = SPECS[MODEL_VERSION]
+    path = model_path(MODEL_VERSION)
+    if not path.exists():
+        print(f"no model at {path}", file=sys.stderr, flush=True)
+        return 1
+    pipeline = load(path)
 
     stop = threading.Event()
 
@@ -78,10 +89,10 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_stop)
     signal.signal(signal.SIGINT, handle_stop)
 
-    print(f"jev worker started, every {interval}s ({MODEL_VERSION})", flush=True)
+    print(f"worker started, every {interval}s ({MODEL_VERSION})", flush=True)
     while not stop.is_set():
         try:
-            run_cycle(database_url, jev_c)
+            run_cycle(database_url, jev_c, spec, pipeline)
         except TRANSIENT_ERRORS as e:
             detail = " ".join(str(e).split())
             print(
@@ -91,17 +102,19 @@ def main() -> int:
             )
         stop.wait(timeout=interval)
 
-    print("jev worker stopped", flush=True)
+    print("worker stopped", flush=True)
     return 0
 
 
-def run_cycle(database_url: str, jev_c: JevClient) -> None:
+def run_cycle(
+    database_url: str, jev_c: JevClient, spec: ModelSpec, pipeline: Pipeline
+) -> None:
     # A fresh connection every cycle: a connection opened before a Postgres restart is
     # dead for good, and opening one every few minutes costs nothing. The with closes
     # it at the end of the cycle, on success or on error.
     with psycopg.connect(database_url, autocommit=True) as conn:
-        total_jobs, total_cost = process_pending_jobs(conn, jev_c)
-    print(f"cycle: {total_jobs} jobs scored, ${total_cost:.6f}", flush=True)
+        report = update_jobs(conn, jev_c, spec, pipeline)
+    print(f"cycle: {report} ({spec.version})", flush=True)
 
 
 if __name__ == "__main__":
