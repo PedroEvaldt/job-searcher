@@ -74,8 +74,9 @@ restart app digest`.
 | `digest.every`         | time between digests                                                       |
 | `digest.max_age`       | only jobs posted within this (`336h` = 14 days); `0` = any age             |
 
-Durations use Go's format (`500ms`, `30s`, `6h`). Postgres is published on the host at port
-**5433**, to stay clear of a local Postgres on 5432.
+Durations use Go's format (`500ms`, `30s`, `6h`). Postgres is published on the host's
+`127.0.0.1:5433` only (5433 to stay clear of a local Postgres on 5432); other machines reach it
+through an SSH tunnel ([docs/OPERATIONS.md](docs/OPERATIONS.md)).
 
 ## Labelling jobs: `radar`
 

@@ -7,7 +7,8 @@ Postgres.
 ## Setup
 
 Requirements: [uv](https://docs.astral.sh/uv/), a migrated Postgres (the collector migrates it;
-compose publishes it on `localhost:5433`), and `cv.md` at the repository root (or `CV_PATH`).
+compose publishes it on `localhost:5433`; from another machine, through the SSH tunnel in
+docs/OPERATIONS.md), and `cv.md` at the repository root (or `CV_PATH`).
 
 ```bash
 uv sync                      # runtime dependencies

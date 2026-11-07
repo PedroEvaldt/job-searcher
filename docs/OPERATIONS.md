@@ -3,18 +3,57 @@
 job-radar runs with `docker compose` on a Raspberry Pi (arm64; Docker builds the images natively
 there). Nothing in the code or the compose file is Pi-specific.
 
-All commands run from the repository root. `psql` inside the database container:
+All commands run from the repository root on the Pi unless said otherwise. `psql` inside the
+database container:
 
 ```
 docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
+
+## The one database, and how to reach it
+
+The Pi's database is the only one with live data: the collector writes there, the digest reads
+there, and labelling and modelling from the desktop or the notebook work on it too. Postgres is
+published on the Pi's `127.0.0.1:5433` only (`compose.yaml`): Docker's published ports skip
+`ufw`, so binding to localhost is what keeps the network and the tailnet out. Other machines
+come in through an SSH tunnel over Tailscale, the same at home and away:
+
+```
+# ~/.ssh/config
+Host pi-db
+    HostName 100.78.132.99          # the Pi's Tailscale address
+    User pedro
+    IdentityFile ~/.ssh/pi_deploy
+    IdentitiesOnly yes
+    LocalForward 5433 localhost:5433
+    ExitOnForwardFailure yes
+    ServerAliveInterval 30
+```
+
+With `ssh -N pi-db` open, this in the machine's `.env` points every script and `radar` at the
+Pi (the traffic is inside SSH, so `sslmode=disable` never crosses the network):
+
+```
+DATABASE_URL="postgres://postgres:<the Pi's password>@localhost:5433/jobs?sslmode=disable"
+```
+
+Without the tunnel they fail with "connection refused" instead of reaching another database.
+The compose stack does not run on the desktop: its `.env` has no `DISCORD_WEBHOOK_URL` and no
+`COMPOSE_PROFILES`, since a second collector, worker and digest would send every job twice and
+pay the Jev twice. `make test` starts its own Postgres (testcontainers).
+
+The database password goes inside that URL, so it takes letters and digits only
+(`openssl rand -hex 24`): `@ : / # ? %` break the connection string, and the services retry
+forever. To change it, run `\password` in `psql` (the server only reads `POSTGRES_PASSWORD`
+when it creates the database), put the same value in the Pi's `.env`, then
+`docker compose up -d` to recreate the services with it.
 
 ## First deploy
 
 ```
 git clone https://github.com/PedroEvaldt/job-searcher.git
 cd job-searcher
-cp .env.example .env            # set a real POSTGRES_PASSWORD
+cp .env.example .env            # set a real POSTGRES_PASSWORD (letters and digits)
 cp cv.example.md cv.md          # your résumé
 docker compose up -d --build
 ```
@@ -84,9 +123,10 @@ glibc from the start.
 
 ## Moving the desktop's database to the Pi
 
-Labelling and modelling happen on the desktop, so the desktop's database is the one that
-counts. On 2026-11-07 it replaced the Pi's (still `postgres:16-alpine`, schema 7, no labels;
-its dump is `db_dump/pi-jobs-2026-11-07.dump`), restored into a fresh volume so the indexes are
+Until 2026-11-07 labelling and modelling worked on a database of the desktop's own, so that
+was the one that counted. That day it replaced the Pi's (still `postgres:16-alpine`, schema 7,
+no labels; its dump is `db_dump/pi-jobs-2026-11-07.dump`), and since then the Pi's is the only
+one (see "The one database" above). It was restored into a fresh volume so the indexes are
 built under glibc from the start:
 
 ```
@@ -126,19 +166,28 @@ may send jobs the old one already sent.
 ## Backups
 
 The labels are the one thing that cannot be recollected: they are hours of human judgement.
-Dumps go to `db_dump/`, which git ignores.
+Dumps go to the desktop's `db_dump/`, which git ignores.
+
+Every day the desktop's `job-radar-backup.timer` (in the dotfiles: `~/.local/bin/job-radar-backup`
+and `~/.config/systemd/user/`) pulls a full dump from the Pi into `db_dump/pi-YYYY-MM-DD.dump`,
+checks it with `pg_restore --list` before keeping it, and keeps the newest 14 (dumps named any
+other way are left alone). `Persistent=true` runs a missed day at the next login, and a failed
+run retries every 10 minutes, up to 3 times. `journalctl --user -u job-radar-backup` shows the
+runs; `systemctl --user start job-radar-backup.service` makes one now.
+
+By hand, from the desktop:
 
 ```
 # the whole database (custom format)
-docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+ssh pi 'cd ~/pi/job-searcher && docker compose exec -T postgres sh -c "pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Fc"' \
   > db_dump/jobs-$(date +%F).dump
 
 # just the labels, as plain SQL
-docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only -t labels' \
+ssh pi 'cd ~/pi/job-searcher && docker compose exec -T postgres sh -c "pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" --data-only -t labels"' \
   > db_dump/labels-$(date +%F).sql
 ```
 
-Restore a full dump into the running database (replaces what is there):
+Restore a full dump into the running database (on the Pi; replaces what is there):
 
 ```
 docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner' \
