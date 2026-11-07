@@ -1,7 +1,8 @@
 .venv
 .env
+.git
 __pycache__
 .mypy_cache
 .ruff_cache
-.git
-eda
+.pytest_cache
+tests/

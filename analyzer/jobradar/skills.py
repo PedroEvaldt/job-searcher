@@ -6,9 +6,9 @@ from pathlib import Path
 #
 # Curated "main" skills, not an exhaustive taxonomy. Single-letter languages (C, R) are
 # left out on purpose: the word-boundary matcher would catch the C in "C++"/"C#" and R
-# everywhere, which needs longest-match (a later task). Some names are also English words
-# ("go", "spring", "express"), so counts over-report a little — confidence is a raw count
-# for now anyway (to be weighted in 3a.5).
+# everywhere, which needs longest-match. Some names are also English words ("go",
+# "spring", "express"), so counts over-report a little. confidence is a raw mention
+# count, not normalized: the models use skills as a set (jobradar/match.py), not counts.
 ALIASES = {
     # Languages
     "python": "Python",

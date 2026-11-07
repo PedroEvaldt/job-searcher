@@ -1,7 +1,5 @@
-import os
 import sys
 from collections import Counter
-from pathlib import Path
 
 import psycopg
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -11,29 +9,25 @@ from jobradar.boilerplate import (
     cut_boilerplate,
     paragraphs_counter,
 )
+from jobradar.db import DatabaseError, connect
+from jobradar.match import CV_PATH
 from jobradar.skills import ALIASES, skills_extractor
 from jobradar.text import html_to_paragraphs
 
 SKILLS_LIMIT: int = 100
+TFIDF_VERSION = "tfidf-v1"
 
 
 def main() -> int:
-    """Report how many jobs are still waiting for a score."""
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
+    """The analyzer service: extract the skills of every new live job, score the
+    unscored ones with tfidf-v1, then report how many jobs are still unscored."""
+    # Autocommit (jobradar.db): each skills batch commits on its own, so the FOR UPDATE
+    # locks are released batch by batch instead of at the very end.
     try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
         return 1
-
-    # Each batch commits on its own (see the loop). Without autocommit, the Phase A read
-    # opens an implicit transaction and every with-transaction() becomes a savepoint, so
-    # the FOR UPDATE locks would be held until the very end.
-    conn.autocommit = True
     with conn, conn.cursor() as cur:
         try:
             insert_job_skills(conn)
@@ -127,17 +121,16 @@ def insert_scores(conn: psycopg.Connection) -> None:
             jobs = cur.execute(
                 "SELECT id, description FROM jobs WHERE duplicate_of IS NULL AND scored_at IS NULL ORDER BY id;",
             ).fetchall()
+            # A run with no new job is a normal day: nothing to fit TF-IDF on.
+            if not jobs:
+                return
 
             jobs_scores = scorer(jobs, counter)
 
             cur.executemany(
                 "INSERT INTO scores (job_id, model_version, score, computed_at) VALUES(%s, %s, %s, now()) ON CONFLICT (job_id, model_version) DO UPDATE set score=EXCLUDED.score, computed_at=EXCLUDED.computed_at;",
                 [
-                    (
-                        job_id,
-                        "tfidf-v1",
-                        score,
-                    )
+                    (job_id, TFIDF_VERSION, score)
                     for job_id, score in jobs_scores.items()
                 ],
             )
@@ -157,8 +150,7 @@ def scorer(jobs: list[tuple[int, str]], counter: Counter[str]) -> dict[int, floa
         kept = cut_boilerplate(job_paragraphs, counter)
         descriptions[job_id] = "\n".join(kept)
 
-    cv_path = Path(__file__).parents[2] / "cv.md"
-    cv_text = cv_path.read_text(encoding="utf-8")
+    cv_text = CV_PATH.read_text(encoding="utf-8")
     corpus = [cv_text, *descriptions.values()]
     matrix = TfidfVectorizer(stop_words="english").fit_transform(corpus)
     grades = cosine_similarity(matrix[0], matrix[1:])[0]

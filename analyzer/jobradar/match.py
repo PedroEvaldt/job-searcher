@@ -1,16 +1,19 @@
-"""How well a job's skills fit the CV's skills (5.4.2).
+"""How well a job's skills fit the CV's skills.
 
 Both sides are sets — a skill is there or not — because mention counts measure how a
-text was written, not what anyone knows (D47). Pure functions, no database: the
+text was written, not what anyone knows. Pure functions, no database: the
 caller brings the job's skills (from job_skills) and the CV's (from cv_skills()).
 """
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from jobradar.skills import ALIASES, skills_extractor
 
-CV_PATH = Path(__file__).resolve().parents[2] / "cv.md"
+# The CV is personal data and stays out of git: cv.md at the repository root by default,
+# or wherever CV_PATH points (the analyzer container mounts it at /app/cv.md).
+CV_PATH = Path(os.getenv("CV_PATH") or Path(__file__).resolve().parents[2] / "cv.md")
 
 
 @dataclass(frozen=True)
@@ -36,7 +39,7 @@ def skill_match(job_skills: set[str], cv_skills: set[str]) -> SkillMatch:
 
 SKILLS_GATE_VERSION = "skills-gate-v1"
 
-# Fixed before looking at the test set (5.4, 2026-11-02). Tuning it on test-set-v2
+# Fixed before looking at the test set (2026-11-02). Tuning it on the test set
 # would turn the test set into training data.
 GATE_CUTOFF = 0.5
 

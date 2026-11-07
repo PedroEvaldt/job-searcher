@@ -1,4 +1,6 @@
-"""5.4.3: write the skills-gate-v1 score of every live job to scores.
+"""Write the skills-gate-v1 score of every live job to scores (a ranking baseline).
+
+    uv run --env-file ../.env python -m scripts.score_skills_gate
 
 Needs, per job, the Jev answers (jev_answers, qs-v1) and the extracted skills
 (job_skills). A live job without Jev answers yet is skipped — its gate cannot be
@@ -9,11 +11,11 @@ it warns when some live jobs never went through skill extraction.
 Idempotent: re-running overwrites the same (job_id, model_version) rows.
 """
 
-import os
 import sys
 
 import psycopg
 
+from jobradar.db import DatabaseError, connect
 from jobradar.jev.questions import QUESTION_SET_VERSION
 from jobradar.match import (
     SKILLS_GATE_VERSION,
@@ -24,14 +26,14 @@ from jobradar.match import (
 
 
 def score_skills_gate() -> int:
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
-
     cv = cv_skills()
     try:
-        with psycopg.connect(database_url) as conn:
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
+        return 1
+    try:
+        with conn:
             rows = conn.execute(
                 """SELECT j.id, je.answers,
                        COALESCE(array_agg(js.skill) FILTER (WHERE js.skill IS NOT NULL),

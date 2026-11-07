@@ -23,7 +23,7 @@ BLOCK_TAGS = {
 }
 
 # Invisible characters found in the descriptions (Unicode category Cf). str.split() does
-# not treat them as spaces, so a paragraph made only of them looked non-empty (D43).
+# not treat them as spaces, so a paragraph made only of them looked non-empty.
 # A translate table that deletes them.
 REMOVE_INVISIBLE = str.maketrans(
     "",

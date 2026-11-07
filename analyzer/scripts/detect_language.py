@@ -1,9 +1,8 @@
-import os
 import sys
 
-import psycopg
 from langdetect import DetectorFactory, LangDetectException, detect_langs
 
+from jobradar.db import DatabaseError, connect
 from jobradar.text import html_to_paragraphs
 
 # langdetect is non-deterministic unless the seed is fixed: same text -> same language.
@@ -80,18 +79,11 @@ def detect_language(text: str) -> str | None:
 
 
 def languages_pipeline() -> int:
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
     try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
         return 1
-
-    conn.autocommit = True
     with conn, conn.cursor() as cur:
         # Resumable: only the live jobs not tagged yet.
         rows = cur.execute(

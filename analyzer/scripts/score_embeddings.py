@@ -1,32 +1,22 @@
-import os
 import sys
-from pathlib import Path
 
-import psycopg
-
+from jobradar.db import DatabaseError, connect
 from jobradar.embed import embed
+from jobradar.match import CV_PATH
 from scripts.embed_jobs import MODEL_VERSION
 
 
 def score_embeddings() -> int:
-    cv_path = Path(__file__).resolve().parents[2] / "cv.md"
-    cv_text = cv_path.read_text(encoding="utf-8")
+    cv_text = CV_PATH.read_text(encoding="utf-8")
     cv_vector = embed([cv_text])
 
     cv_pgvector = "[" + ",".join(map(str, cv_vector[0])) + "]"
 
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
     try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
         return 1
-
-    conn.autocommit = True
     with conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -39,7 +29,7 @@ def score_embeddings() -> int:
         if not cur.rowcount:
             print("no embeddings to score")
             return 0
-        print(f"Inseri {cur.rowcount} linhas no scores")
+        print(f"wrote {cur.rowcount} rows to scores ({MODEL_VERSION})")
     return 0
 
 

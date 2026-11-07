@@ -12,9 +12,9 @@ from typesafe_sdk import (
 
 from jobradar.jev.questions import Question
 
-# "jev-latest" floats across releases — fine for the pilot, but the model id becomes part
-# of model_version downstream, so pin it to a concrete version (see client.models()) before
-# trusting scores in the frozen-set comparison. TODO(4b.4): pin.
+# "jev-latest" floats across releases, and the answers are not versioned by Jev model: if
+# the provider updates it, new answers come from a different model under the same
+# question_set_version. TODO: pin a concrete version (see client.models()).
 JEV_MODEL = "jev-latest"
 
 

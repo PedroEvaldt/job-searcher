@@ -1,83 +1,97 @@
-import json
-import os
+"""Measure model versions on the frozen test set, side by side.
+
+    uv run --env-file ../.env python -m scripts.evaluate [model_version ...]
+
+With no argument, measures the digest's current model and the combined model. Every
+model is scored on the same labelled frozen jobs, so the numbers compare directly.
+
+Average precision decides: it weighs the hits at the top of the ranking, which is all
+the digest shows. ROC AUC is there as a sanity check, and P@10 is the share of good
+jobs among the 10 best-ranked test jobs. With only a handful of positives in the test
+set, one job moves these numbers a lot: read them next to the cross-validated AP that
+scripts.train prints.
+"""
+
 import sys
 
 import psycopg
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from jobradar.frozen import FROZEN_PATH
+from jobradar.db import DatabaseError, connect
+from jobradar.frozen import frozen_ids, frozen_version
+from jobradar.jev.manual import MODEL_VERSION as JEV_MANUAL
+from jobradar.model.combined import MODEL_VERSION as COMBINED
 
-MODELS = ["jev-manual-qs-v1"]
+DEFAULT_MODELS = [JEV_MANUAL, COMBINED]
+TOP_K = 10
 
 
-def evaluate() -> int:
-    """Report each model_version on the frozen test set, side by side.
+def main() -> int:
+    models = sys.argv[1:] or DEFAULT_MODELS
+    test_ids = frozen_ids()
 
-    Average Precision is the deciding metric (5.4): it weighs the hits at the top,
-    which is all the digest shows. ROC AUC sits next to it only to compare with the
-    3b–4c numbers. Model versions come from the command line; with none given,
-    `MODELS` is measured. Every model is scored on the same labelled frozen ids.
-    """
-    data = json.loads(FROZEN_PATH.read_text(encoding="utf-8"))
-    frozen_ids: list[int] = [d["job_id"] for d in data["test_set"]]
-
-    db_url = os.getenv("DATABASE_URL")
-    if db_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
-
-    models = sys.argv[1:] or MODELS
-    results: list[tuple[str, float, float]] = []
     try:
-        with psycopg.connect(db_url) as conn:
-            labels_by_job = fetch_labels(conn, frozen_ids)
-            unlabelled = len(frozen_ids) - len(labels_by_job)
-            if unlabelled:
-                # Measuring on a partial test set is allowed but must be visible:
-                # the numbers change once the rest is labelled.
-                print(
-                    f"warning: {unlabelled} of {len(frozen_ids)} test jobs not "
-                    "labelled yet — measuring on the labelled ones only",
-                    file=sys.stderr,
-                )
-            ids = sorted(labels_by_job)
-            labels = [labels_by_job[job_id] for job_id in ids]
-            if not any(labels) or all(labels):
-                print("the labelled test jobs are all one class", file=sys.stderr)
-                return 1
-
-            for model in models:
-                scores_by_job = fetch_scores(conn, model, ids)
-                missing = [job_id for job_id in ids if job_id not in scores_by_job]
-                if missing:
-                    print(f"no {model} score for jobs: {missing}", file=sys.stderr)
-                    return 1
-                scores = [scores_by_job[job_id] for job_id in ids]
-                results.append(
-                    (
-                        model,
-                        float(average_precision_score(labels, scores)),
-                        float(roc_auc_score(labels, scores)),
-                    )
-                )
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
         return 1
+
+    results: list[tuple[str, float, float, float]] = []
+    with conn:
+        labels_by_job = fetch_labels(conn, test_ids)
+        unlabelled = len(test_ids) - len(labels_by_job)
+        if unlabelled:
+            # Measuring on a partial test set is allowed but must be visible: the
+            # numbers change once the rest is labelled.
+            print(
+                f"warning: {unlabelled} of {len(test_ids)} test jobs not labelled "
+                "yet, measuring on the labelled ones only",
+                file=sys.stderr,
+            )
+        ids = sorted(labels_by_job)
+        labels = [labels_by_job[job_id] for job_id in ids]
+        if not any(labels) or all(labels):
+            print("the labelled test jobs are all one class", file=sys.stderr)
+            return 1
+
+        for model in models:
+            scores_by_job = fetch_scores(conn, model, ids)
+            missing = [job_id for job_id in ids if job_id not in scores_by_job]
+            if missing:
+                print(f"no {model} score for jobs: {missing}", file=sys.stderr)
+                return 1
+            scores = [scores_by_job[job_id] for job_id in ids]
+            results.append(
+                (
+                    model,
+                    float(average_precision_score(labels, scores)),
+                    float(roc_auc_score(labels, scores)),
+                    precision_at_k(labels, scores, TOP_K),
+                )
+            )
 
     n_pos = sum(labels)
-    # AP of a random ranking equals the positive rate: the floor to beat.
+    # The AP of a random ranking equals the positive rate: the floor to beat.
     print(
-        f"{data['version']}: n={len(ids)} pos={n_pos} (random AP={n_pos / len(ids):.4f})"
+        f"{frozen_version()}: n={len(ids)} pos={n_pos} "
+        f"(random AP={n_pos / len(ids):.4f})"
     )
-    width = max(len(model) for model, _, _ in results)
-    for model, ap, auc in results:
-        print(f"{model:<{width}}  AP={ap:.4f}  ROC AUC={auc:.4f}")
+    width = max(len(model) for model, *_ in results)
+    for model, ap, auc, p_at_k in results:
+        print(
+            f"{model:<{width}}  AP={ap:.4f}  ROC AUC={auc:.4f}  P@{TOP_K}={p_at_k:.2f}"
+        )
     return 0
 
 
+def precision_at_k(labels: list[bool], scores: list[float], k: int) -> float:
+    """Share of positives among the k best-scored jobs (ties broken by input order)."""
+    ranked = sorted(range(len(scores)), key=lambda i: -scores[i])[:k]
+    return sum(labels[i] for i in ranked) / len(ranked)
+
+
 def fetch_labels(conn: psycopg.Connection, ids: list[int]) -> dict[int, bool]:
-    """would_apply of the frozen jobs that already have a label, as {job_id: label}."""
+    """would_apply of the given jobs that already have a label, as {job_id: label}."""
     rows = conn.execute(
         "SELECT job_id, would_apply FROM labels WHERE job_id = ANY(%s);", (ids,)
     ).fetchall()
@@ -87,14 +101,13 @@ def fetch_labels(conn: psycopg.Connection, ids: list[int]) -> dict[int, bool]:
 def fetch_scores(
     conn: psycopg.Connection, model_version: str, ids: list[int]
 ) -> dict[int, float]:
-    """The frozen jobs' scores for one model_version, as {job_id: score}."""
+    """The given jobs' scores for one model_version, as {job_id: score}."""
     rows = conn.execute(
-        "SELECT job_id, score FROM scores "
-        "WHERE model_version = %s AND job_id = ANY(%s);",
+        "SELECT job_id, score FROM scores WHERE model_version = %s AND job_id = ANY(%s);",
         (model_version, ids),
     ).fetchall()
     return {job_id: score for job_id, score in rows}
 
 
 if __name__ == "__main__":
-    sys.exit(evaluate())
+    sys.exit(main())

@@ -14,7 +14,7 @@ BOILERPLATE_MIN_DESCRIPTIONS = 10
 def paragraphs_counter(htmls: Iterable[str]) -> Counter[str]:
     """In how many distinct descriptions each paragraph appears."""
     counts: Counter[str] = Counter()
-    # Identical descriptions count once: the same job posted many times (D44) is not
+    # Identical descriptions count once: the same job posted many times is not
     # boilerplate across jobs
     for html in set(htmls):
         # A paragraph repeated inside one description counts once too

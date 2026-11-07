@@ -1,9 +1,7 @@
-import os
 import sys
 
-import psycopg
-
 from jobradar.boilerplate import clean_descriptions
+from jobradar.db import DatabaseError, connect
 from jobradar.embed import embed
 
 MODEL_VERSION = "minilm-l6-v2"
@@ -16,18 +14,11 @@ def embed_jobs() -> int:
     Resumable and idempotent — a second run embeds only what is still missing, and the
     ON CONFLICT upsert means re-embedding a job overwrites its row, never duplicates it.
     """
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
     try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
         return 1
-
-    conn.autocommit = True
     with conn, conn.cursor() as cur:
         # The whole live set: clean_descriptions builds the boilerplate statistic over
         # it, so the cut does not change with the pending subset.

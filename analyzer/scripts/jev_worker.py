@@ -16,7 +16,7 @@ from typesafe_sdk import (
 )
 
 from jobradar.jev.client import JevClient, jev_client
-from scripts.score_jev import MODEL_VERSION
+from jobradar.jev.manual import MODEL_VERSION
 from scripts.score_jev_batch import process_pending_jobs
 
 DEFAULT_INTERVAL_SECONDS = 15 * 60

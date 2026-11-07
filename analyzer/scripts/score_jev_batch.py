@@ -1,13 +1,21 @@
-import os
+"""Answer every live job the Jev has not seen yet, once, then exit.
+
+    uv run --group jev --env-file ../.env python -m scripts.score_jev_batch
+
+The daemon version is scripts.jev_worker; both share process_pending_jobs. Needs
+JEV_API_KEY: without it the project still runs, ranking by the other models.
+"""
+
 import sys
 
 import psycopg
 from psycopg.types.json import Json
 
 from jobradar.boilerplate import clean_descriptions
+from jobradar.db import DatabaseError, connect
 from jobradar.jev.client import JevAnswers, JevClient, jev_client
+from jobradar.jev.manual import MODEL_VERSION, manual_score
 from jobradar.jev.questions import QUESTION_SET_VERSION, QUESTIONS
-from scripts.score_jev import MODEL_VERSION, get_score
 
 BATCH_SIZE = 100
 
@@ -16,25 +24,17 @@ INPUT_PRICE_PER_MILLION = 0.042
 
 
 def score_jev_batch() -> int:
-    """One-shot: drain the pending jobs once and exit. The daemon version is
-    scripts.jev_worker; both share process_pending_jobs."""
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        print("DATABASE_URL is not set", file=sys.stderr)
-        return 1
-
     jev_c = jev_client()
     if jev_c is None:
-        print("no JEV_API_KEY set — nothing to run", file=sys.stderr)
+        print("no JEV_API_KEY set, nothing to run", file=sys.stderr)
         return 1
 
     try:
-        # autocommit=True: process_pending_jobs relies on it, so each batch's
-        # conn.transaction() is a real commit instead of a savepoint (3a.2.3 gotcha).
-        conn = psycopg.connect(database_url, autocommit=True)
-    except psycopg.Error as e:
-        detail = " ".join(str(e).split())
-        print(f"failed to connect to the database: {detail}", file=sys.stderr)
+        # Autocommit (jobradar.db): process_pending_jobs relies on it, so each batch's
+        # conn.transaction() is a real commit instead of a savepoint.
+        conn = connect()
+    except DatabaseError as e:
+        print(e, file=sys.stderr)
         return 1
 
     with conn:
@@ -91,7 +91,7 @@ def process_pending_jobs(
         answers: list[JevAnswers] = [
             jev_c.answer(state, QUESTIONS) for state in jev_states
         ]
-        scores = [get_score(answer.answers) for answer in answers]
+        scores = [manual_score(answer.answers) for answer in answers]
 
         batch_tokens = sum(a.input_tokens for a in answers)
         batch_cost = batch_tokens / 1_000_000 * INPUT_PRICE_PER_MILLION
