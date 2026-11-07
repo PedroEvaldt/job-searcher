@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import numpy as np
 
 from jobradar.model.combined import (
@@ -65,3 +68,19 @@ def test_every_spec_uses_known_features() -> None:
         answers = {q.id for q in QUESTION_SETS[spec.question_set]}
         assert set(spec.features) <= answers | set(CODE_FEATURES), spec.version
         assert len(spec.features) == len(set(spec.features)), spec.version
+
+
+def test_the_worker_and_the_digest_use_the_same_model() -> None:
+    # The worker scores new jobs with MODEL_VERSION and the digest ranks by
+    # digest.model_version: a mismatch sends nothing, or jobs scored by another model.
+    config = Path(__file__).resolve().parents[2] / "config.yaml"
+    match = re.search(
+        r'^\s*model_version:\s*"?([\w.-]+)"?', config.read_text(), re.MULTILINE
+    )
+    assert match is not None, "config.yaml has no digest.model_version"
+    assert match.group(1) == MODEL_VERSION
+
+
+def test_the_digest_model_is_saved() -> None:
+    # The images carry data/models/: the worker cannot start without the file.
+    assert model_path().exists()
