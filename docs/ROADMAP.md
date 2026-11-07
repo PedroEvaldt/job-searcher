@@ -13,7 +13,7 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
 - fully remote; hybrid or on-site never;
 - hands-on backend / software engineering (Go, Python), DevOps / infrastructure / SRE, or
   data / AI / ML. Not QA, security analysis, support, frontend-only or non-technical roles;
-- junior or mid level;
+- junior or mid level, the entry level (junior, intern, trainee) preferred;
 - written in English, Portuguese or Spanish (a rule);
 - no hard requirement of a completed degree: "or equivalent experience", an in-progress degree
   or current students are fine (a rule).
@@ -39,12 +39,15 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
       0.600, audit 8/10, a near tie; v7 stays in the digest.
 - [x] A stack read from the title too, with COBOL and the other missing languages
       (`jobradar/stack.py`): `sklearn-combined-v9`, test AP 0.554, audit 9/10, a tie; v7 stays.
+- [x] `junior_title` (the title says junior, intern or entry level), for more weight on the
+      entry level: `sklearn-combined-v10`, audit **10/10**, test AP 0.498 (no test positive is
+      entry level). The digest switches to v10.
 
 ## Next: switch the digest
 
 - [x] The worker keeps every new job complete for the digest's model: language, skills, the
       model's Jev answers, its score (`jobradar/pipeline.py`).
-- [x] `digest.model_version: sklearn-combined-v7`, `min_score: 0.20` (≈5 jobs a day),
+- [x] `digest.model_version: sklearn-combined-v10`, `min_score: 0.20` (≈4 jobs a day),
       `max_age: 336h`. Model files are versioned, so the images carry them.
 - [ ] Deploy to the Pi: database move with the reindex (OPERATIONS.md), then the new images.
 
@@ -52,7 +55,7 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
 
 - Teach `fully_remote` (see MODELING.md). The sources' location field was tried: no gain.
 - More labels drawn **at random** from the live jobs, to grow the test set past its 3 positives:
-  v7, v8 and v9 now differ only in where two test jobs land, so it decides the next switch.
+  v7 to v10 differ only in where two test jobs land, and none of its positives is entry level.
   Labels picked by a model's ranking go to training only.
 - Pin the Jev model (`jev-latest` floats) and record the CV version in the model versions.
 - Refit `tfidf-v1`'s vocabulary on the whole live set, as a new version.

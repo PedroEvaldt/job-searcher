@@ -4,9 +4,10 @@ The goal is a ranking whose top is jobs I would actually apply to, because the t
 digest sends. This file is the record of how models are measured, what each one scores, and
 what is known to be wrong. Every number comes with the `model_version` that produced it.
 
-**Now:** the digest ranks by `sklearn-combined-v7`. On the frozen test set it reaches an
-average precision of 0.767 (random: 0.020), and 9 of the 10 live jobs it ranks first are good
-ones. The first learned model, `sklearn-combined-v2`, managed 0.121 and 1 of 10.
+**Now:** the digest ranks by `sklearn-combined-v10`. All 10 of the live jobs it ranks first are
+good ones; the first learned model, `sklearn-combined-v2`, managed 1 of 10. On the frozen test
+set its average precision is 0.498 (random: 0.020; v2: 0.121), below v7's 0.767: v10 weights
+up the entry level, a preference stated after the test set was labelled (see v10 below).
 
 ## How a model is measured
 
@@ -25,12 +26,14 @@ ones. The first learned model, `sklearn-combined-v2`, managed 0.121 and 1 of 10.
 
 The test set has only 3 positives, so one job moves its AP by a lot. Feature sets are chosen by
 nested cross-validation on the training jobs (C picked inside each outer fold, 5×5 repeats), the
-test set is read once per version, and the audit decides between versions that tie.
+test set is read once per version, and the audit decides between versions that tie. A
+preference stated after the test set was labelled (more weight on the entry level, v10) is
+judged by the audit: the test labels cannot reflect it.
 
 ## Labels
 
-633 labelled jobs, 33 of them "would apply" (2026-11-07). The training pool is every label
-outside the test set: 483 jobs, 30 positive.
+636 labelled jobs, 36 of them "would apply" (2026-11-07). The training pool is every label
+outside the test set: 486 jobs, 33 positive.
 
 | Batch | When | Jobs | How they were chosen |
 | --- | --- | --- | --- |
@@ -40,7 +43,7 @@ outside the test set: 483 jobs, 30 positive.
 | positives review | 2026-11-06 | (41) | every "yes" re-checked under a stricter criterion: 41 became 27 |
 | criteria review | 2026-11-07 | (13) | training "yes" that broke the stated criteria, re-checked from their descriptions: 11 became "no" |
 | test review | 2026-11-07 | (4) | the 4 test "yes" re-checked against the stated criteria: 1 became "no" (`test-set-v3`) |
-| audits | 2026-11-06/07 | 70 | the top 10 of v2 and v4 to v9; 33 of them new labels |
+| audits | 2026-11-06/07 | 80 | the top 10 of v2 and v4 to v10; 36 of them new labels |
 
 Round 2 and the audits were selected by a model's ranking, so they over-represent what those
 models like. That is fine for training, but they never grow the test set, and they make the
@@ -84,9 +87,10 @@ audit = good jobs among the 10 live jobs the version ranks first.
 | `sklearn-combined-v4` | `qs-v2` + skill coverage and overlap | 0.600 | 0.980 | 0.3 | 7/10 |
 | `sklearn-combined-v5` | v4's features on `qs-v3`, plus the language and degree rules | 0.514 | 0.984 | 0.3 | 7/10 |
 | `sklearn-combined-v6` | v5 plus a rule dropping `open_to_brazil` < 0.15 | 0.307 | 0.776 | 0.2 | 6/10 |
-| **`sklearn-combined-v7`** | **v5 plus `other_stack`** | **0.767** | **0.984** | **0.3** | **9/10** |
+| `sklearn-combined-v7` | v5 plus `other_stack` | 0.767 | 0.984 | 0.3 | 9/10 |
 | `sklearn-combined-v8` | v7 on `qs-v4` | 0.600 | 0.980 | 0.3 | 8/10 |
 | `sklearn-combined-v9` | v8 with the stack read from the title: `main_other_stack`, `title_cv_stack` | 0.554 | 0.977 | 0.3 | 9/10 |
+| **`sklearn-combined-v10`** | **v9 plus `junior_title`** | **0.498** | **0.966** | **0.2** | **10/10** |
 
 Raw similarity to the CV (`tfidf-v1`, `minilm-l6-v2`) has no ranking power: the jobs I want are
 not the ones that read most like my résumé. What works is literal facts about the job (can I
@@ -128,56 +132,72 @@ How the versions got there:
   landed at 1, 7 and 8 (AP 0.554), behind a senior job with Python in its title at 2nd:
   `title_cv_stack` outweighs `is_senior_role` there. That job is a test job, so it cannot
   shape a next version's features. A tie with v7 on the audit and a lower test AP: v7 stays.
+- **v10** added `junior_title` for a preference stated after v9: its jobs, with more weight on
+  the entry level. 1 when the title says junior, intern, trainee or entry level
+  (`jobradar/seniority.py`; the title only, since senior jobs' descriptions say "mentor junior
+  engineers"). 23 training titles say so, 5 of them good: 22%, against 6% overall. The model
+  gives it +0.51, and the nested CV AP goes from 0.762 to 0.791 on the labels as of v9's audit
+  (30 of 50 folds better). The labelled good entry-level jobs moved up from v9's 43rd–187th to
+  11th–36th, and the audit gave 10/10, a Golang trainee and two remote internships among them.
+  On the test set, whose good jobs are not entry level, they landed at 1, 9 and 11 (AP 0.498).
+  The digest switched to v10 on the audit and the stated preference.
 
 `sklearn-combined-v3` (`qs-v2` + skill coverage, trained before the criteria review) was
 superseded by v4 without being measured on the test set.
 
-### `sklearn-combined-v7`, the digest's model
+### `sklearn-combined-v10`, the digest's model
 
-Logistic regression (median imputer → scaler → model) over 8 features
-(`jobradar/model/features.py`), trained on 471 jobs (21 positive), C = 10 chosen by 5-fold
-cross-validated AP (0.54 ± 0.16, optimistic for the reason above).
+Logistic regression (median imputer → scaler → model) over 10 features
+(`jobradar/model/features.py`) on the `qs-v4` answers, trained on 483 jobs (30 positive), C = 1
+chosen by 5-fold cross-validated AP (0.81 ± 0.15, optimistic for the reason above).
 
 | Feature (scaled) | Coefficient |
 | --- | --- |
-| `is_target_role` | +3.537 |
-| `open_to_brazil` | +2.514 |
-| `open_to_latam` | −2.433 |
-| `is_senior_role` | −1.404 |
-| `other_stack` | −0.496 |
-| `skill_overlap` | −0.467 |
-| `fully_remote` | +0.136 |
-| `skill_coverage` | +0.075 |
+| `is_target_role` | +2.452 |
+| `open_to_brazil` | +1.467 |
+| `is_senior_role` | −0.843 |
+| `open_to_latam` | −0.709 |
+| `skill_overlap` | −0.634 |
+| `junior_title` | +0.514 |
+| `title_cv_stack` | +0.488 |
+| `main_other_stack` | −0.434 |
+| `fully_remote` | +0.214 |
+| `skill_coverage` | +0.002 |
 
 The two location answers move together and share their effect: together they reward "open to
-Brazil" and punish "open to Latin America but not to Brazil"; dropping `open_to_latam` lowers
-the nested CV AP from 0.48 to 0.36. `skill_overlap` and `skill_coverage` share theirs too.
+Brazil" and punish "open to Latin America but not to Brazil"; with v5's features, dropping
+`open_to_latam` lowered the nested CV AP from 0.48 to 0.36. `skill_overlap` and
+`skill_coverage` share theirs too.
 
 **Rules** on top (`Rules` in `jobradar/model/combined.py`; a job that breaks one scores 0). They
 are stated criteria the labels were not written with, so the model cannot learn them:
 
 - written in English, Portuguese or Spanish (`jobs.language`, langdetect): drops 590 live jobs,
   mostly German and French; no good job is in another language;
-- no hard degree requirement (`requires_degree` < 0.5): drops 3,048 live jobs.
+- no hard degree requirement (`requires_degree` < 0.5): drops 3,051 live jobs.
 
-**Threshold.** Share of good jobs above a v7 score, on the training and audit labels (rough:
-those labels concentrate at the top), with how many of the ~382 jobs collected a day pass it:
+Together 3,568 of the 16,204 live jobs score 0.
+
+**Threshold.** Share of good jobs above a v10 score, on the training and audit labels (rough:
+those labels concentrate at the top, and v10 was trained on most of them), with how many of
+the ~382 jobs collected a day pass it:
 
 | `min_score` | good / labelled above | new jobs a day above |
 | --- | --- | --- |
-| 0.10 | 34% | ~10 |
-| 0.15 | 37% | ~7 |
-| **0.20** | **45%** | **~5** |
-| 0.30 | 57% | ~2 |
-| 0.40 | 87% | ~0.5 |
+| 0.10 | 44% | ~9 |
+| 0.15 | 55% | ~6 |
+| **0.20** | **68%** | **~4** |
+| 0.30 | 82% | ~2 |
+| 0.40 | 86% | ~1.4 |
 
 The digest runs with `min_score: 0.20` and `max_age: 336h` (postings from the last 14 days).
 
 ## Known issues
 
-- **Few positives.** 3 in the test set, 30 in training. Differences within a few hundredths of
-  AP are noise; the audit is the tiebreaker. v7, v8 and v9 rank the first test positive 1st
-  and differ only in where the other two land: the test set can no longer tell them apart.
+- **Few positives.** 3 in the test set, 33 in training. Differences within a few hundredths of
+  AP are noise; the audit is the tiebreaker. v7 to v10 rank the first test positive 1st and
+  differ only in where the other two land: the test set can no longer tell them apart, and it
+  has no entry-level positive to measure v10's preference with.
 - **"Fully remote" is weakly learned.** "Never hybrid" is a stated criterion, but 3 good jobs
   read as not remote to the Jev (one, at Stone, is marked "Remoto" by its source), so no rule,
   and the model gives `fully_remote` little weight.
@@ -187,11 +207,12 @@ The digest runs with `min_score: 0.20` and `max_age: 336h` (postings from the la
   0.45).
 - **Skills miss the title and some languages.** `job_skills` reads the description only, with
   no COBOL or Delphi, so `skill_coverage`, `skill_overlap` and `other_stack` miss a job that
-  names its stack in the title. Only v9's stack features read the title (`jobradar/stack.py`,
-  a dictionary of its own, so `job_skills` and the earlier versions stay as measured).
+  names its stack in the title. Only the stack features of v9 and v10 read the title
+  (`jobradar/stack.py`, a dictionary of its own, so `job_skills` and the earlier versions stay
+  as measured).
 - **The degree rule sits on a noisy answer.** 35 live jobs cross `requires_degree` 0.5 between
   `qs-v3` and `qs-v4`. One is a good job ("Bachelors Degree in IT…" and, two lines below, "or
-  equivalent related experience"): 0.45 in `qs-v3`, 0.52 in `qs-v4`, so v8 and v9 drop it.
+  equivalent related experience"): 0.45 in `qs-v3`, 0.52 in `qs-v4`, so v8 to v10 drop it.
 - **`tfidf-v1` is not comparable across runs.** Its vocabulary is fit on the CV plus the jobs
   unscored in that run.
 - **Jev answers do not record which model answered.** `JEV_MODEL` is `jev-latest`, which floats

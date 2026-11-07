@@ -150,12 +150,12 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
   fully remote? senior? backend, infra or data work? does it require a completed degree?) for
   about $0.07 per 1000 jobs.
 - **Ranking**: a logistic regression over those answers and the skill match, with hard rules
-  on top (language, degree). On a frozen test set of 150 hand-labelled jobs it reaches an
-  average precision of 0.77 (a random order: 0.02; the first learned model: 0.12), and 9 of
-  the 10 live jobs it ranks first are ones I would apply to (the first learned model: 1 of 10).
+  on top (language, degree). All 10 of the live jobs it ranks first are ones I would apply to
+  (the first learned model: 1 of 10); on a frozen test set of 150 hand-labelled jobs its
+  average precision is 0.50 (a random order: 0.02; the first learned model: 0.12).
   How it is measured and what still goes wrong: [docs/MODELING.md](docs/MODELING.md).
-- **Digest**: about 5 jobs a day on Discord, from the last 14 days of postings, ranked by
-  `sklearn-combined-v7`.
+- **Digest**: about 4 jobs a day on Discord, from the last 14 days of postings, ranked by
+  `sklearn-combined-v10`.
 
 Running it on the Pi, backups and upgrades: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
