@@ -225,6 +225,31 @@ SPECS = {
                 max_requires_degree=0.5,
             ),
         ),
+        # v9 plus junior_title (the title says junior, intern or entry level), asked for on
+        # 2026-11-07: v9's jobs, with more weight on the entry level. Trained on the labels
+        # as of v9's audit. Nested CV AP 0.791 vs v9's features 0.762 on the same labels
+        # (5x10, 30 of 50 folds better). Audit 10/10, test AP 0.498 (none of the test
+        # positives is entry level): the digest's model since 2026-11-07.
+        ModelSpec(
+            "sklearn-combined-v10",
+            question_set="qs-v4",
+            features=(
+                "open_to_latam",
+                "open_to_brazil",
+                "fully_remote",
+                "is_senior_role",
+                "is_target_role",
+                "skill_coverage",
+                "skill_overlap",
+                "main_other_stack",
+                "title_cv_stack",
+                "junior_title",
+            ),
+            rules=Rules(
+                languages=frozenset({"en", "pt", "es"}),
+                max_requires_degree=0.5,
+            ),
+        ),
     ]
 }
 

@@ -13,6 +13,7 @@ import psycopg
 
 from jobradar.experience import extract_years
 from jobradar.match import skill_match
+from jobradar.seniority import is_junior_title
 from jobradar.skills import LANGUAGES
 from jobradar.stack import STACK_LANGUAGES, description_languages, title_languages
 
@@ -27,6 +28,7 @@ CODE_FEATURES = (
     "other_stack",
     "main_other_stack",
     "title_cv_stack",
+    "junior_title",
 )
 
 Features = dict[str, int | float | None]
@@ -67,6 +69,8 @@ def features_for_job(job: Job, cv_skills: set[str]) -> Features:
         "main_other_stack": int(bool(main_langs) and not main_langs & cv_languages),
         # 1 when the title names one of the CV's languages: "Golang Developer".
         "title_cv_stack": int(bool(title_langs & cv_languages)),
+        # 1 when the title says junior, intern or entry level (jobradar/seniority.py).
+        "junior_title": int(is_junior_title(job.title)),
     }
 
 

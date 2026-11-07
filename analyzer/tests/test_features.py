@@ -45,6 +45,7 @@ def test_features_for_job_values() -> None:
         "other_stack": 0,
         "main_other_stack": 0,
         "title_cv_stack": 0,
+        "junior_title": 0,
     }
 
 
