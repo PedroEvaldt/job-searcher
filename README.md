@@ -9,7 +9,7 @@ data never leaves it.
 
 ```
 Remote OK ─┐                                   ┌── analyzer (Python)   skills, TF-IDF
-Remotive  ─┼─▶ collector (Go) ─▶ PostgreSQL ◀──┼── jev-worker (Python) LLM answers about each job
+Remotive  ─┼─▶ collector (Go) ─▶ PostgreSQL ◀──┼── jev-worker (Python) LLM answers, model scores
 Himalayas ─┘   every 6h                        ├── radar (Go CLI)      label jobs by hand
                                                └── digest (Go)  ─▶ Discord
 ```
@@ -40,8 +40,9 @@ What happens:
 4. `digest` sends the best unsent jobs to Discord every 6 hours. With no
    `DISCORD_WEBHOOK_URL` it prints them to its log instead.
 
-`jev-worker` (the LLM answers the ranking depends on) is off by default: set `JEV_API_KEY`
-and `COMPOSE_PROFILES=jev` in `.env` to turn it on. Without a key everything else runs.
+`jev-worker` keeps every new job ready for the ranking (language, skills, the LLM's answers,
+the model's score). It is off by default: set `JEV_API_KEY` and `COMPOSE_PROFILES=jev` in
+`.env` to turn it on. Without a key everything else runs.
 
 > `docker compose down` keeps the data; `docker compose down -v` deletes the database.
 > After pulling new code, always rebuild (`docker compose up -d --build`).
@@ -71,6 +72,7 @@ restart app digest`.
 | `digest.model_version` | which `scores.model_version` the digest ranks by                          |
 | `digest.min_score`     | lowest score sent, on that model's own scale                              |
 | `digest.every`         | time between digests                                                       |
+| `digest.max_age`       | only jobs posted within this (`336h` = 14 days); `0` = any age             |
 
 Durations use Go's format (`500ms`, `30s`, `6h`). Postgres is published on the host at port
 **5433**, to stay clear of a local Postgres on 5432.
@@ -143,15 +145,17 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
 - **Collection** runs unattended on a Raspberry Pi: three sources, retries and rate limits,
   cross-source deduplication. It ran 7 days straight through 3 power cuts with no
   intervention. About 16,000 live jobs collected.
-- **Extraction** in code: skills, salary in annual USD, required years, job age. An LLM
-  (Jev) answers three literal questions about each job (open to Latin America? fully
-  remote? senior?) for about $0.05 per 1000 jobs.
-- **Ranking** is the open problem. On a frozen test set of 150 hand-labelled jobs, the best
-  model (`sklearn-combined-v2`) reaches an average precision of 0.10, against 0.027 for a
-  random order, but only 1 of its top 10 live jobs was one I would apply to. The numbers, what
-  goes wrong and what to try next are in [docs/MODELING.md](docs/MODELING.md).
-- **Digest**: sends the best unsent jobs to Discord every 6 hours, ranked for now by the
-  hand-weighted `jev-manual-qs-v1` model.
+- **Extraction** in code: skills, salary in annual USD, required years, job age, language.
+  An LLM (Jev) answers six literal questions about each job (can someone in Brazil take it?
+  fully remote? senior? backend, infra or data work? does it require a completed degree?) for
+  about $0.07 per 1000 jobs.
+- **Ranking**: a logistic regression over those answers and the skill match, with hard rules
+  on top (language, degree). On a frozen test set of 150 hand-labelled jobs it reaches an
+  average precision of 0.77 (a random order: 0.02; the first learned model: 0.12), and 9 of
+  the 10 live jobs it ranks first are ones I would apply to (the first learned model: 1 of 10).
+  How it is measured and what still goes wrong: [docs/MODELING.md](docs/MODELING.md).
+- **Digest**: about 5 jobs a day on Discord, from the last 14 days of postings, ranked by
+  `sklearn-combined-v7`.
 
 Running it on the Pi, backups and upgrades: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 

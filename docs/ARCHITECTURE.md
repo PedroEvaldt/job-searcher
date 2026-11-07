@@ -12,8 +12,8 @@ Himalayas ─┘   (Go)    │ labels · jobs_sent                              
                        └──▲────────────▲──────────────▲───────────────▲─────────────┘
                           │            │              │               │
                   analyzer (Py)   jev-worker (Py)  radar label   digest (Go) ──▶ Discord
-                  skills, tfidf   Jev answers +    (you, by hand)  top unsent
-                                  jev-manual score                 jobs
+                  skills, tfidf   language, skills, (you, by hand) top unsent
+                                  Jev answers, score               recent jobs
 ```
 
 ## Processes
@@ -22,8 +22,8 @@ Himalayas ─┘   (Go)    │ labels · jobs_sent                              
 | --------------- | -------------------------------- | -------------------- | ---- |
 | `migrate`       | `collector -migrate`             | once, then exits 0   | applies pending migrations; every other service waits for it |
 | `app`           | `collector`                      | forever, every 6h    | fetches each source, stores raw payloads and normalized jobs, marks duplicates |
-| `analyzer`      | `python -m scripts.main`         | once per `up`        | extracts skills from new jobs, scores them with TF-IDF (`tfidf-v1`) |
-| `jev-worker`    | `python -m scripts.jev_worker`   | forever, every 15min | asks the Jev the question set about each new job, writes `jev_answers` and `jev-manual-qs-v1` |
+| `analyzer`      | `python -m scripts.main`         | once per `up`        | extracts skills from new jobs, scores them with the TF-IDF baseline (`tfidf-v1`) |
+| `jev-worker`    | `python -m scripts.jev_worker`   | forever, every 15min | brings each new job up to date for the digest's model: language, skills, the Jev's answers to the model's question set, the score |
 | `digest`        | `radar digest-loop`              | forever, every 6h    | sends the best unsent jobs of `digest.model_version` to a Discord webhook |
 | (none)          | `radar label / review / status`  | by hand              | the human side: labels that every model is measured against |
 

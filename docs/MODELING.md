@@ -4,134 +4,193 @@ The goal is a ranking whose top is jobs I would actually apply to, because the t
 digest sends. This file is the record of how models are measured, what each one scores, and
 what is known to be wrong. Every number comes with the `model_version` that produced it.
 
+**Now:** the digest ranks by `sklearn-combined-v7`. On the frozen test set it reaches an
+average precision of 0.767 (random: 0.020), and 9 of the 10 live jobs it ranks first are good
+ones. The first learned model, `sklearn-combined-v2`, managed 0.121 and 1 of 10.
+
 ## How a model is measured
 
-- **Labels.** Jobs labelled by hand with `radar label`: `would_apply` (yes/no) is the target.
-  The optional `hires_latam`, `seniority` and `note` are notes, not targets.
-- **Frozen test set** (`analyzer/data/frozen.json`, `test-set-v2`): 150 labelled jobs that never
-  take part in training, hyperparameter search or question writing. 4 of them are positive.
+- **Labels.** Jobs labelled by hand with `radar label`: `would_apply` (yes/no) is the target,
+  judged against the criteria in [ROADMAP.md](ROADMAP.md). The optional `hires_latam`,
+  `seniority` and `note` are notes, not targets.
+- **Frozen test set** (`analyzer/data/frozen.json`, `test-set-v3`): 150 labelled jobs that
+  never take part in training, hyperparameter search, question writing or rule thresholds.
 - **Deciding metric: average precision (AP)** on the test set. It rewards putting the good jobs
-  first. A random order scores the positive rate (0.027 here); a perfect one scores 1.
-- **Next to it:** the cross-validated AP on the training jobs (more positives, so steadier),
-  ROC AUC as a sanity check, and P@10, the share of good jobs among the top 10.
-- **Reality check:** label the 10 live jobs the model would send today (a shuffled queue for
-  `radar label`, so the order does not reveal the ranking) and count how many are good.
+  first. A random order scores the positive rate; a perfect one scores 1.
+- **Next to it:** the cross-validated AP on the training jobs, ROC AUC as a sanity check, and
+  P@10, the share of good jobs among the 10 best-ranked test jobs.
+- **The audit**, the check that matters most: label the 10 live jobs the model would send
+  today (a shuffled queue in `analyzer/data/queues/`, so the order does not reveal the
+  ranking) and count the good ones.
 
-With 4 positives, one job moves the test AP a lot: on 2026-11-06, almost all of
-`sklearn-combined-v2`'s lead came from a single job ranked 4th instead of ~35th. Read the test
-AP together with the cross-validated AP, never alone.
+The test set has only 3 positives, so one job moves its AP by a lot. Feature sets are chosen by
+nested cross-validation on the training jobs (C picked inside each outer fold, 5×5 repeats), the
+test set is read once per version, and the audit decides between versions that tie.
 
 ## Labels
 
-605 labelled jobs, 28 of them "would apply" (as of 2026-11-07):
+623 labelled jobs, 26 of them "would apply" (2026-11-07). The training pool is every label
+outside the test set: 473 jobs, 23 positive.
 
 | Batch | When | Jobs | How they were chosen |
 | --- | --- | --- | --- |
 | first rounds | Oct 2026 | 250 | live jobs in id order; `test-set-v1` = a stratified 75 of them |
 | round 1 | 2026-11-03 | 200 | random live jobs: 75 completed `test-set-v2`, 125 went to training |
-| round 2 | 2026-11-03 | 150 | training only, from the top of `skills-gate-v1` (where positives were expected) |
-| review | 2026-11-06 | (41) | every "yes" re-checked under a stricter criterion: 41 became 27 |
-| audit | 2026-11-06 | 10 | the top 10 of `sklearn-combined-v2`; 5 were already labelled |
+| round 2 | 2026-11-03 | 150 | training only, from the top of `skills-gate-v1` |
+| positives review | 2026-11-06 | (41) | every "yes" re-checked under a stricter criterion: 41 became 27 |
+| criteria review | 2026-11-07 | (13) | training "yes" that broke the stated criteria, re-checked from their descriptions: 11 became "no" |
+| test review | 2026-11-07 | (4) | the 4 test "yes" re-checked against the stated criteria: 1 became "no" (`test-set-v3`) |
+| audits | 2026-11-06/07 | 50 | the top 10 of v2, v4, v5, v6 and v7; 23 of them new labels |
 
-The training pool is every label outside the test set: 455 jobs. Round 2 and the audit were
-selected by a model's ranking, so they over-represent what those models like; that is fine for
-training, but they must never be used to grow the test set.
+Round 2 and the audits were selected by a model's ranking, so they over-represent what those
+models like. That is fine for training, but they never grow the test set, and they make the
+cross-validated AP of the later versions optimistic (their positives are the jobs this kind of
+model already ranks first).
 
-## Results on `test-set-v2`
+Test labels do not change once a model has been measured on them, with one documented
+exception: when the criteria were stated, the test positives were re-checked from their
+descriptions, without any model score, and the set became `test-set-v3`. The criteria only
+restrict, so only positives could change.
 
-n=150, 4 positive, random AP = 0.0267. Measured 2026-11-07 with `scripts.evaluate`.
+## The Jev's questions
 
-| model_version | What it is | AP | ROC AUC | P@10 |
-| --- | --- | --- | --- | --- |
-| `tfidf-v1` | TF-IDF cosine between the CV and the description | 0.0514 | 0.527 | 0.0 |
-| `minilm-l6-v2` | cosine between `all-MiniLM-L6-v2` embeddings of the CV and the description | 0.0548 | 0.497 | 0.1 |
-| `skills-gate-v1` | Jev answers as a gate (remote, LatAm, not senior), then skill coverage | 0.0267 | 0.497 | 0.2 |
-| `jev-manual-qs-v1` | 0.7·remote + 0.6·LatAm − 0.7·senior, weights set by hand | 0.0678 | 0.649 | 0.1 |
-| `sklearn-combined-v2` | logistic regression, see below | **0.1002** | **0.670** | 0.1 |
+All asked in one call per job, about $0.07 per 1000 jobs; answers are probabilities.
+
+| Set | Questions | Answered for |
+| --- | --- | --- |
+| `qs-v1` | `open_to_latam`, `fully_remote`, `is_senior_role` | all live jobs (the worker until 2026-11-07) |
+| `qs-v2` | + `open_to_brazil` (Brazil can take it; a single other country cannot), `is_target_role` (hands-on backend, infra or data work) | all live jobs ($1.06) |
+| `qs-v3` | + `requires_degree` (a completed degree with no alternative) | all live jobs ($1.14); the worker now |
+
+Each new question was piloted on the labelled training jobs first. `is_target_role` alone ranks
+the training jobs at AP 0.147 (the best `qs-v1` answer: 0.084); `open_to_brazil` drops the
+Mexico-only and Colombia-only jobs from 0.89–0.97 (`open_to_latam`) to 0.02–0.03;
+`requires_degree` reads "Bachelor's required" high and "or equivalent experience" low, but misses
+a few real requirements.
+
+## Results
+
+`test-set-v3` (n=150, 3 positive, random AP = 0.020), measured 2026-11-07 with `scripts.evaluate`;
+audit = good jobs among the 10 live jobs the version ranks first.
+
+| model_version | What it is | AP | ROC AUC | P@10 | Audit |
+| --- | --- | --- | --- | --- | --- |
+| `tfidf-v1` | TF-IDF cosine, CV vs description | 0.058 | 0.640 | 0.0 | |
+| `minilm-l6-v2` | embedding cosine, CV vs description | 0.064 | 0.642 | 0.1 | |
+| `skills-gate-v1` | Jev gate (remote, LatAm, not senior), then skill coverage | 0.020 | 0.497 | 0.2 | |
+| `jev-manual-qs-v1` | 0.7·remote + 0.6·LatAm − 0.7·senior, by hand | 0.070 | 0.652 | 0.1 | |
+| `sklearn-combined-v2` | logistic regression, `qs-v1` + 4 skill features + years | 0.121 | 0.794 | 0.1 | 1/10 |
+| `sklearn-combined-v4` | `qs-v2` + skill coverage and overlap | 0.600 | 0.980 | 0.3 | 7/10 |
+| `sklearn-combined-v5` | v4's features on `qs-v3`, plus the language and degree rules | 0.514 | 0.984 | 0.3 | 7/10 |
+| `sklearn-combined-v6` | v5 plus a rule dropping `open_to_brazil` < 0.15 | 0.307 | 0.776 | 0.2 | 6/10 |
+| **`sklearn-combined-v7`** | **v5 plus `other_stack`** | **0.767** | **0.984** | **0.3** | **9/10** |
 
 Raw similarity to the CV (`tfidf-v1`, `minilm-l6-v2`) has no ranking power: the jobs I want are
-not the ones that read most like my résumé. Everything above chance goes through the Jev's
-answers.
+not the ones that read most like my résumé. What works is literal facts about the job (can I
+take it from Brazil, is it the kind of work I do, how senior), plus the skill match.
 
-`jev-manual-qs-v1` read 0.0618 until 2026-11-07. That day, 73 of its stored scores (68 in the
-test set) turned out not to match the formula over the answers in `jev_answers`: the answers had
-been rewritten after the scores were computed. `scripts.score_jev` recomputed every score from
-the stored answers, which is what the worker does for new jobs, and the AP became 0.0678.
+How the versions got there:
 
-### `sklearn-combined-v2`
+- **v2** had only the `qs-v1` answers. Its audit failed on location: jobs open to Latin America
+  but to a single country (Mexico-only), which `open_to_latam` cannot tell apart, and DevOps
+  jobs restricted to India or the Philippines that got in on skills alone. Hence `qs-v2`.
+- **v4** (`qs-v2`) jumped to 7/10. Before training it, 10 training "yes" that broke the newly
+  stated criteria (QA, security, writing, on-site, US-only roles) became "no".
+- **v5** added the two stated rules (below) and `requires_degree`: same audit count, but its 7
+  best-ranked jobs were all good. Its 3 misses were jobs not open to Brazil.
+- **v6** tried a location rule for those misses and was rejected: it also drops a job labelled
+  good (open to Southeast Asia, `open_to_brazil` 0.10), and its audit fell to 6/10. The
+  misses it removed were replaced by Java, Rust and Node.js jobs.
+- **v7** added `other_stack` for those: 1 when the job names programming languages and none of
+  them is in the CV (Go, Python). Among labelled technical jobs, only 1 of 24 with another stack
+  and no Go or Python is good. Nested CV AP 0.508 against v5's 0.483 (a small step, within
+  noise), but test AP 0.767 (good test jobs at 1, 2 and 10) and audit 9/10.
 
-`LogisticRegression` (imputer → scaler → model) over 8 features, computed by
-`jobradar/model/features.py`:
+`sklearn-combined-v3` (`qs-v2` + skill coverage, trained before the criteria review) was
+superseded by v4 without being measured on the test set.
 
-- the 3 Jev answers: `open_to_latam`, `fully_remote`, `is_senior_role` (probabilities);
-- 4 skill features against the CV: `skill_overlap`, `skill_coverage`, `skill_missing`,
-  `n_job_skills`;
-- `years_required`, by regex (missing in 80% of jobs, filled with the median).
+### `sklearn-combined-v7`, the digest's model
 
-Trained on 450 jobs (23 positive). `C` chosen by 5-fold cross-validated AP: **C = 0.01**, the
-strongest regularization in the grid (smaller values plateau at about the same AP).
-**CV AP = 0.1465 ± 0.0569** (folds 0.105, 0.133, 0.259, 0.125, 0.111) against a random 0.051.
+Logistic regression (median imputer → scaler → model) over 8 features
+(`jobradar/model/features.py`), trained on 471 jobs (21 positive), C = 10 chosen by 5-fold
+cross-validated AP (0.54 ± 0.16, optimistic for the reason above).
 
 | Feature (scaled) | Coefficient |
 | --- | --- |
-| `skill_coverage` | +0.104 |
-| `is_senior_role` | −0.101 |
-| `skill_overlap` | +0.090 |
-| `open_to_latam` | +0.076 |
-| `fully_remote` | +0.045 |
-| `n_job_skills` | +0.028 |
-| `skill_missing` | −0.008 |
-| `years_required` | −0.003 |
+| `is_target_role` | +3.537 |
+| `open_to_brazil` | +2.514 |
+| `open_to_latam` | −2.433 |
+| `is_senior_role` | −1.404 |
+| `other_stack` | −0.496 |
+| `skill_overlap` | −0.467 |
+| `fully_remote` | +0.136 |
+| `skill_coverage` | +0.075 |
 
-`skill_missing` = `n_job_skills` − `skill_overlap`, so those three share their effect.
+The two location answers move together and share their effect: together they reward "open to
+Brazil" and punish "open to Latin America but not to Brazil"; dropping `open_to_latam` lowers
+the nested CV AP from 0.48 to 0.36. `skill_overlap` and `skill_coverage` share theirs too.
 
-### The audit: 1 out of 10
+**Rules** on top (`Rules` in `jobradar/model/combined.py`; a job that breaks one scores 0). They
+are stated criteria the labels were not written with, so the model cannot learn them:
 
-On 2026-11-06 the 10 live jobs `sklearn-combined-v2` would send were labelled: **P@10 = 1/10**.
-Five of them were already training negatives, which the model still put at the top, so it is not
-memorizing: its features cannot tell those jobs apart from good ones. Of the 9 "no":
+- written in English, Portuguese or Spanish (`jobs.language`, langdetect): drops 590 live jobs,
+  mostly German and French; no good job is in another language;
+- no hard degree requirement (`requires_degree` < 0.5): drops 3,048 live jobs.
 
-- 4 have a low `open_to_latam` (0.02 to 0.26: Philippines-only, India-only…) and got in on
-  DevOps skills alone. The skill features weigh more than location.
-- 5 have a high `open_to_latam` (0.86 to 0.97), but several are restricted to a single Latin
-  American country (Mexico-only, Colombia-only). "Open to Latin America" is not "open to
-  someone in Brazil", and the question does not separate the two.
+**Threshold.** Share of good jobs above a v7 score, on the training and audit labels (rough:
+those labels concentrate at the top), with how many of the ~382 jobs collected a day pass it:
 
-Because of this, the digest still ranks by `jev-manual-qs-v1`.
+| `min_score` | good / labelled above | new jobs a day above |
+| --- | --- | --- |
+| 0.10 | 34% | ~10 |
+| 0.15 | 37% | ~7 |
+| **0.20** | **45%** | **~5** |
+| 0.30 | 57% | ~2 |
+| 0.40 | 87% | ~0.5 |
 
-### History: `test-set-v1`
-
-The first test set (75 jobs, 5 positive, ROC AUC only) measured `tfidf-v1` 0.51, `minilm-l6-v2`
-0.46, `jev-manual-qs-v1` 0.72 and `sklearn-combined-v1` 0.65. `sklearn-combined-v1` added the
-`minilm-l6-v2` cosine and salary/age features, was trained on 175 jobs with C = 100, and gave
-its largest weight to the cosine, a feature with no signal on its own: overfitting. v2 dropped
-the cosine and the salary/age columns. Its scripts are in `archive/`.
+The digest runs with `min_score: 0.20` and `max_age: 336h` (postings from the last 14 days).
 
 ## Known issues
 
-- **Too few positives.** 4 in the test set, 23 in training. Any comparison between models within
-  a few hundredths of AP is noise.
-- **Location is the main error** (see the audit). The labels already hold a sharper signal:
-  `hires_latam` is filled for 139 jobs, and `note` for 250.
+- **Few positives.** 3 in the test set, 23 in training. Differences within a few hundredths of
+  AP are noise; the audit is the tiebreaker.
+- **"Fully remote" is weakly learned.** "Never hybrid" is a stated criterion, but 3 good jobs
+  read as not remote to the Jev (one, at Stone, is marked "Remoto" by its source), so no rule,
+  and the model gives `fully_remote` little weight.
+- **The sources' own location field is not a feature.** Himalayas lists countries for 97% of
+  its jobs, but they look like the company's country, not eligibility: a job whose text says
+  "Remote · LATAM" is listed as "United States". Adding it lowered the nested CV AP (0.48 →
+  0.45).
 - **`tfidf-v1` is not comparable across runs.** Its vocabulary is fit on the CV plus the jobs
-  unscored in that run, so a job's score depends on which other jobs came in with it.
+  unscored in that run.
 - **Jev answers do not record which model answered.** `JEV_MODEL` is `jev-latest`, which floats
-  with the provider; answers written months apart may come from different models under the same
-  `question_set_version`.
-- **Scores do not record which CV produced them.** Changing `cv.md` and re-scoring overwrites
-  `tfidf-v1`, `minilm-l6-v2` and `sklearn-combined-v2` under the same version.
+  with the provider.
+- **Scores do not record which CV produced them.** Changing `cv.md` and re-scoring overwrites a
+  version's scores under the same name (the worker reads the CV every cycle).
 
 ## Adding a model version
 
-1. Change the features (`jobradar/model/features.py`) or the method
-   (`jobradar/model/combined.py`), and bump `MODEL_VERSION`. `scripts.train` refuses to
-   overwrite an existing model file, so the old version stays reproducible.
-2. `python -m scripts.train`: read the CV AP and the coefficients.
-3. `python -m scripts.score`: writes the new version's score for every live job.
-4. `python -m scripts.evaluate`: compare on the test set, next to the current models.
-5. Audit its top 10 before pointing `digest.model_version` at it, and set `digest.min_score` on
-   its scale (the probabilities of `sklearn-combined-v2` range from 0.03 to 0.10, so the current
-   0.75 would let nothing through).
+1. Add a `ModelSpec` to `SPECS` (`jobradar/model/combined.py`): its question set, its features
+   (`jobradar/model/features.py` computes them) and its rules. `scripts.train` refuses to
+   overwrite an existing version's model file, so every published number stays reproducible.
+2. Compare feature sets by nested cross-validation on the training jobs, never on the test set.
+3. `python -m scripts.train <version>`: the CV AP and the coefficients.
+4. `python -m scripts.score <version>`: scores every live job.
+5. `python -m scripts.evaluate`: once, next to the current models.
+6. Audit its top 10. To make it the digest's model, see docs/OPERATIONS.md.
 
-A new Jev question means a new `QUESTION_SET_VERSION` (`jobradar/jev/questions.py`), new answers
-for every live job (about $0.05 per 1000), and a new version of every model that reads them.
+A new Jev question means a new question set (`QUESTION_SETS` in `jobradar/jev/questions.py`),
+answers for every live job (`python -m scripts.answer_jev <set> --workers 6`, about $1.10 for
+16,000 jobs; pilot it first with `--training-labels`), and a new model version that reads it.
+
+## History: `test-set-v1` and `test-set-v2`
+
+`test-set-v1` (75 jobs, 5 positive, ROC AUC only) measured `tfidf-v1` 0.51, `minilm-l6-v2` 0.46,
+`jev-manual-qs-v1` 0.72 and `sklearn-combined-v1` 0.65. `sklearn-combined-v1` added the embedding
+cosine and salary and age features, was trained on 175 jobs with C = 100, and gave its largest
+weight to the cosine, a feature with no signal on its own: overfitting. Its scripts are in
+`archive/`.
+
+`test-set-v2` (the same 150 jobs as v3, 4 positive) measured, by AP: `jev-manual-qs-v1` 0.068
+(0.062 until 73 stale scores were recomputed on 2026-11-07), `sklearn-combined-v2` 0.100,
+v4 0.483, v5 0.419, v6 0.276.

@@ -70,6 +70,23 @@ Zero rows: start everything with `docker compose up -d --build`. The cleaner alt
 dump of the old database restored into a fresh volume (below): the indexes are then built under
 glibc from the start.
 
+## Switching the digest to another model
+
+The worker scores new jobs with `MODEL_VERSION` (`analyzer/jobradar/model/combined.py`) and
+the digest ranks by `digest.model_version` (`config.yaml`): they must name the same version,
+so change both in the same commit.
+
+1. Train, score and audit the new version (see docs/MODELING.md, "Adding a model version").
+   Its model file under `analyzer/data/models/` is committed with it.
+2. Set `MODEL_VERSION` and `digest.model_version`; set `digest.min_score` on the new model's
+   scale and `digest.max_age`.
+3. If the new version reads a new question set, answer it for the live jobs first
+   (`scripts.answer_jev <set> --workers 6`), or the worker will do it slowly, cycle by cycle.
+4. `docker compose up -d --build jev-worker digest`.
+
+The digest remembers what it sent per model (`jobs_sent`), so the first run on a new model
+may send jobs the old one already sent.
+
 ## Backups
 
 The labels are the one thing that cannot be recollected: they are hours of human judgement.
