@@ -1,0 +1,7 @@
+{
+  "subtask": "5.4.8",
+  "model_version": "sklearn-combined-v2",
+  "note": "Top 10 live jobs the digest would send today (pendingJobs without min_score), shuffled so the order does not reveal the ranking.",
+  "created": "2026-11-06",
+  "job_ids": [12089,12427,3564,16242,8851,10873,12649,5917,11617,4344]
+}

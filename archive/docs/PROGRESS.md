@@ -743,6 +743,15 @@ incompleta); o mentor terminou como `features_for_job(desc, jev_score, skills, c
 ~3 s, re-run mantém 16.204, `evaluate` inalterado (AP=0.1002 / ROC AUC=0.6695). Notas das vivas: 0.0304 a 0.1013.
 O `score_sklearn_v2.py` ficou redundante (o `score_live_v2` também regrava as 150 do teste), mas foi mantido: é
 o script que mediu a 5.4.6.
+**5.4.8 fechada: precisão@10 = 1/10** (`sklearn-combined-v2`, top-10 do `pendingJobs` sem `min_score`). Fila
+`data/label_queue_audit_v2.json` montada pelo mentor a pedido (caminho curto: SQL + `ORDER BY random()`, sem
+script); 5 das 10 já eram "n" de treino, o aluno rotulou as outras 5 (1 "y": 5917 "Devops Trainee"). Leitura do
+mentor: coeficientes da v2 (C=0.01) `skill_coverage` +0.104, `is_senior_role` −0.101, `skill_overlap` +0.090,
+`open_to_latam` +0.076 → skill pesa mais que localização. Das 9 "n": 4 com `open_to_latam` baixo (0.02–0.26;
+ex.: Philippines, India) entraram só pelas skills de DevOps; 5 com `open_to_latam` alto (0.86–0.97), várias
+restritas a um país (Remote MX, Medellín) → hipótese: "aberta à LATAM" ≠ "aberta ao Brasil". E 5 negativos de
+treino no top-10 → o modelo não decorou, as features não separam esses casos. **5.4.9 em espera** até o aluno
+confirmar o motivo dos "n".
 
 Última sessão: **2026-11-06**.
 

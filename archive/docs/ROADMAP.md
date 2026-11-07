@@ -1067,8 +1067,12 @@ LATAM e não sênior tira nota máxima. Decisões tomadas uma por vez, registrad
       _Feita 2026-11-06 pelo mentor, a pedido ("faça você"): `features_for_job()` no `build_features_v2.py`
       (`features_v2.json` regerado idêntico) + `scripts/score_live_v2.py` → 16.204 notas (0.0304 a 0.1013), uma
       transação; `scripts.evaluate` igual ao da 5.4.6 (AP=0.1002 / ROC AUC=0.6695)._
-- [ ] **5.4.8** Auditoria: rotular o top-10 que a v2 mandaria hoje (fila embaralhada no `radar label`) →
+- [x] **5.4.8** Auditoria: rotular o top-10 que a v2 mandaria hoje (fila embaralhada no `radar label`) →
       precisão@10 real.
+      _Fila pronta 2026-11-06 (mentor, a pedido; caminho curto, sem script): consulta do `pendingJobs` sem
+      `min_score` + `ORDER BY random()` → `data/label_queue_audit_v2.json`. 5 das 10 já tinham rótulo (treino)._
+      _Resultado 2026-11-06: `sklearn-combined-v2` **precisão@10 = 1/10** (5 já rotuladas: 0 "y"; 5 novas: 1 "y").
+      Pelo critério da auditoria (0–1 de 10 = a troca não vale), a 5.4.9 fica em espera._
 - [ ] **5.4.9** A v2 vira o `digest.model_version`: nota para as vagas novas no ciclo do `jev-worker` e
       `min_score` recalibrado (no teste as notas da v2 vão de 0.031 a 0.067; o `0.75` atual não deixa passar nada).
       _Replanejado 2026-11-06: a 5.4.7 original virou 5.4.7–5.4.9. Trocar o `model_version` sem nota para as
