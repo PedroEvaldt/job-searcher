@@ -32,8 +32,9 @@ lint-py:
 	$(ANALYZER) ruff format --check .
 	$(ANALYZER) --group dev mypy
 
-up: ## start the whole stack (rebuilding images that changed)
-	docker compose up -d --build
+up: ## on the Pi: build the images one at a time, then start the whole stack
+	COMPOSE_PARALLEL_LIMIT=1 docker compose build
+	docker compose up -d
 
 down: ## stop the stack, keeping the data volume
 	docker compose down
