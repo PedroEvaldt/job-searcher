@@ -11,6 +11,7 @@ db_dump/
 cv.md
 Makefile
 README.md
+CHANGELOG.md
 LICENSE
 Dockerfile
 .dockerignore
