@@ -29,8 +29,8 @@ test set is read once per version, and the audit decides between versions that t
 
 ## Labels
 
-627 labelled jobs, 28 of them "would apply" (2026-11-07). The training pool is every label
-outside the test set: 477 jobs, 25 positive.
+633 labelled jobs, 33 of them "would apply" (2026-11-07). The training pool is every label
+outside the test set: 483 jobs, 30 positive.
 
 | Batch | When | Jobs | How they were chosen |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ outside the test set: 477 jobs, 25 positive.
 | positives review | 2026-11-06 | (41) | every "yes" re-checked under a stricter criterion: 41 became 27 |
 | criteria review | 2026-11-07 | (13) | training "yes" that broke the stated criteria, re-checked from their descriptions: 11 became "no" |
 | test review | 2026-11-07 | (4) | the 4 test "yes" re-checked against the stated criteria: 1 became "no" (`test-set-v3`) |
-| audits | 2026-11-06/07 | 60 | the top 10 of v2, v4, v5, v6, v7 and v8; 27 of them new labels |
+| audits | 2026-11-06/07 | 70 | the top 10 of v2 and v4 to v9; 33 of them new labels |
 
 Round 2 and the audits were selected by a model's ranking, so they over-represent what those
 models like. That is fine for training, but they never grow the test set, and they make the
@@ -86,6 +86,7 @@ audit = good jobs among the 10 live jobs the version ranks first.
 | `sklearn-combined-v6` | v5 plus a rule dropping `open_to_brazil` < 0.15 | 0.307 | 0.776 | 0.2 | 6/10 |
 | **`sklearn-combined-v7`** | **v5 plus `other_stack`** | **0.767** | **0.984** | **0.3** | **9/10** |
 | `sklearn-combined-v8` | v7 on `qs-v4` | 0.600 | 0.980 | 0.3 | 8/10 |
+| `sklearn-combined-v9` | v8 with the stack read from the title: `main_other_stack`, `title_cv_stack` | 0.554 | 0.977 | 0.3 | 9/10 |
 
 Raw similarity to the CV (`tfidf-v1`, `minilm-l6-v2`) has no ranking power: the jobs I want are
 not the ones that read most like my résumé. What works is literal facts about the job (can I
@@ -116,6 +117,17 @@ How the versions got there:
   COBOL and a Java job. COBOL is not in the skill dictionary, and the Java job names Java only
   in its title, which skill extraction does not read. v7 stays: a near tie is no reason to
   switch.
+- **v9** read the stack with its own dictionary (`jobradar/stack.py`), which knows COBOL,
+  Delphi or ABAP, maps frameworks to their language (Django → Python) and skips English words
+  ("go beyond", "react to"). `main_other_stack` replaces `other_stack`: the title's languages
+  when it names any, else the description's, and none in the CV. `title_cv_stack` marks a
+  title that names Go or Python (8 training jobs, 5 good). Nested CV AP 0.691 against v8's
+  features 0.640 (5×10 folds, better in 33 of 50), C = 1, the two features at −0.35 and +0.35.
+  The COBOL and Java jobs left the top 10, which is now Go and Python titles, and its audit
+  gave 9/10, with 5 new good jobs that v7 ranked 46th to 226th. On the test set the good jobs
+  landed at 1, 7 and 8 (AP 0.554), behind a senior job with Python in its title at 2nd:
+  `title_cv_stack` outweighs `is_senior_role` there. That job is a test job, so it cannot
+  shape a next version's features. A tie with v7 on the audit and a lower test AP: v7 stays.
 
 `sklearn-combined-v3` (`qs-v2` + skill coverage, trained before the criteria review) was
 superseded by v4 without being measured on the test set.
@@ -163,8 +175,9 @@ The digest runs with `min_score: 0.20` and `max_age: 336h` (postings from the la
 
 ## Known issues
 
-- **Few positives.** 3 in the test set, 23 in training. Differences within a few hundredths of
-  AP are noise; the audit is the tiebreaker.
+- **Few positives.** 3 in the test set, 30 in training. Differences within a few hundredths of
+  AP are noise; the audit is the tiebreaker. v7, v8 and v9 rank the first test positive 1st
+  and differ only in where the other two land: the test set can no longer tell them apart.
 - **"Fully remote" is weakly learned.** "Never hybrid" is a stated criterion, but 3 good jobs
   read as not remote to the Jev (one, at Stone, is marked "Remoto" by its source), so no rule,
   and the model gives `fully_remote` little weight.
@@ -172,11 +185,13 @@ The digest runs with `min_score: 0.20` and `max_age: 336h` (postings from the la
   its jobs, but they look like the company's country, not eligibility: a job whose text says
   "Remote · LATAM" is listed as "United States". Adding it lowered the nested CV AP (0.48 →
   0.45).
-- **Skills miss the title and some languages.** Extraction reads the description only, and the
-  dictionary has no COBOL, so `other_stack` misses "Programador JAVA" with Java only in its
-  title. Changing either changes `job_skills` for every job, and with it every version's skill
-  features: it needs versioned skills (a new feature computed from title and description) rather
-  than an edit in place.
+- **Skills miss the title and some languages.** `job_skills` reads the description only, with
+  no COBOL or Delphi, so `skill_coverage`, `skill_overlap` and `other_stack` miss a job that
+  names its stack in the title. Only v9's stack features read the title (`jobradar/stack.py`,
+  a dictionary of its own, so `job_skills` and the earlier versions stay as measured).
+- **The degree rule sits on a noisy answer.** 35 live jobs cross `requires_degree` 0.5 between
+  `qs-v3` and `qs-v4`. One is a good job ("Bachelors Degree in IT…" and, two lines below, "or
+  equivalent related experience"): 0.45 in `qs-v3`, 0.52 in `qs-v4`, so v8 and v9 drop it.
 - **`tfidf-v1` is not comparable across runs.** Its vocabulary is fit on the CV plus the jobs
   unscored in that run.
 - **Jev answers do not record which model answered.** `JEV_MODEL` is `jev-latest`, which floats
