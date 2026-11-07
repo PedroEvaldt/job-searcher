@@ -41,7 +41,7 @@ func sendNotification(ctx context.Context, msg string, webhookURL string) error 
 	if err != nil {
 		return fmt.Errorf("post to discord webhook: %w", redactURL(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // the status code is the answer; a close error adds nothing
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 512))

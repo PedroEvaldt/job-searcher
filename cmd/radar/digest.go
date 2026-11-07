@@ -1,17 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 	"unicode/utf8"
 
+	"github.com/PedroEvaldt/job-searcher/internal/config"
 	"github.com/jackc/pgx/v5"
-	"go.yaml.in/yaml/v3"
 )
 
 const (
@@ -25,12 +23,6 @@ const (
 	digestHeader  = "**Vagas de hoje**\n\n"
 )
 
-type digestConfig struct {
-	ModelVersion string        `yaml:"model_version"`
-	MinScore     float64       `yaml:"min_score"`
-	Every        time.Duration `yaml:"every"`
-}
-
 type digestJob struct {
 	id      int64
 	title   string
@@ -41,7 +33,7 @@ type digestJob struct {
 
 // digest sends today's best unsent jobs to Discord, or prints them when no webhook
 // is configured. Finding nothing new is a normal day, not an error.
-func digest(ctx context.Context, conn *pgx.Conn, cfg digestConfig) error {
+func digest(ctx context.Context, conn *pgx.Conn, cfg config.Digest) error {
 	if err := checkModelHasScores(ctx, conn, cfg.ModelVersion); err != nil {
 		return err
 	}
@@ -71,34 +63,6 @@ func digest(ctx context.Context, conn *pgx.Conn, cfg digestConfig) error {
 	return markSent(ctx, conn, included, cfg.ModelVersion)
 }
 
-func loadDigestConfig(path string) (digestConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return digestConfig{}, fmt.Errorf("read config %s: %w", path, err)
-	}
-
-	var file struct {
-		Digest digestConfig `yaml:"digest"`
-	}
-	// Not KnownFields(true): radar only cares about the digest: key, but config.yaml's
-	// other top-level keys (collect_every, sources) belong to the collector.
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&file); err != nil {
-		return digestConfig{}, fmt.Errorf("parse digest config: %w", err)
-	}
-
-	// An error, not a warning: with min_score wrong the digest would send nothing
-	// forever while the scheduler sees a clean exit.
-	cfg := file.Digest
-	if cfg.MinScore < 0 || cfg.MinScore > 1 {
-		return digestConfig{}, fmt.Errorf("digest.min_score is %v, expected 0-1", cfg.MinScore)
-	}
-	if cfg.Every < time.Minute {
-		return digestConfig{}, fmt.Errorf("digest.every is %v, expected > than 1m", cfg.Every)
-	}
-	return cfg, nil
-}
-
 // checkModelHasScores catches a typo in digest.model_version, which would otherwise
 // look exactly like "no new jobs" every single day.
 func checkModelHasScores(ctx context.Context, conn *pgx.Conn, modelVersion string) error {
@@ -117,7 +81,7 @@ func checkModelHasScores(ctx context.Context, conn *pgx.Conn, modelVersion strin
 
 // pendingJobs returns the best-scored live jobs this model has not sent yet. "Sent"
 // is per model_version: switching models may resend a job, by design (jobs_sent PK).
-func pendingJobs(ctx context.Context, conn *pgx.Conn, cfg digestConfig) ([]digestJob, error) {
+func pendingJobs(ctx context.Context, conn *pgx.Conn, cfg config.Digest) ([]digestJob, error) {
 	rows, err := conn.Query(ctx, `
 		SELECT j.id, j.title, j.company, j.url, s.score
 		FROM jobs j

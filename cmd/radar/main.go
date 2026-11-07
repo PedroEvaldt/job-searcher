@@ -9,7 +9,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/PedroEvaldt/job-searcher/internal/config"
 	"github.com/jackc/pgx/v5"
+	"github.com/joho/godotenv"
 )
 
 const usage = "usage: radar [status | label [queue.json] | digest | digest-loop | review]"
@@ -29,6 +31,8 @@ func run(args []string) error {
 		return errors.New(usage)
 	}
 
+	// Same as the collector: a local .env is picked up, compose sets the variables itself.
+	_ = godotenv.Load()
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return errors.New("DATABASE_URL is not set")
@@ -44,7 +48,7 @@ func run(args []string) error {
 	// the shared connection below — each cycle opens its own, so a Postgres restart
 	// does not leave the loop holding a dead connection.
 	if args[0] == "digest-loop" {
-		cfg, err := loadDigestConfig("./config.yaml")
+		cfg, err := loadDigest()
 		if err != nil {
 			return err
 		}
@@ -80,7 +84,7 @@ func run(args []string) error {
 		}
 		return label(ctx, conn, 100, queue)
 	case "digest":
-		cfg, err := loadDigestConfig("./config.yaml")
+		cfg, err := loadDigest()
 		if err != nil {
 			return err
 		}
@@ -90,4 +94,16 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q; %s", mode, usage)
 	}
+}
+
+// loadDigest reads config.yaml and checks its digest: section.
+func loadDigest() (config.Digest, error) {
+	cfg, err := config.Load(config.Path)
+	if err != nil {
+		return config.Digest{}, err
+	}
+	if err := cfg.Digest.Validate(); err != nil {
+		return config.Digest{}, err
+	}
+	return cfg.Digest, nil
 }

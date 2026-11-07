@@ -1,30 +1,27 @@
-package main
+package collector
 
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"path/filepath"
 
+	schema "github.com/PedroEvaldt/job-searcher/db"
 	"github.com/pressly/goose/v3"
 )
 
-//go:embed db/migrations/*.sql
-var migrationsFS embed.FS
-
-// migrate applies every pending goose migration embedded under db/migrations,
+// applyMigrations applies every pending goose migration embedded in package db,
 // logging each one. Running it at startup lets a fresh database come up with the
 // full schema without anyone invoking goose by hand.
-func migrate(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
-	sub, err := fs.Sub(migrationsFS, "db/migrations")
+func applyMigrations(ctx context.Context, sqlDB *sql.DB, logger *slog.Logger) error {
+	sub, err := fs.Sub(schema.Migrations, "migrations")
 	if err != nil {
 		return fmt.Errorf("failed to remove FS prefix: %w", err)
 	}
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, sub)
 	if err != nil {
 		return fmt.Errorf("failed to get goose provider: %w", err)
 	}
@@ -65,17 +62,17 @@ func logResults(logger *slog.Logger, migrations []*goose.MigrationResult) {
 	}
 }
 
-// migrateAndExit opens a database/sql handle just for goose, applies every pending
-// migration and closes it. It backs the -migrate flag.
-func migrateAndExit(ctx context.Context, logger *slog.Logger, dbURL string) (err error) {
-	db, err := sql.Open("pgx", dbURL)
+// Migrate opens a database/sql handle just for goose, applies every pending migration
+// and closes it. It backs the collector's -migrate flag.
+func Migrate(ctx context.Context, logger *slog.Logger, dbURL string) (err error) {
+	sqlDB, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 	defer func() {
-		if closeErr := db.Close(); closeErr != nil && err == nil {
+		if closeErr := sqlDB.Close(); closeErr != nil && err == nil {
 			err = fmt.Errorf("failed to close database: %w", closeErr)
 		}
 	}()
-	return migrate(ctx, db, logger)
+	return applyMigrations(ctx, sqlDB, logger)
 }

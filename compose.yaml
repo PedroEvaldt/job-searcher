@@ -2,13 +2,13 @@ services:
   migrate:
     # One-shot: applies the goose migrations and exits 0. Every other service waits for
     # it (service_completed_successfully), so none of them can start before the schema
-    # exists — the D41 race, where analyzer/jev-worker/digest ran ahead of app's
-    # migrations on a fresh database.
+    # exists. Without it, on a fresh database, analyzer, jev-worker and digest raced
+    # ahead of the collector's own migrations and failed on missing tables.
     build:
       context: .
       dockerfile: Dockerfile
     image: job-searcher:latest
-    command: ["./jobs_collector", "-migrate"]
+    command: ["./collector", "-migrate"]
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
     depends_on:
@@ -38,9 +38,10 @@ services:
 
   postgres:
     # pgvector's official image = postgres 16 + the `vector` extension preinstalled.
-    # Same PG 16 major as postgres:16-alpine, so the existing data volume is reused as is.
+    # A volume created by postgres:16-alpine (musl) must be REINDEXed before use here:
+    # glibc sorts text differently and the old indexes silently stop matching. See
+    # docs/OPERATIONS.md.
     image: pgvector/pgvector:pg16
-    container_name: postgres_db
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -51,18 +52,23 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB "]
+      # $$ defers expansion to the container shell, so the values never land in docker inspect.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   analyzer:
+    # One-shot: extracts the skills of new jobs and scores them with tfidf-v1, then exits.
     build:
       context: ./analyzer/
       dockerfile: ./Dockerfile
     image: analyzer:latest
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      CV_PATH: /app/cv.md
+    volumes:
+      - ./cv.md:/app/cv.md:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

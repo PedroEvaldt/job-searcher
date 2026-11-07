@@ -1,4 +1,4 @@
-package main
+package collector
 
 import (
 	"bytes"
@@ -203,7 +203,7 @@ func updateDuplicate(ctx context.Context, conn querier, jobID, source1 int, job1
 }
 
 // sourceLooksBroken reports whether each of the last k runs of source failed, with
-// an error or with zero items fetched (D36). A source with fewer than k runs is not
+// an error or with zero items fetched. A source with fewer than k runs is not
 // broken yet: it may just be new.
 func sourceLooksBroken(ctx context.Context, conn *pgx.Conn, k int, source string) (bool, error) {
 	sourceID, err := getSourceID(ctx, conn, source)

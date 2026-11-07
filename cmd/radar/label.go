@@ -111,7 +111,7 @@ func label(ctx context.Context, conn *pgx.Conn, limit int, queue []int64) error 
 
 		fmt.Print("Would apply (y/n): ")
 		var (
-			wouldApply bool = false
+			wouldApply bool
 			hiresLatam *bool
 			seniority  *string
 			note       *string
@@ -127,11 +127,11 @@ func label(ctx context.Context, conn *pgx.Conn, limit int, queue []int64) error 
 				return fmt.Errorf("read user input: %w", err)
 			}
 			wouldApplyStr = strings.TrimSpace(wouldApplyStr)
-			switch {
-			case wouldApplyStr == "y":
+			switch wouldApplyStr {
+			case "y":
 				wouldApply = true
 				break outer
-			case wouldApplyStr == "n":
+			case "n":
 				wouldApply = false
 				break outer
 			default:

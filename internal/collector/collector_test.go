@@ -1,4 +1,4 @@
-package main
+package collector
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
@@ -16,10 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PedroEvaldt/job-searcher/internal/config"
 	"github.com/PedroEvaldt/job-searcher/internal/sources"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -89,6 +88,9 @@ func TestMigrations(t *testing.T) {
 		"labels",
 		"scores",
 		"job_skills",
+		"job_embeddings",
+		"jev_answers",
+		"jobs_sent",
 	}
 	err := pingDB(db)
 	if err != nil {
@@ -132,8 +134,8 @@ func TestFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("database not ready for testing fetching: %v", err)
 	}
-	cfg := Config{
-		SourcesConfig: []sources.SourceConfig{
+	cfg := config.Config{
+		Sources: []sources.SourceConfig{
 			{
 				Name:        "remoteok",
 				Enabled:     true,
@@ -157,7 +159,7 @@ func TestFetch(t *testing.T) {
 			},
 		},
 	}
-	for i, source := range cfg.SourcesConfig {
+	for i, source := range cfg.Sources {
 		body, err := os.ReadFile(fmt.Sprintf("testdata/%s.json", source.Name))
 		if err != nil {
 			t.Fatalf("failed to read json file: %v", err)
@@ -169,7 +171,7 @@ func TestFetch(t *testing.T) {
 			}
 		}))
 		t.Cleanup(func() { srv.Close() })
-		cfg.SourcesConfig[i].URL = srv.URL
+		cfg.Sources[i].URL = srv.URL
 	}
 
 	_, err = db.Exec("TRUNCATE raw_jobs, jobs, runs RESTART IDENTITY CASCADE;")
@@ -177,7 +179,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = Run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -201,7 +203,7 @@ func TestFetch(t *testing.T) {
 		return
 	}
 
-	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = Run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Errorf("expected error nil, got %v", err)
 		return
@@ -270,8 +272,8 @@ func TestPartialFailure(t *testing.T) {
 	}))
 	defer badSrv.Close()
 
-	cfg := Config{
-		SourcesConfig: []sources.SourceConfig{
+	cfg := config.Config{
+		Sources: []sources.SourceConfig{
 			{
 				Name:        "remoteok",
 				Enabled:     true,
@@ -294,7 +296,7 @@ func TestPartialFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
-	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = Run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 	if err != nil {
 		t.Fatalf("expected err nil; got %v", err)
 	}
@@ -335,8 +337,8 @@ func TestClientTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := Config{
-		SourcesConfig: []sources.SourceConfig{
+	cfg := config.Config{
+		Sources: []sources.SourceConfig{
 			{
 				Name:    "remoteok",
 				Enabled: true,
@@ -355,7 +357,7 @@ func TestClientTimeout(t *testing.T) {
 		t.Fatalf("failed to clean tables: %v", err)
 	}
 
-	err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = Run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 
 	switch {
 	case err == nil:
@@ -409,8 +411,8 @@ func TestFailureThreshold(t *testing.T) {
 				}
 			}))
 			defer srv.Close()
-			cfg := Config{
-				SourcesConfig: []sources.SourceConfig{
+			cfg := config.Config{
+				Sources: []sources.SourceConfig{
 					{
 						Name:        "remotive",
 						Enabled:     true,
@@ -427,7 +429,7 @@ func TestFailureThreshold(t *testing.T) {
 				t.Fatalf("failed to clean tables: %v", err)
 			}
 
-			err = run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
+			err = Run(context.Background(), slog.New(slog.DiscardHandler), dsn, &cfg)
 
 			var (
 				runsErrCount int
@@ -539,7 +541,7 @@ func pingDB(db *sql.DB) error {
 func setupPostgres() (*sql.DB, func() error, error) {
 	ctx := context.Background()
 
-	ctr, err := postgres.Run(ctx, "postgres:16-alpine",
+	ctr, err := postgres.Run(ctx, "pgvector/pgvector:pg16",
 		postgres.WithDatabase("jobs_test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
@@ -584,18 +586,9 @@ func setupPostgres() (*sql.DB, func() error, error) {
 		return nil, teardown, fmt.Errorf("failed to ping db: %w", err)
 	}
 
-	sub, err := fs.Sub(migrationsFS, "db/migrations")
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to remove FS prefix: %w", err)
-	}
-
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to get goose provider: %w", err)
-	}
-	_, err = provider.Up(ctx)
-	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to do goose up: %w", err)
+	// The same code path the collector runs at start-up, against the embedded files.
+	if err := applyMigrations(ctx, db, slog.New(slog.DiscardHandler)); err != nil {
+		return nil, teardown, fmt.Errorf("failed to migrate: %w", err)
 	}
 	return db, teardown, nil
 }
@@ -628,7 +621,7 @@ func TestCollector(t *testing.T) {
 				return nil
 			}
 			// No retries: a failed cycle waits for the next tick, as before them.
-			collector(ctx, slog.New(slog.DiscardHandler), tt.interval, 0, 0, cycle)
+			loop(ctx, slog.New(slog.DiscardHandler), tt.interval, 0, 0, cycle)
 
 			if counter != tt.wantedCalls {
 				t.Errorf("expected %d; got %d", tt.wantedCalls, counter)
@@ -648,7 +641,7 @@ func TestFirstCycle(t *testing.T) {
 	}
 	begin := time.Now()
 	// Interval and retry wait both 1s: the first call must wait for neither.
-	collector(ctx, slog.New(slog.DiscardHandler), time.Second, 3, time.Second, cycle)
+	loop(ctx, slog.New(slog.DiscardHandler), time.Second, 3, time.Second, cycle)
 	after := time.Since(begin)
 	if after > 500*time.Millisecond {
 		t.Errorf("expected time < 500ms; got %v", after)
@@ -686,7 +679,7 @@ func TestCollectorRetry(t *testing.T) {
 				return nil
 			}
 			begin := time.Now()
-			collector(ctx, slog.New(slog.DiscardHandler), time.Hour, retries, tt.retryWait, cycle)
+			loop(ctx, slog.New(slog.DiscardHandler), time.Hour, retries, tt.retryWait, cycle)
 
 			if calls != tt.wantCalls {
 				t.Errorf("expected %d calls; got %d", tt.wantCalls, calls)
@@ -710,8 +703,8 @@ func TestCtxCancel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := Config{
-		SourcesConfig: []sources.SourceConfig{
+	cfg := config.Config{
+		Sources: []sources.SourceConfig{
 			{
 				Name:    "remoteok",
 				Enabled: true,
@@ -742,7 +735,7 @@ func TestCtxCancel(t *testing.T) {
 
 	time.AfterFunc(100*time.Millisecond, cancel)
 	begin := time.Now()
-	err = run(ctx, slog.New(slog.DiscardHandler), dsn, &cfg)
+	err = Run(ctx, slog.New(slog.DiscardHandler), dsn, &cfg)
 	after := time.Since(begin)
 	if err == nil {
 		t.Fatalf("expected err; got nil")
@@ -800,7 +793,7 @@ func TestWaitForDB(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
-			err := waitForDB(ctx, slog.New(slog.DiscardHandler), tt.dsn, testInitialWait)
+			err := WaitForDB(ctx, slog.New(slog.DiscardHandler), tt.dsn, testInitialWait)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error got nil")
@@ -903,7 +896,7 @@ func jobItem(t *testing.T, externalID, company, title, description string) json.
 	return item
 }
 
-// writeDuplicateScenario empties the tables and writes the real cases from 1.5.1
+// writeDuplicateScenario empties the tables and writes the real duplicate cases (see dedup_test.go)
 // through collectAndStoreData, in order: the himalayas jobs first, then remoteok.
 func writeDuplicateScenario(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
@@ -1144,7 +1137,7 @@ func TestNormalizeRawJobs(t *testing.T) {
 				t.Fatalf("expected 0 failed items; got %d", failed)
 			}
 
-			// Simulate pre-3a.3.1 history: posted_at lost, and the job already scored.
+			// Simulate a job stored before posted_at was extracted, and already scored.
 			_, err = db.Exec("UPDATE jobs SET posted_at = NULL, scored_at = now() WHERE external_id = $1;", tt.externalID)
 			if err != nil {
 				t.Fatalf("failed to reset job: %v", err)

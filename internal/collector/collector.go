@@ -1,23 +1,22 @@
-package main
+// Package collector pulls jobs from every enabled source into Postgres: the raw
+// payload into raw_jobs, the normalized job into jobs, with duplicates across sources
+// marked as they arrive. cmd/collector is its only entry point.
+package collector
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/PedroEvaldt/job-searcher/internal/client"
+	"github.com/PedroEvaldt/job-searcher/internal/config"
 	"github.com/PedroEvaldt/job-searcher/internal/sources"
 	"github.com/jackc/pgx/v5"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/joho/godotenv"
+	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" driver for database/sql (goose)
 )
 
 const (
@@ -46,7 +45,7 @@ const (
 	cycleRetries = 3
 	// cycleRetryWait is how long the collector waits before each of those tries.
 	cycleRetryWait = 5 * time.Minute
-
+	// renormalizeBatchSize is how many raw_jobs Renormalize reads at a time.
 	renormalizeBatchSize = 500
 )
 
@@ -72,84 +71,9 @@ func newSource(name string, c *client.Client) (Source, error) {
 	}
 }
 
-// main wires the process together: load .env and DATABASE_URL, load config.yaml,
-// then collect every collect_every until SIGINT or SIGTERM, or run a single
-// collection pass with -once. It is the only place that exits the process.
-func main() {
-	logger := slog.Default()
-
-	err := godotenv.Load()
-	if err != nil {
-		logger.Debug("failed to load env configs", "error", err)
-	}
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		logger.Error("DATABASE_URL is not set")
-		os.Exit(1)
-	}
-
-	cfg, err := loadConfig("./config.yaml")
-	if err != nil {
-		logger.Error("failed to load config", "error", err)
-		os.Exit(1)
-	}
-
-	once := flag.Bool("once", false, "run one time only")
-	renormalize := flag.Bool("renormalize", false, "renormalize jobs database")
-	migrateOnly := flag.Bool("migrate", false, "apply pending migrations and exit")
-	flag.Parse()
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	dbCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	err = waitForDB(dbCtx, logger, dbURL, 100*time.Millisecond)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			logger.Error("could not connect to database in less than 2 minutes", "error", err)
-			os.Exit(1)
-		}
-		logger.Info("shutting down")
-		return
-	}
-	// The compose "migrate" service runs this once; every other service waits for it to
-	// exit 0 (service_completed_successfully), so none of them starts before the schema
-	// exists. run() still migrates at the start of each cycle — a no-op by then.
-	if *migrateOnly {
-		if err := migrateAndExit(dbCtx, logger, dbURL); err != nil {
-			logger.Error("failed to migrate", "error", err)
-			os.Exit(1)
-		}
-		return
-	}
-	if *renormalize {
-		conn, err := openConn(ctx, dbURL)
-		if err != nil {
-			logger.Error("failed to connect to renormalize", "error", err)
-			os.Exit(1)
-		}
-		renormalizedJobs, err := normalizeRawJobs(ctx, conn, renormalizeBatchSize)
-		if err != nil {
-			logger.Error("failed to renormalize jobs", "error", err)
-			os.Exit(1)
-		}
-		logger.Info("renormalized jobs successfully", "total", renormalizedJobs)
-		return
-	}
-
-	cycle := func() error { return run(ctx, logger, dbURL, cfg) }
-	if *once {
-		if err := cycle(); err != nil {
-			logger.Error("failed to run", "error", err)
-			os.Exit(1)
-		}
-	} else {
-		collector(ctx, logger, cfg.CollectEvery, cycleRetries, cycleRetryWait, cycle)
-	}
-}
-
-func waitForDB(ctx context.Context, logger *slog.Logger, dbURL string, initialDBWait time.Duration) error {
+// WaitForDB blocks until Postgres accepts a connection, doubling the wait between
+// attempts from initialDBWait. It returns ctx's error when ctx ends first.
+func WaitForDB(ctx context.Context, logger *slog.Logger, dbURL string, initialDBWait time.Duration) error {
 	counter := 1
 	for {
 		conn, err := openConn(ctx, dbURL)
@@ -162,7 +86,7 @@ func waitForDB(ctx context.Context, logger *slog.Logger, dbURL string, initialDB
 			}
 			initialDBWait *= 2
 		} else {
-			_ = conn.Close(ctx) // only probing; run opens its own connection
+			_ = conn.Close(ctx) // only probing; Run opens its own connection
 			return nil
 		}
 	}
@@ -189,11 +113,19 @@ func runWithRetries(ctx context.Context, logger *slog.Logger, cycle func() error
 	}
 }
 
-// collector runs cycle right away, then again on every tick of interval, and returns
+// Loop runs a collection pass right away and then every interval, until ctx is
+// cancelled. A pass that fails whole is retried cycleRetries times, cycleRetryWait
+// apart, before the loop goes back to waiting for the next tick.
+func Loop(ctx context.Context, logger *slog.Logger, dbURL string, cfg *config.Config) {
+	pass := func() error { return Run(ctx, logger, dbURL, cfg) }
+	loop(ctx, logger, cfg.CollectEvery, cycleRetries, cycleRetryWait, pass)
+}
+
+// loop runs cycle right away, then again on every tick of interval, and returns
 // when ctx is cancelled. A cycle that fails whole is tried again up to retries more
 // times, retryWait apart, before the loop goes back to waiting for the tick: a cycle
 // lost to a network that is still coming up costs minutes, not a whole interval.
-func collector(ctx context.Context, logger *slog.Logger, interval time.Duration, retries int, retryWait time.Duration, cycle func() error) {
+func loop(ctx context.Context, logger *slog.Logger, interval time.Duration, retries int, retryWait time.Duration, cycle func() error) {
 	runWithRetries(ctx, logger, cycle, retries, retryWait)
 
 	t := time.NewTicker(interval)
@@ -209,11 +141,11 @@ func collector(ctx context.Context, logger *slog.Logger, interval time.Duration,
 	}
 }
 
-// run performs one full collection pass: open the Postgres connection, apply
+// Run performs one full collection pass: open the Postgres connection, apply
 // migrations, backfill dedupe keys for older jobs, process each enabled source in turn,
 // then warn about sources that look broken. A failure in one source is logged and
-// skipped, not fatal to the others; run fails only when no source succeeds.
-func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (err error) {
+// skipped, not fatal to the others; Run fails only when no source succeeds.
+func Run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *config.Config) (err error) {
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -238,7 +170,7 @@ func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (e
 		}
 	}()
 
-	err = migrate(dbCtx, db, logger)
+	err = applyMigrations(dbCtx, db, logger)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
 	}
@@ -258,7 +190,7 @@ func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (e
 
 	var runErrs []error
 	var success bool
-	for _, sourceConfig := range cfg.SourcesConfig {
+	for _, sourceConfig := range cfg.Sources {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return fmt.Errorf("context cancelled: %w", ctx.Err())
 		}
@@ -282,7 +214,7 @@ func run(ctx context.Context, logger *slog.Logger, dbURL string, cfg *Config) (e
 		success = true
 	}
 
-	for _, sourceConfig := range cfg.SourcesConfig {
+	for _, sourceConfig := range cfg.Sources {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return fmt.Errorf("context cancelled: %w", ctx.Err())
 		}
@@ -423,4 +355,20 @@ func collectAndStoreData(ctx context.Context, conn *pgx.Conn, logger *slog.Logge
 		}
 	}
 	return failed
+}
+
+// Renormalize re-parses every stored raw payload with its source's current mapping and
+// rewrites the matching jobs row, so a parser fix reaches old jobs without re-fetching
+// anything. It returns how many jobs it rewrote.
+func Renormalize(ctx context.Context, dbURL string) (n int, err error) {
+	conn, err := openConn(ctx, dbURL)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if closeErr := conn.Close(ctx); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close connection: %w", closeErr)
+		}
+	}()
+	return normalizeRawJobs(ctx, conn, renormalizeBatchSize)
 }

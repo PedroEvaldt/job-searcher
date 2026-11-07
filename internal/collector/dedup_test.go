@@ -1,4 +1,4 @@
-package main
+package collector
 
 import (
 	"testing"
@@ -6,8 +6,8 @@ import (
 	"github.com/PedroEvaldt/job-searcher/internal/sources"
 )
 
-// TestIsDuplicate runs the dedupe rule against real cases from the week of data on
-// the Pi (1.5.1). Descriptions are short stand-ins for the real ones.
+// TestIsDuplicate runs the dedupe rule against real cases from a week of data collected
+// on the Pi. Descriptions are short stand-ins for the real ones.
 func TestIsDuplicate(t *testing.T) {
 	// Source ids only need to be equal or different; the names are for reading.
 	const (

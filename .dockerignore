@@ -1,24 +1,28 @@
-.env
-
+# Only what the Go build needs goes into the build context.
 .git
 .gitignore
-testdata/
-docs/
-
+.env
 .claude
 CLAUDE.md
+docs/
+archive/
+analyzer/
+db_dump/
+cv.md
 Makefile
 README.md
 LICENSE
-job-searcher
-
-main_test.go
-
 Dockerfile
 .dockerignore
-*compose.yml
+compose.yaml
 
-analyzer/
-db_dump/
+# tests and fixtures are not part of the image
+**/*_test.go
+**/testdata/
+
+# local builds
+/collector
+/job-searcher
+cmd/collector/collector
 cmd/radar/radar
-cv.md
+bin/

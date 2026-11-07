@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -108,7 +108,7 @@ sources:
 				t.Fatalf("failed to write config: %v", err)
 			}
 
-			cfg, err := loadConfig(path)
+			cfg, err := Load(path)
 
 			if tt.wantErr {
 				if err == nil {
@@ -124,11 +124,43 @@ sources:
 			if err != nil {
 				t.Fatalf("expected err nil; got %v", err)
 			}
-			if len(cfg.SourcesConfig) != 1 {
-				t.Fatalf("expected 1 source; got %d", len(cfg.SourcesConfig))
+			if len(cfg.Sources) != 1 {
+				t.Fatalf("expected 1 source; got %d", len(cfg.Sources))
 			}
-			if got := cfg.SourcesConfig[0]; got != tt.want {
+			if got := cfg.Sources[0]; got != tt.want {
 				t.Errorf("expected %+v; got %+v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestDigestValidate(t *testing.T) {
+	valid := Digest{ModelVersion: "jev-manual-qs-v1", MinScore: 0.75, Every: 6 * time.Hour}
+	tests := []struct {
+		name        string
+		mutate      func(d *Digest)
+		errContains string
+	}{
+		{"valid", func(d *Digest) {}, ""},
+		{"min_score 0 is allowed", func(d *Digest) { d.MinScore = 0 }, ""},
+		{"empty model_version", func(d *Digest) { d.ModelVersion = "" }, "model_version"},
+		{"min_score above 1", func(d *Digest) { d.MinScore = 1.5 }, "min_score"},
+		{"negative min_score", func(d *Digest) { d.MinScore = -0.1 }, "min_score"},
+		{"every below a minute", func(d *Digest) { d.Every = 30 * time.Second }, "every"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := valid
+			tt.mutate(&d)
+			err := d.Validate()
+			if tt.errContains == "" {
+				if err != nil {
+					t.Fatalf("expected err nil; got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+				t.Fatalf("expected err containing %q; got %v", tt.errContains, err)
 			}
 		})
 	}
