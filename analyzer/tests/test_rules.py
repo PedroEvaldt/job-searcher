@@ -11,7 +11,12 @@ def job(
 ) -> Job:
     answers = {"requires_degree": requires_degree, "open_to_brazil": open_to_brazil}
     return Job(
-        job_id=1, description="", jev_answers=answers, skills=None, language=language
+        job_id=1,
+        title="",
+        description="",
+        jev_answers=answers,
+        skills=None,
+        language=language,
     )
 
 
@@ -46,7 +51,7 @@ def test_rules(candidate: Job, passes: bool) -> None:
 
 def test_no_rules_pass_everything() -> None:
     # without a degree rule the answer is never read, so qs-v1/qs-v2 jobs work too
-    assert Rules().passes(Job(1, "", {}, None, "zh-cn"))
+    assert Rules().passes(Job(1, "", "", {}, None, "zh-cn"))
 
 
 def test_answer_rules_only_on_a_set_that_asks_them() -> None:

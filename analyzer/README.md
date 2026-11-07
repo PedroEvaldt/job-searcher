@@ -36,12 +36,13 @@ jobradar/                 the library: pure functions plus a few queries, all te
   text.py                 HTML → paragraphs of plain text (mojibake repaired)
   boilerplate.py          paragraphs shared by many descriptions, and cutting them
   skills.py               dictionary of skills and their aliases, and the matcher
+  stack.py                the languages a job's title and description name (v9's stack)
   match.py                a job's skills against the CV's; the skills-gate baseline
   experience.py           required years, by regex
   salary.py               salary to annual USD
   embed.py                all-MiniLM-L6-v2 embeddings (group embed)
   frozen.py               the frozen test set
-  jev/questions.py        the versioned question sets (qs-v1, qs-v2, qs-v3)
+  jev/questions.py        the versioned question sets (qs-v1 to qs-v4)
   jev/pending.py          answers a question set for the jobs that lack it, in batches
   jev/client.py           the Jev client, behind a Protocol; None without JEV_API_KEY
   jev/manual.py           jev-manual: the answers with hand-picked weights

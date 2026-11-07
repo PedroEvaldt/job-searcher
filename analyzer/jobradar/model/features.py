@@ -14,6 +14,7 @@ import psycopg
 from jobradar.experience import extract_years
 from jobradar.match import skill_match
 from jobradar.skills import LANGUAGES
+from jobradar.stack import STACK_LANGUAGES, description_languages, title_languages
 
 # The features computed in code; every Jev answer of the job's question set is a
 # feature too, under its question id.
@@ -24,6 +25,8 @@ CODE_FEATURES = (
     "skill_missing",
     "n_job_skills",
     "other_stack",
+    "main_other_stack",
+    "title_cv_stack",
 )
 
 Features = dict[str, int | float | None]
@@ -34,6 +37,7 @@ class Job:
     """What the features are computed from: one job, its Jev answers and its skills."""
 
     job_id: int
+    title: str
     description: str
     jev_answers: dict[str, float]
     skills: list[str] | None  # None: no skill extracted (the LEFT JOIN found nothing)
@@ -44,6 +48,9 @@ def features_for_job(job: Job, cv_skills: set[str]) -> Features:
     job_skills = set(job.skills or ())
     match = skill_match(job_skills, cv_skills)
     job_languages = job_skills & LANGUAGES
+    cv_languages = cv_skills & STACK_LANGUAGES
+    title_langs = title_languages(job.title)
+    main_langs = title_langs or description_languages(job.description)
     return {
         **job.jev_answers,
         "years_required": extract_years(job.description),
@@ -54,6 +61,12 @@ def features_for_job(job: Job, cv_skills: set[str]) -> Features:
         # 1 when the job names programming languages and none of them is in the CV: a
         # Java or Node.js backend, for a Go and Python CV.
         "other_stack": int(bool(job_languages) and not job_languages & cv_skills),
+        # other_stack read with jobradar/stack.py, which also knows COBOL or Delphi, and
+        # from the job's main languages: the title's when it names any, since a "Java
+        # Developer" that mentions Python is still a Java job; else the description's.
+        "main_other_stack": int(bool(main_langs) and not main_langs & cv_languages),
+        # 1 when the title names one of the CV's languages: "Golang Developer".
+        "title_cv_stack": int(bool(title_langs & cv_languages)),
     }
 
 
@@ -72,7 +85,7 @@ def fetch_live_jobs(conn: psycopg.Connection, question_set: str) -> list[Job]:
     """Every live (non-duplicate) job answered with question_set, by id."""
     rows = conn.execute(
         """
-        SELECT j.id, j.description, je.answers, sk.skills, j.language
+        SELECT j.id, j.title, j.description, je.answers, sk.skills, j.language
         FROM jobs j
         JOIN jev_answers je ON je.job_id = j.id AND je.question_set_version = %s
         LEFT JOIN (
@@ -96,7 +109,7 @@ def fetch_labelled_jobs(
     as a duplicate."""
     rows = conn.execute(
         """
-        SELECT j.id, j.description, je.answers, sk.skills, j.language, l.would_apply
+        SELECT j.id, j.title, j.description, je.answers, sk.skills, j.language, l.would_apply
         FROM labels l
         JOIN jobs j ON j.id = l.job_id
         JOIN jev_answers je ON je.job_id = j.id AND je.question_set_version = %s
@@ -109,7 +122,7 @@ def fetch_labelled_jobs(
         """,
         (question_set,),
     ).fetchall()
-    return [(Job(*row[:5]), bool(row[5])) for row in rows]
+    return [(Job(*row[:6]), bool(row[6])) for row in rows]
 
 
 def fetch_unscored_jobs(
@@ -120,7 +133,7 @@ def fetch_unscored_jobs(
     extracted: scored before that, they would be scored without their skills."""
     rows = conn.execute(
         """
-        SELECT j.id, j.description, je.answers, sk.skills, j.language
+        SELECT j.id, j.title, j.description, je.answers, sk.skills, j.language
         FROM jobs j
         JOIN jev_answers je ON je.job_id = j.id AND je.question_set_version = %s
         LEFT JOIN (

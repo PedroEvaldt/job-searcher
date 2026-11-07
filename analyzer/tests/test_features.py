@@ -13,9 +13,12 @@ CV = {"Go", "Python", "Docker"}
 ANSWERS = {"open_to_latam": 0.9, "fully_remote": 0.8, "is_senior_role": 0.1}
 
 
-def make_job(description: str = "", skills: list[str] | None = None) -> Job:
+def make_job(
+    description: str = "", skills: list[str] | None = None, title: str = "Engineer"
+) -> Job:
     return Job(
         job_id=1,
+        title=title,
         description=description,
         jev_answers=ANSWERS,
         skills=skills,
@@ -40,6 +43,8 @@ def test_features_for_job_values() -> None:
         "skill_missing": 1,
         "n_job_skills": 3,
         "other_stack": 0,
+        "main_other_stack": 0,
+        "title_cv_stack": 0,
     }
 
 
@@ -71,3 +76,26 @@ def test_feature_matrix_turns_none_into_nan() -> None:
 )
 def test_other_stack(skills: list[str] | None, other_stack: int) -> None:
     assert features_for_job(make_job(skills=skills), CV)["other_stack"] == other_stack
+
+
+@pytest.mark.parametrize(
+    ("title", "description", "main_other_stack", "title_cv_stack"),
+    [
+        ("Java Developer", "", 1, 0),
+        # the title decides: Python in the text does not make it a Python job
+        ("Programador JAVA", "<p>Nice to have: Python</p>", 1, 0),
+        ("Programador - COBOL", "", 1, 0),
+        ("Golang Developer", "", 0, 1),
+        ("Full Stack Developer (Golang-Angular)", "", 0, 1),
+        # no language in the title: the description's languages
+        ("Backend Engineer", "<p>Kotlin and Spring Boot</p>", 1, 0),
+        ("Backend Engineer", "<p>Go, Java and PostgreSQL</p>", 0, 0),
+        ("DevOps Engineer", "<p>Docker and Kubernetes</p>", 0, 0),
+    ],
+)
+def test_main_stack(
+    title: str, description: str, main_other_stack: int, title_cv_stack: int
+) -> None:
+    features = features_for_job(make_job(description, title=title), CV)
+    assert features["main_other_stack"] == main_other_stack
+    assert features["title_cv_stack"] == title_cv_stack

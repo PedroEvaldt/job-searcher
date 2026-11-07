@@ -200,6 +200,31 @@ SPECS = {
                 max_requires_degree=0.5,
             ),
         ),
+        # v8 with the stack read by jobradar/stack.py: main_other_stack (the title's
+        # languages, else the description's, miss the CV) replaces other_stack, and
+        # title_cv_stack marks a title that names Go or Python. v8's audit misses were a
+        # COBOL job and a Java one named only in its title. Nested CV AP 0.691 vs v8's
+        # features 0.640 (5x10, 33 of 50 folds better). Test AP 0.554 and audit 9/10:
+        # ties with v7, which stays the digest's model.
+        ModelSpec(
+            "sklearn-combined-v9",
+            question_set="qs-v4",
+            features=(
+                "open_to_latam",
+                "open_to_brazil",
+                "fully_remote",
+                "is_senior_role",
+                "is_target_role",
+                "skill_coverage",
+                "skill_overlap",
+                "main_other_stack",
+                "title_cv_stack",
+            ),
+            rules=Rules(
+                languages=frozenset({"en", "pt", "es"}),
+                max_requires_degree=0.5,
+            ),
+        ),
     ]
 }
 
