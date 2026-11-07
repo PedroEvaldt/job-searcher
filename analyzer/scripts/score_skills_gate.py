@@ -16,8 +16,8 @@ import sys
 import psycopg
 
 from jobradar.db import DatabaseError, connect
-from jobradar.jev.questions import QUESTION_SET_VERSION
 from jobradar.match import (
+    SKILLS_GATE_QUESTION_SET,
     SKILLS_GATE_VERSION,
     cv_skills,
     skill_match,
@@ -44,14 +44,14 @@ def score_skills_gate() -> int:
                 LEFT JOIN job_skills js ON js.job_id = j.id
                 WHERE j.duplicate_of IS NULL
                 GROUP BY j.id, je.answers;""",
-                (QUESTION_SET_VERSION,),
+                (SKILLS_GATE_QUESTION_SET,),
             ).fetchall()
             n_live_without_jev = conn.execute(
                 """SELECT count(*) FROM jobs j
                 LEFT JOIN jev_answers je
                     ON je.job_id = j.id AND je.question_set_version = %s
                 WHERE j.duplicate_of IS NULL AND je.job_id IS NULL;""",
-                (QUESTION_SET_VERSION,),
+                (SKILLS_GATE_QUESTION_SET,),
             ).fetchone()
             # A job whose skills were never extracted has an empty job_skills and would
             # silently score 0 — run `python -m scripts.main` first to drain that queue.

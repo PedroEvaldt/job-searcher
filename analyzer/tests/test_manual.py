@@ -1,11 +1,11 @@
 import pytest
 
-from jobradar.jev.manual import WEIGHTS, manual_score
-from jobradar.jev.questions import QUESTIONS
+from jobradar.jev.manual import QUESTION_SET, WEIGHTS, manual_score
+from jobradar.jev.questions import QUESTION_SETS
 
 
 def test_every_question_has_a_weight() -> None:
-    assert {q.id for q in QUESTIONS} == set(WEIGHTS)
+    assert {q.id for q in QUESTION_SETS[QUESTION_SET]} == set(WEIGHTS)
 
 
 def test_manual_score_is_the_weighted_sum() -> None:

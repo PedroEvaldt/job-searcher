@@ -4,11 +4,12 @@ This is the score the digest ranks by today. The weights are part of the method,
 changing one means a new model version, not a silent overwrite of the old scores.
 """
 
-from jobradar.jev.questions import QUESTION_SET_VERSION
-
 WEIGHTS = {"fully_remote": 0.7, "open_to_latam": 0.6, "is_senior_role": -0.7}
 
-MODEL_VERSION = f"jev-manual-{QUESTION_SET_VERSION}"
+# The question set whose answers it combines.
+QUESTION_SET = "qs-v1"
+
+MODEL_VERSION = f"jev-manual-{QUESTION_SET}"
 
 
 def manual_score(answers: dict[str, float]) -> float:

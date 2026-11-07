@@ -10,8 +10,7 @@ only needed to backfill or after restoring a database.
 import sys
 
 from jobradar.db import DatabaseError, connect
-from jobradar.jev.manual import MODEL_VERSION, manual_score
-from jobradar.jev.questions import QUESTION_SET_VERSION
+from jobradar.jev.manual import MODEL_VERSION, QUESTION_SET, manual_score
 
 
 def main() -> int:
@@ -30,7 +29,7 @@ def main() -> int:
             WHERE je.question_set_version = %s AND j.duplicate_of IS NULL
             ORDER BY je.job_id;
             """,
-            (QUESTION_SET_VERSION,),
+            (QUESTION_SET,),
         ).fetchall()
         if not rows:
             print("no Jev answers to score")

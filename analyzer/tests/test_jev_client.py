@@ -4,7 +4,9 @@ import pytest
 from typesafe_sdk import SystemOneResponse
 
 from jobradar.jev.client import _parse, jev_client
-from jobradar.jev.questions import QUESTIONS
+from jobradar.jev.questions import QUESTION_SETS
+
+QUESTIONS = QUESTION_SETS["qs-v1"]  # the set the recorded response answers
 
 TESTDATA = Path(__file__).parent / "testdata" / "jev_systemone.json"
 

@@ -38,6 +38,8 @@ def skill_match(job_skills: set[str], cv_skills: set[str]) -> SkillMatch:
 
 
 SKILLS_GATE_VERSION = "skills-gate-v1"
+# The question set whose answers the gate reads.
+SKILLS_GATE_QUESTION_SET = "qs-v1"
 
 # Fixed before looking at the test set (2026-11-02). Tuning it on the test set
 # would turn the test set into training data.
