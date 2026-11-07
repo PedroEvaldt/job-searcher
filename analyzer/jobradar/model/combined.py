@@ -180,6 +180,26 @@ SPECS = {
                 max_requires_degree=0.5,
             ),
         ),
+        # v7 on qs-v4, whose open_to_brazil counts a remote job that names no country as
+        # open (2026-11-07). Same features and rules.
+        ModelSpec(
+            "sklearn-combined-v8",
+            question_set="qs-v4",
+            features=(
+                "open_to_latam",
+                "open_to_brazil",
+                "fully_remote",
+                "is_senior_role",
+                "is_target_role",
+                "skill_coverage",
+                "skill_overlap",
+                "other_stack",
+            ),
+            rules=Rules(
+                languages=frozenset({"en", "pt", "es"}),
+                max_requires_degree=0.5,
+            ),
+        ),
     ]
 }
 

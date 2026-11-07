@@ -59,6 +59,15 @@ REQUIRES_DEGREE = Question(
     criteria_false="No degree is mentioned; a degree is only preferred or a plus; equivalent experience or any other alternative is accepted; or current students, an in-progress degree or self-taught candidates are accepted.",
 )
 
+# qs-v4: OPEN_TO_BRAZIL read a remote job that names no country as closed ("no location
+# is stated" was a false criterion), but such a job is open to anyone (stated 2026-11-07).
+OPEN_TO_BRAZIL_V2 = Question(
+    "open_to_brazil",
+    "Decide whether someone who lives in Brazil can apply for this job and do it from Brazil.",
+    criteria_true="Open worldwide / anywhere, open to all of Latin America or the Americas, explicitly lists Brazil, or the job is remote and the posting states no country or region restriction at all.",
+    criteria_false="Restricted to countries or regions that do not include Brazil (e.g. US-only, EU-only, Mexico-only, Colombia-only, India-only), requires living in, being authorized to work in or relocating to another country, or the job is on-site or hybrid somewhere outside Brazil.",
+)
+
 QUESTION_SETS: dict[str, list[Question]] = {
     "qs-v1": [OPEN_TO_LATAM, FULLY_REMOTE, IS_SENIOR_ROLE],
     "qs-v2": [
@@ -71,6 +80,14 @@ QUESTION_SETS: dict[str, list[Question]] = {
     "qs-v3": [
         OPEN_TO_LATAM,
         OPEN_TO_BRAZIL,
+        FULLY_REMOTE,
+        IS_SENIOR_ROLE,
+        IS_TARGET_ROLE,
+        REQUIRES_DEGREE,
+    ],
+    "qs-v4": [
+        OPEN_TO_LATAM,
+        OPEN_TO_BRAZIL_V2,
         FULLY_REMOTE,
         IS_SENIOR_ROLE,
         IS_TARGET_ROLE,
