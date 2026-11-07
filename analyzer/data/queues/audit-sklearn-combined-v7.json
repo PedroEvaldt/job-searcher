@@ -1,0 +1,7 @@
+{
+  "purpose": "audit",
+  "model_version": "sklearn-combined-v7",
+  "note": "Top 10 live jobs the digest would send today (pendingJobs without min_score or max_age), shuffled so the order does not reveal the ranking.",
+  "created": "2026-11-07",
+  "job_ids": [305,12511,1276,12930,12176,26,12506,3168,7274,15324]
+}

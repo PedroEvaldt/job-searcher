@@ -1,6 +1,17 @@
 {
-  "version": "test-set-v2",
+  "version": "test-set-v3",
   "random_state": 20261102,
+  "relabelled": {
+    "date": "2026-11-07",
+    "why": "the criteria for a good job were stated (docs/ROADMAP.md); they only restrict, so only the test positives were re-checked, from their descriptions, without any model score",
+    "from": "test-set-v2",
+    "changed": [
+      {
+        "job_id": 42,
+        "would_apply": false
+      }
+    ]
+  },
   "from_test_set_v1": [
     1,
     2,

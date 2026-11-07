@@ -1,6 +1,7 @@
 """The frozen test set: the jobs every model is measured on and none is trained on.
 
-frozen.json holds test-set-v2 (150 job ids; their labels live in the labels table).
+frozen.json holds test-set-v3: 150 job ids (their labels live in the labels table), the same
+jobs as test-set-v2 with the positives re-checked against the criteria stated on 2026-11-07.
 One place, so every script reads the same set.
 """
 
