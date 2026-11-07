@@ -37,7 +37,8 @@ jobradar/                 the library: pure functions plus a few queries, all te
   text.py                 HTML → paragraphs of plain text (mojibake repaired)
   boilerplate.py          paragraphs shared by many descriptions, and cutting them
   skills.py               dictionary of skills and their aliases, and the matcher
-  stack.py                the languages a job's title and description name (v9's stack)
+  stack.py                the languages a job's title and description name (v9 and v10)
+  seniority.py            whether a title says junior, intern or entry level (v10)
   match.py                a job's skills against the CV's; the skills-gate baseline
   experience.py           required years, by regex
   salary.py               salary to annual USD
@@ -52,7 +53,7 @@ jobradar/                 the library: pure functions plus a few queries, all te
                           scoring, MODEL_VERSION (the digest's model)
 scripts/                  thin command-line entry points: python -m scripts.<name>
 tests/
-data/frozen.json          test-set-v2
+data/frozen.json          the frozen test set (test-set-v3)
 data/models/              trained models, one file per model_version (versioned: the
                           worker image needs them, and a version never changes)
 data/queues/              label queues for radar label (audits, rounds)
@@ -71,13 +72,13 @@ By hand (`uv run --env-file ../.env python -m scripts.<name>`):
 
 | Script | Does |
 | --- | --- |
-| `train` | trains `sklearn-combined` on the labels outside the test set; prints CV AP and coefficients; saves `data/models/<version>.joblib` |
-| `score` | scores every live job with the saved `sklearn-combined` |
+| `train [version]` | trains a `sklearn-combined` version on the labels outside the test set; prints CV AP and coefficients; saves `data/models/<version>.joblib` (refuses to overwrite one) |
+| `score [version]` | scores every live job with a saved `sklearn-combined` version |
 | `evaluate [version …]` | AP, ROC AUC and P@10 of each model version on the test set |
 | `explain [version]` | the coefficients of a saved model |
 | `score_jev` | recomputes `jev-manual-qs-v1` from the stored answers, no Jev call |
 | `update_jobs` | one pass of the worker, then exit (group `jev`) |
-| `answer_jev <set> [--training-labels]` | answers a question set for the jobs that lack it, without scoring; for trying a new set (group `jev`) |
+| `answer_jev <set> [--training-labels] [--workers N]` | answers a question set for the jobs that lack it, without scoring; for trying a new set (group `jev`) |
 | `score_skills_gate` | writes the `skills-gate-v1` baseline |
 | `embed_jobs`, `score_embeddings` | embeds new jobs into `job_embeddings`, then scores `minilm-l6-v2` (group `embed`) |
 | `detect_language` | tags `jobs.language` on the jobs that have none (the worker does it too) |
@@ -88,11 +89,14 @@ The measurement protocol, the results of every model and the known problems are 
 ## A new model version
 
 ```bash
-# 1. change jobradar/model/features.py or combined.py, and bump MODEL_VERSION
-uv run --env-file ../.env python -m scripts.train      # refuses to overwrite an existing version
-uv run --env-file ../.env python -m scripts.score
-uv run --env-file ../.env python -m scripts.evaluate
+# 1. add a ModelSpec to SPECS in jobradar/model/combined.py (and any new feature to features.py)
+uv run --env-file ../.env python -m scripts.train <version>     # refuses to overwrite one
+uv run --env-file ../.env python -m scripts.score <version>
+uv run --env-file ../.env python -m scripts.evaluate <current version> <version>
 ```
+
+Then audit its top 10. `MODEL_VERSION` changes only when the digest switches to the new
+version, together with `config.yaml` (docs/OPERATIONS.md): the worker scores with it.
 
 ## Checks
 

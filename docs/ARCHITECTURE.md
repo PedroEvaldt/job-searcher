@@ -3,6 +3,8 @@
 job-radar is a handful of small processes around one Postgres database. Go does the I/O-heavy,
 long-running work (collecting, sending); Python does the text and the models. They never call
 each other: each reads and writes tables, and the schema in `db/migrations/` is the contract.
+Everything runs on a Raspberry Pi, the database included; labelling and modelling from another
+machine reach that one database through an SSH tunnel ([OPERATIONS.md](OPERATIONS.md)).
 
 ```
                        ┌──────────────────────── PostgreSQL ─────────────────────────┐

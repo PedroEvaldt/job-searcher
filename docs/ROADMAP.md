@@ -18,7 +18,7 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
 - no hard requirement of a completed degree: "or equivalent experience", an in-progress degree
   or current students are fine (a rule).
 
-## Now: better features, then a model that uses them
+## Done in v1.0.0: features and models
 
 - [x] Question set `qs-v2`: adds `open_to_brazil` and `is_target_role` to the three `qs-v1`
       questions. `qs-v1` stays as it is: the worker and the digest keep using it until the switch.
@@ -43,7 +43,7 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
       entry level: `sklearn-combined-v10`, audit **10/10**, test AP 0.498 (no test positive is
       entry level). The digest switches to v10.
 
-## Next: switch the digest
+## Done in v1.0.0: the digest on the Pi
 
 - [x] The worker keeps every new job complete for the digest's model: language, skills, the
       model's Jev answers, its score (`jobradar/pipeline.py`).
@@ -53,11 +53,17 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
       new images, the worker on v10. Its first cycles took 438 new jobs through the whole
       pipeline for $0.03; 7 passed the digest's filters.
 
-## Later
+## Next
 
-- Teach `fully_remote` (see MODELING.md). The sources' location field was tried: no gain.
+In order:
+
 - More labels drawn **at random** from the live jobs, to grow the test set past its 3 positives:
   v7 to v10 differ only in where two test jobs land, and none of its positives is entry level.
   Labels picked by a model's ranking go to training only.
+- Label what the digest sends (training only), then a version that learns the junior title
+  together with the stack: in v10 a junior title outweighs another stack, and the first digest's
+  top job was a junior C++ role.
+- Ask the Jev again when a posting's text changes (58 live jobs on 2026-11-07; MODELING.md).
+- Teach `fully_remote` (see MODELING.md). The sources' location field was tried: no gain.
 - Pin the Jev model (`jev-latest` floats) and record the CV version in the model versions.
 - Refit `tfidf-v1`'s vocabulary on the whole live set, as a new version.

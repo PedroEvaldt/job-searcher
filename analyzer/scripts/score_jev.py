@@ -2,9 +2,9 @@
 
     uv run --env-file ../.env python -m scripts.score_jev
 
-No Jev call and no cost: it only recombines the answers already in jev_answers. The
-worker (scripts.jev_worker) writes this same score as it answers new jobs, so this is
-only needed to backfill or after restoring a database.
+No Jev call and no cost: it only recombines the qs-v1 answers already in jev_answers. The
+worker answers the digest model's question set, not qs-v1, so this baseline covers only the
+jobs that have qs-v1 answers, and is kept to compare models with (docs/MODELING.md).
 """
 
 import sys

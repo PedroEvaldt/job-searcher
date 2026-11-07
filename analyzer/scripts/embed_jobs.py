@@ -1,3 +1,11 @@
+"""Embed every live job that has no minilm-l6-v2 vector yet into job_embeddings.
+
+    uv run --env-file ../.env --group embed python -m scripts.embed_jobs
+
+A baseline (docs/MODELING.md): the digest does not use embeddings. The embed group pulls in
+torch, so it stays out of the images.
+"""
+
 import sys
 
 from jobradar.boilerplate import clean_descriptions

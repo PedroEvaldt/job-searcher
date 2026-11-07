@@ -55,7 +55,8 @@ git clone https://github.com/PedroEvaldt/job-searcher.git
 cd job-searcher
 cp .env.example .env            # set a real POSTGRES_PASSWORD (letters and digits)
 cp cv.example.md cv.md          # your résumé
-docker compose up -d --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose build
+docker compose up -d
 ```
 
 `postgres` always restarts and `app`, `jev-worker` and `digest` restart unless stopped by hand,
@@ -89,13 +90,11 @@ git push pi:pi/job-searcher main:refs/remotes/desktop/main
 ssh pi 'cd ~/pi/job-searcher && git merge --ff-only desktop/main'
 ```
 
-Since 2026-11-07 the database container no longer has a fixed name (it was `postgres_db`). The
-first `up` after that change recreates it as `job-searcher-postgres-1` on the **same** volume;
-use `docker compose exec postgres` instead of the old name.
-
 ## Moving a database from `postgres:16-alpine` to `pgvector/pgvector:pg16`
 
-The stack uses the pgvector image (Debian, glibc) since the embeddings were added. A data volume
+The stack uses the pgvector image (Debian, glibc) since the embeddings were added. (The Pi went
+through this on 2026-11-07 the cleaner way, a restore into a fresh volume: see the next
+section.) A data volume
 created by the old `postgres:16-alpine` image (musl) can be mounted by the new one, but the two C
 libraries sort text differently: every index on a text column is silently wrong, lookups miss
 rows that are there, and the collector starts writing jobs twice **without any error** (its
@@ -117,7 +116,7 @@ docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -c "SELECT source_id, external_id, count(*) FROM jobs GROUP BY 1, 2 HAVING count(*) > 1;"'
 ```
 
-Zero rows: start everything with `docker compose up -d --build`. The cleaner alternative is a
+Zero rows: start everything with `docker compose up -d`. The cleaner alternative is a
 dump of the old database restored into a fresh volume (below): the indexes are then built under
 glibc from the start.
 
@@ -206,6 +205,6 @@ docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTG
 | Command | When |
 | --- | --- |
 | `docker compose run --rm app ./collector -renormalize` | a source parser changed: rebuild every `jobs` row from `raw_jobs` |
-| `make gstatus` / `make gup` / `make gdown` | inspect or roll back migrations by hand (the collector applies them on its own) |
+| `make gstatus` / `make gup` / `make gdown` | inspect or roll back migrations by hand (the collector applies them on its own); through the tunnel, on the Pi's database |
 | `cd analyzer && uv run --env-file ../.env python -m scripts.detect_language` | tag the language of new jobs |
 | `cd analyzer && uv run --env-file ../.env python -m scripts.score_jev` | recompute `jev-manual-qs-v1` from the stored answers (no Jev call) |

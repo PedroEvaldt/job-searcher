@@ -45,7 +45,8 @@ the model's score). It is off by default: set `JEV_API_KEY` and `COMPOSE_PROFILE
 `.env` to turn it on. Without a key everything else runs.
 
 > `docker compose down` keeps the data; `docker compose down -v` deletes the database.
-> After pulling new code, always rebuild (`docker compose up -d --build`).
+> After pulling new code, always rebuild (`docker compose up -d --build`; on a Raspberry Pi,
+> one image at a time: see [docs/OPERATIONS.md](docs/OPERATIONS.md)).
 
 ## Configuration
 
@@ -131,6 +132,8 @@ archive/            finished experiments and the project's learning log, kept fo
 
 ### Checking the data
 
+On the machine that runs the database:
+
 ```
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < db/queries/live_duplicates.sql
 ```
@@ -147,18 +150,21 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
   cross-source deduplication. It ran 7 days straight through 3 power cuts with no
   intervention. About 16,000 live jobs collected.
 - **Extraction** in code: skills, salary in annual USD, required years, job age, language.
-  An LLM (Jev) answers six literal questions about each job (can someone in Brazil take it?
-  fully remote? senior? backend, infra or data work? does it require a completed degree?) for
-  about $0.07 per 1000 jobs.
-- **Ranking**: a logistic regression over those answers and the skill match, with hard rules
-  on top (language, degree). All 10 of the live jobs it ranks first are ones I would apply to
-  (the first learned model: 1 of 10); on a frozen test set of 150 hand-labelled jobs its
-  average precision is 0.50 (a random order: 0.02; the first learned model: 0.12).
+  An LLM (Jev) answers six literal questions about each job (open to Latin America? can
+  someone in Brazil take it? fully remote? senior? backend, infra or data work? does it
+  require a completed degree?) for about $0.07 per 1000 jobs.
+- **Ranking**: a logistic regression over those answers, the skill match, the job's stack
+  (the languages its title or description names) and whether its title is entry level, with
+  hard rules on top (language, degree). All 10 of the live jobs it ranks first are ones I
+  would apply to (the first learned model: 1 of 10); on a frozen test set of 150
+  hand-labelled jobs its average precision is 0.50 (a random order: 0.02; the first learned
+  model: 0.12).
   How it is measured and what still goes wrong: [docs/MODELING.md](docs/MODELING.md).
 - **Digest**: about 4 jobs a day on Discord, from the last 14 days of postings, ranked by
   `sklearn-combined-v10`.
 
-Running it on the Pi, backups and upgrades: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Running it on the Pi, backups and upgrades: [docs/OPERATIONS.md](docs/OPERATIONS.md). What each
+version changed: [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

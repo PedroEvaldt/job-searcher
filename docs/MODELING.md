@@ -63,8 +63,8 @@ All asked in one call per job, about $0.07 per 1000 jobs; answers are probabilit
 | --- | --- | --- |
 | `qs-v1` | `open_to_latam`, `fully_remote`, `is_senior_role` | all live jobs (the worker until 2026-11-07) |
 | `qs-v2` | + `open_to_brazil` (Brazil can take it; a single other country cannot), `is_target_role` (hands-on backend, infra or data work) | all live jobs ($1.06) |
-| `qs-v3` | + `requires_degree` (a completed degree with no alternative) | all live jobs ($1.14); the worker now |
-| `qs-v4` | `open_to_brazil` rewritten: a remote job that names no country counts as open | all live jobs ($1.15) |
+| `qs-v3` | + `requires_degree` (a completed degree with no alternative) | all live jobs ($1.14) |
+| `qs-v4` | `open_to_brazil` rewritten: a remote job that names no country counts as open | all live jobs ($1.15); the worker since 2026-11-07 (v10) |
 
 Each new question was piloted on the labelled training jobs first. `is_target_role` alone ranks
 the training jobs at AP 0.147 (the best `qs-v1` answer: 0.084); `open_to_brazil` drops the
@@ -213,6 +213,9 @@ The digest runs with `min_score: 0.20` and `max_age: 336h` (postings from the la
 - **The degree rule sits on a noisy answer.** 35 live jobs cross `requires_degree` 0.5 between
   `qs-v3` and `qs-v4`. One is a good job ("Bachelors Degree in IT…" and, two lines below, "or
   equivalent related experience"): 0.45 in `qs-v3`, 0.52 in `qs-v4`, so v8 to v10 drop it.
+- **Jev answers are not refreshed when a posting changes.** A new text resets the job's skills
+  and its score follows, but its answers stay those of the first text: the worker only asks
+  about jobs with no answers for the set. 58 of the 16,642 live jobs (2026-11-07).
 - **`tfidf-v1` is not comparable across runs.** Its vocabulary is fit on the CV plus the jobs
   unscored in that run.
 - **Jev answers do not record which model answered.** `JEV_MODEL` is `jev-latest`, which floats

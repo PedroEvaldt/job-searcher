@@ -1,3 +1,11 @@
+"""The analyzer service: the skills of every new live job, then the tfidf-v1 baseline.
+
+    uv run --env-file ../.env python -m scripts.main
+
+Runs once per `docker compose up` (the "analyzer" service) and exits. tfidf-v1 is kept as a
+baseline to compare models with (docs/MODELING.md); the digest does not rank by it.
+"""
+
 import sys
 from collections import Counter
 

@@ -1,3 +1,10 @@
+"""Score every embedded job by its cosine similarity to the CV: the minilm-l6-v2 baseline.
+
+    uv run --env-file ../.env --group embed python -m scripts.score_embeddings
+
+Run after scripts.embed_jobs: only jobs that have a vector get a score.
+"""
+
 import sys
 
 from jobradar.db import DatabaseError, connect

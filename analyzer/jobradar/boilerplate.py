@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping
 from jobradar.text import html_to_paragraphs
 
 # A paragraph found in this many distinct descriptions or more is boilerplate. Measured
-# on the live jobs (2026-10-21, see PROGRESS.md): it cuts 10.2% of the text and empties
+# on the live jobs (2026-10-21, see archive/docs/PROGRESS.md): it cuts 10.2% of the text and empties
 # only 2 jobs; at 5, 362 jobs would keep less than 10% of their text.
 BOILERPLATE_MIN_DESCRIPTIONS = 10
 
