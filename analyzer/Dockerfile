@@ -6,7 +6,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /bin/
 
 WORKDIR /app
 
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+# On the Pi, with the other images building at the same time, a bytecode-compile worker
+# can take longer than uv's default 60 s to start, and the whole sync fails.
+ENV UV_COMPILE_BYTECODE=1 UV_COMPILE_BYTECODE_TIMEOUT=600 UV_LINK_MODE=copy
 
 # Dependencies first, in their own layer: code changes do not reinstall them.
 COPY pyproject.toml uv.lock ./
