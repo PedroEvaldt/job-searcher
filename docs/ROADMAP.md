@@ -35,6 +35,8 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
 - [x] Test positives re-checked against the criteria: `test-set-v3` (one job became "no").
 - [x] `other_stack` (no Go or Python among the job's languages): `sklearn-combined-v7`, test AP
       0.767, audit **9/10**.
+- [x] `qs-v4` (a remote job that names no country is open) and `sklearn-combined-v8`: test AP
+      0.600, audit 8/10, a near tie; v7 stays in the digest.
 
 ## Next: switch the digest
 
@@ -46,6 +48,8 @@ Stated on 2026-11-07, and what the questions, the rules and the models aim at:
 
 ## Later
 
+- A stack feature read from the title too, with COBOL and other missing languages, as a new
+  feature (v8's audit misses); then v8's `qs-v4` location with it.
 - Teach `fully_remote` (see MODELING.md). The sources' location field was tried: no gain.
 - More labels drawn **at random** from the live jobs, to grow the test set past 4 positives.
   Labels picked by a model's ranking go to training only.
