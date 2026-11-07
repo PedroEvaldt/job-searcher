@@ -1,8 +1,8 @@
 collect_every: 6h
 digest:
   # Must match MODEL_VERSION in analyzer/jobradar/model/combined.py (the worker's model).
-  model_version: "sklearn-combined-v7"
-  # On v7's scale: about 5 new jobs a day pass 0.20 (docs/MODELING.md).
+  model_version: "sklearn-combined-v10"
+  # On v10's scale: about 4 new jobs a day pass 0.20 (docs/MODELING.md).
   min_score: 0.20
   max_age: 336h
   every: 6h

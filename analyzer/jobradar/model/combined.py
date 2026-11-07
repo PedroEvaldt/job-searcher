@@ -255,7 +255,7 @@ SPECS = {
 
 # The digest's model: what the worker scores new jobs with, and the version the scripts
 # use when none is given. config.yaml's digest.model_version must name the same one.
-MODEL_VERSION = "sklearn-combined-v7"
+MODEL_VERSION = "sklearn-combined-v10"
 
 MODELS_DIR = DATA_DIR / "models"
 
